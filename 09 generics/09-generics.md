@@ -1,471 +1,695 @@
 # Module 03.2 — Generics
 
-> **Mức độ ưu tiên: Cao** — Generics là kiến thức **bắt buộc** để đọc hiểu source code Spring/Hibernate (`JpaRepository<T, ID>`, `ResponseEntity<T>`, `List<T>`...). Không hiểu wildcard (`? extends`/`? super`) sẽ khiến việc đọc signature của các method thư viện trở nên rất khó hiểu, và dễ viết code Generic sai mà compiler không báo lỗi rõ ràng.
+> **Mức độ ưu tiên: Cao** — Generics là kiến thức **bắt buộc** để đọc hiểu source Spring/Hibernate (`JpaRepository<T, ID>`, `ResponseEntity<T>`, `Comparator<? super T>`...). Không nắm wildcard (`? extends`/`? super`) thì signature của method thư viện trở nên khó hiểu, và rất dễ viết code generic sai theo cách compiler cảnh báo mờ nhạt (`unchecked warning`) rồi nổ `ClassCastException` ở chỗ khác.
+
+> **Phạm vi bài này:** cơ chế generic của Java — generic class/method, bounded type, tính bất biến (invariance), wildcard, quy tắc PECS, type erasure và các hệ quả của nó. **Chỉ nhắc tên, không đi sâu:** Stream/lambda/functional interface (Module 03.3), Spring Data JPA (Module 14), annotation processing. Các ví dụ Spring/JDK ở mục 10 chỉ để *đọc hiểu signature*, không phải để học framework.
 
 ---
 
 ## Mục lục
 
-1. [Vấn đề trước khi có Generics](#1-vấn-đề-trước-khi-có-generics)
+1. [Vấn đề trước khi có Generics — raw type & unchecked warning](#1-vấn-đề-trước-khi-có-generics--raw-type--unchecked-warning)
 2. [Generic Class](#2-generic-class)
-3. [Generic Method](#3-generic-method)
+3. [Generic Method & suy luận kiểu](#3-generic-method--suy-luận-kiểu)
 4. [Bounded Type — `<T extends X>`](#4-bounded-type--t-extends-x)
-5. [Wildcard — `?`, `? extends`, `? super`](#5-wildcard---extends-super)
-6. [PECS — Producer Extends, Consumer Super](#6-pecs--producer-extends-consumer-super)
-7. [Type Erasure — cơ chế Generics hoạt động thế nào lúc runtime](#7-type-erasure--cơ-chế-generics-hoạt-động-thế-nào-lúc-runtime)
-8. [Generics trong thực tế Spring/JDK](#8-generics-trong-thực-tế-springjdk)
-9. [Tổng kết — Bảng ghi nhớ nhanh](#9-tổng-kết--bảng-ghi-nhớ-nhanh)
-10. [Bài tập luyện tập](#10-bài-tập-luyện-tập)
+5. [Tính bất biến (invariance) & quan hệ với mảng](#5-tính-bất-biến-invariance--quan-hệ-với-mảng)
+6. [Wildcard — `?`, `? extends`, `? super` & capture](#6-wildcard---extends-super--capture)
+7. [PECS — Producer Extends, Consumer Super](#7-pecs--producer-extends-consumer-super)
+8. [Type Erasure — Generics lúc runtime](#8-type-erasure--generics-lúc-runtime)
+9. [Hệ quả của Erasure & cách lách](#9-hệ-quả-của-erasure--cách-lách)
+10. [Generics trong Spring/JDK thực tế](#10-generics-trong-springjdk-thực-tế)
+11. [Bẫy thường gặp](#11-bẫy-thường-gặp)
+12. [Tổng kết — Bảng ghi nhớ nhanh](#12-tổng-kết--bảng-ghi-nhớ-nhanh)
+13. [Bài tập luyện tập](#13-bài-tập-luyện-tập)
 
 ---
 
-## 1. Vấn đề trước khi có Generics
+## 1. Vấn đề trước khi có Generics — raw type & unchecked warning
 
-Trước Java 5, các Collection lưu trữ kiểu `Object` chung chung — mất an toàn kiểu dữ liệu (type safety), lỗi chỉ phát hiện lúc **runtime**:
-
-```java
-// Cách viết KIỂU CŨ (trước Java 5) — không nên dùng, chỉ để hiểu vấn đề
-List list = new ArrayList(); // không khai báo kiểu phần tử
-list.add("Hello");
-list.add(123); // Compiler CHO PHÉP — vì list lưu Object, String hay Integer đều hợp lệ
-
-String s = (String) list.get(1); // ép kiểu thủ công — CHẠY chương trình mới phát hiện lỗi!
-// Exception in thread "main" java.lang.ClassCastException: class java.lang.Integer cannot be cast to class java.lang.String
-```
-
-**Generics giải quyết vấn đề này** bằng cách cho phép **tham số hóa kiểu dữ liệu (type parameter)** — compiler kiểm tra kiểu **ngay lúc biên dịch**, bắt lỗi sớm trước khi chương trình chạy:
+Trước Java 5, Collection lưu `Object` — mất an toàn kiểu, lỗi chỉ lộ lúc **runtime**:
 
 ```java
-List<String> list = new ArrayList<>(); // khai báo RÕ RÀNG: chỉ chứa String
+List list = new ArrayList();     // "raw type" — không khai báo kiểu phần tử
 list.add("Hello");
-// list.add(123); // ❌ Lỗi COMPILE ngay lập tức — không cần chờ đến runtime mới phát hiện
+list.add(123);                   // compiler CHO PHÉP — cái gì cũng là Object
 
-String s = list.get(1); // KHÔNG cần ép kiểu thủ công — compiler đã biết chắc chắn là String
+String s = (String) list.get(1); // ép kiểu thủ công → ClassCastException lúc CHẠY
 ```
+
+Generics **tham số hóa kiểu (type parameter)** để compiler kiểm tra **lúc biên dịch**:
+
+```java
+List<String> list = new ArrayList<>();   // chỉ chứa String
+list.add("Hello");
+// list.add(123);                        // ❌ lỗi COMPILE ngay
+String s = list.get(1);                  // KHÔNG cần ép kiểu
+```
+
+### Raw type vẫn tồn tại — và vì sao nên tránh
+
+Java giữ raw type để **tương thích ngược** với code trước Java 5. Nhưng dùng raw type làm **tắt toàn bộ kiểm tra generic** cho biến đó:
+
+```java
+List<String> strings = new ArrayList<>();
+List raw = strings;              // hợp lệ (chỉ là warning)
+raw.add(42);                     // "unchecked call" — compiler chỉ CẢNH BÁO, không chặn
+String s = strings.get(0);       // 💥 ClassCastException — Integer 42 chui vào List<String>
+```
+
+Hiện tượng "kiểu sai lọt được vào collection do bỏ qua kiểm tra generic" gọi là **heap pollution**.
+
+- `List` (raw) ≠ `List<Object>` ≠ `List<?>`. `List<Object>` vẫn được kiểm tra kiểu đầy đủ; `List<?>` an toàn nhưng không cho ghi (mục 6); chỉ raw `List` mới tắt kiểm tra.
+- Gặp *unchecked warning* → sửa cho hết, đừng bỏ qua. Khi *chắc chắn* an toàn mà không diễn đạt được cho compiler → `@SuppressWarnings("unchecked")` đặt ở **phạm vi hẹp nhất có thể** (một biến local, không phải cả method) kèm comment giải thích vì sao an toàn.
 
 ---
 
 ## 2. Generic Class
 
-Định nghĩa 1 class với **tham số kiểu (type parameter)** — thường ký hiệu bằng 1 chữ cái viết hoa (`T`, `E`, `K`, `V`...), sẽ được "thay thế" bằng kiểu cụ thể khi sử dụng.
+Class có **tham số kiểu** — thường một chữ hoa (`T`, `E`, `K`, `V`) — thay bằng kiểu cụ thể khi dùng:
 
 ```java
-public class Box<T> { // T là type parameter — placeholder cho 1 kiểu bất kỳ
+public class Box<T> {
     private T content;
-
-    public void set(T content) {
-        this.content = content;
-    }
-
-    public T get() {
-        return content;
-    }
+    public void set(T content) { this.content = content; }
+    public T get() { return content; }
 }
 ```
 
 ```java
-Box<String> stringBox = new Box<>();
-stringBox.set("Hello");
-String value = stringBox.get(); // KHÔNG cần ép kiểu
-
-Box<Integer> intBox = new Box<>();
-intBox.set(100);
-// intBox.set("text"); // ❌ Lỗi compile — Box<Integer> chỉ chấp nhận Integer
+Box<String> sb = new Box<>();
+sb.set("Hello");
+String v = sb.get();                 // không ép kiểu
+Box<Integer> ib = new Box<>();
+// ib.set("text");                    // ❌ compile
 ```
 
-### Quy ước đặt tên type parameter (convention chuẩn JDK)
+### Quy ước tên type parameter (JDK convention)
 
-| Ký hiệu | Ý nghĩa quy ước |
+| Ký hiệu | Quy ước |
 |---|---|
-| `T` | Type (kiểu dữ liệu chung chung) |
-| `E` | Element (dùng trong Collection: `List<E>`) |
-| `K`, `V` | Key, Value (dùng trong Map: `Map<K, V>`) |
+| `T` | Type chung |
+| `E` | Element (`List<E>`, `Set<E>`) |
+| `K`, `V` | Key, Value (`Map<K, V>`) |
 | `N` | Number |
-| `R` | Return type (thường dùng trong `Function<T, R>`) |
+| `R` | Result / Return (`Function<T, R>`) |
+| `S`, `U`, `V` | type parameter thứ 2, 3, 4 |
 
-### Generic Class với nhiều type parameter
+### Nhiều type parameter
 
 ```java
 public class Pair<K, V> {
-    private K key;
-    private V value;
-
-    public Pair(K key, V value) {
-        this.key = key;
-        this.value = value;
-    }
-
-    public K getKey() { return key; }
+    private final K key;
+    private final V value;
+    public Pair(K key, V value) { this.key = key; this.value = value; }
+    public K getKey()   { return key; }
     public V getValue() { return value; }
+}
+Pair<String, Integer> p = new Pair<>("Pho", 95);
+```
+
+### Bốn giới hạn của type parameter trong class
+
+```java
+public class Box<T> {
+
+    // 1. KHÔNG dùng T ở ngữ cảnh static — T gắn với INSTANCE, static thì không có instance
+    // static T shared;
+    // static T identity(T t) { return t; }
+
+    // Nhưng static method được có type parameter RIÊNG của nó:
+    static <U> U echo(U u) { return u; }
+
+    // 2. KHÔNG new T() — lúc runtime không biết T là gì (mục 8). Muốn tạo → nhận Supplier<T> hoặc Class<T> (mục 9)
+    // T make() { return new T(); }
+
+    // 3. KHÔNG new T[n] — không tạo mảng generic trực tiếp (mục 9)
+    // T[] arr = new T[10];
+
+    // 4. T KHÔNG nhận primitive — Box<int> sai, phải Box<Integer> (kèm chi phí autoboxing)
 }
 ```
 
-```java
-Pair<String, Integer> studentScore = new Pair<>("Pho", 95);
-```
+> Constructor **không** viết `Box<T>()` — chỉ `Box()`. Type parameter `<T>` khai báo ở tên class là đủ; constructor dùng lại `T` đó. (Constructor *có thể* khai báo type parameter riêng, hiếm dùng.)
 
 ---
 
-## 3. Generic Method
+## 3. Generic Method & suy luận kiểu
 
-Một method **độc lập** có thể là generic **dù bản thân class chứa nó không phải generic** — type parameter được khai báo **trước kiểu trả về**:
+Một method có thể generic **dù class chứa nó không generic** — type parameter khai báo **ngay trước kiểu trả về**:
 
 ```java
 public class ArrayUtils {
-    // <T> ngay trước kiểu trả về "void" — khai báo đây là generic method
-    public static <T> void printArray(T[] array) {
-        for (T item : array) {
-            System.out.println(item);
-        }
+    public static <T> void printAll(T[] array) {
+        for (T item : array) System.out.println(item);
     }
-
-    // Generic method có thể có nhiều type parameter, độc lập với class
-    public static <T> T findFirst(List<T> list) {
-        if (list.isEmpty()) return null;
-        return list.get(0);
+    public static <T> T firstOrNull(List<T> list) {
+        return list.isEmpty() ? null : list.get(0);
+    }
+    // nhiều type parameter, độc lập:
+    public static <K, V> Pair<V, K> swap(Pair<K, V> p) {
+        return new Pair<>(p.getValue(), p.getKey());
     }
 }
 ```
 
-```java
-Integer[] numbers = {1, 2, 3};
-ArrayUtils.printArray(numbers); // T được suy luận tự động là Integer
-
-String[] words = {"a", "b", "c"};
-ArrayUtils.printArray(words);   // T được suy luận tự động là String
-```
-
-> **Type Inference (suy luận kiểu):** compiler thường **tự động suy luận** `T` là gì dựa vào tham số truyền vào, không cần chỉ định tường minh. Vẫn có thể ghi tường minh nếu cần: `ArrayUtils.<String>printArray(words);` (hiếm khi cần thiết trong thực tế).
-
-### Ví dụ thực tế: method generic so sánh 2 giá trị
+### Suy luận kiểu (type inference)
 
 ```java
-public static <T extends Comparable<T>> T max(T a, T b) { // xem mục 4 để hiểu "extends" ở đây
-    return a.compareTo(b) > 0 ? a : b;
-}
+Integer[] nums = {1, 2, 3};
+ArrayUtils.printAll(nums);              // T suy ra Integer từ tham số
+
+List<String> empty = Collections.emptyList();          // T suy ra String từ kiểu biến đích (target typing)
+Map<String, List<Integer>> m = new HashMap<>();        // diamond <> — Java 7+
+var list = new ArrayList<String>();                    // var: kiểu là ArrayList<String>
+
+// Chỉ định tường minh (type witness) — hiếm cần, dùng khi suy luận thất bại:
+List<String> e2 = Collections.<String>emptyList();
+ArrayUtils.<String>printAll(new String[]{"a"});
 ```
+
+### Khi nào cần generic method thay vì chỉ dùng type parameter của class?
+
+- Method **tĩnh** (không có instance → không thấy `T` của class).
+- Quan hệ kiểu **chỉ nằm trong phạm vi method đó** — ví dụ `<T> T firstOrNull(List<T>)`: `T` chỉ liên kết tham số với kiểu trả về, không cần lưu vào class.
+- Cần **ràng buộc giữa nhiều tham số** cho riêng một lời gọi: `<T> void copy(List<? super T> dst, List<? extends T> src)`.
 
 ---
 
 ## 4. Bounded Type — `<T extends X>`
 
-**Bounded Type** giới hạn `T` chỉ được là **X hoặc subclass/subtype của X** — cho phép gọi các method của `X` ngay trên biến kiểu `T` (điều mà Generic thông thường không cho phép, vì compiler mặc định coi `T` chỉ có các method của `Object`).
+Giới hạn `T` là **X hoặc subtype của X** → cho phép gọi method của `X` trên biến kiểu `T` (mặc định compiler chỉ cho `T` các method của `Object`):
 
 ```java
-// KHÔNG bounded — compiler KHÔNG biết T có method compareTo() hay không
+// KHÔNG bounded — compiler không biết T có compareTo()
 public static <T> T max(T a, T b) {
-    // return a.compareTo(b) > 0 ? a : b; // ❌ Lỗi compile — Object không có compareTo()
+    // return a.compareTo(b) > 0 ? a : b;   // ❌ Object không có compareTo()
     return null;
 }
-
-// CÓ bounded — T PHẢI implement Comparable<T>, nên compiler BIẾT chắc T có compareTo()
+// CÓ bounded — compiler BIẾT T có compareTo()
 public static <T extends Comparable<T>> T max(T a, T b) {
-    return a.compareTo(b) > 0 ? a : b; // ✅ Hợp lệ
+    return a.compareTo(b) > 0 ? a : b;      // ✅
 }
+max(5, 10);              // 10
+max("apple", "banana");  // "banana"
 ```
 
-```java
-System.out.println(max(5, 10));          // 10 — Integer implements Comparable<Integer>
-System.out.println(max("apple", "banana")); // banana — String implements Comparable<String>
-```
+> **Cú pháp:** dù `X` là **interface**, vẫn viết `extends` (không phải `implements`) trong bounded type — quy tắc riêng của Generics, hay bị nhầm.
 
-> **Lưu ý cú pháp:** dù `X` là **interface**, từ khóa vẫn luôn là `extends` (không phải `implements`) trong ngữ cảnh bounded type — đây là quy tắc cú pháp riêng của Generics, hay bị nhầm lẫn.
-
-### Bounded Type với class trừu tượng (giới hạn theo quan hệ kế thừa)
+### Bound theo class
 
 ```java
-public class NumberBox<T extends Number> { // T CHỈ ĐƯỢC LÀ Number hoặc subclass: Integer, Double, Long...
-    private T value;
+public class NumberBox<T extends Number> {          // Integer, Double, Long, BigDecimal...
+    private final T value;
     public NumberBox(T value) { this.value = value; }
+    public double asDouble() { return value.doubleValue(); }   // gọi được method của Number
+}
+// NumberBox<String> x;    // ❌ String không phải Number
+```
 
-    public double doubleValue() {
-        return value.doubleValue(); // gọi được method của Number vì compiler biết chắc T là Number
-    }
+### Multiple bounds — `&`
+
+```java
+public static <T extends Number & Comparable<T>> T clamp(T v, T lo, T hi) {
+    if (v.compareTo(lo) < 0) return lo;
+    if (v.compareTo(hi) > 0) return hi;
+    return v;
 }
 ```
 
-```java
-NumberBox<Integer> box1 = new NumberBox<>(10);   // ✅ hợp lệ
-NumberBox<Double> box2 = new NumberBox<>(3.14);  // ✅ hợp lệ
-// NumberBox<String> box3 = new NumberBox<>("abc"); // ❌ Lỗi compile — String không phải Number
-```
+Quy tắc: nếu có nhiều bound thì **tối đa một class**, và class đó phải **đứng đầu**; phần còn lại là interface.
 
-### Multiple Bounds — giới hạn theo nhiều điều kiện cùng lúc
+### Recursive bound — `<T extends Comparable<? super T>>`
+
+Kiểu ràng buộc "T so sánh được với chính nó (hoặc lớp cha của nó)" xuất hiện khắp JDK. Signature thật của `Collections.max`:
 
 ```java
-public static <T extends Number & Comparable<T>> T max(T a, T b) {
-    // T phải VỪA là Number, VỪA implement Comparable<T> — dùng "&" để nối nhiều điều kiện
-    return a.compareTo(b) > 0 ? a : b;
-}
+public static <T extends Object & Comparable<? super T>> T max(Collection<? extends T> coll)
 ```
-> Nếu có nhiều bound, **tối đa 1 class** (phải đứng đầu tiên), các bound còn lại phải là **interface**.
+
+`Comparable<? super T>` (thay vì `Comparable<T>`) cho phép `T` **kế thừa** khả năng so sánh từ lớp cha — ví dụ `class Manager extends Employee` mà chỉ `Employee implements Comparable<Employee>` thì `max(List<Manager>)` vẫn hợp lệ.
 
 ---
 
-## 5. Wildcard — `?`, `? extends`, `? super`
+## 5. Tính bất biến (invariance) & quan hệ với mảng
 
-Wildcard dùng khi **khai báo tham số của method/biến**, không dùng khi định nghĩa class/method generic (khác với `T` ở các mục trên).
+Điểm khiến người mới bối rối nhất:
 
-### `?` — Unbounded Wildcard (không giới hạn kiểu)
-
-```java
-public static void printList(List<?> list) { // chấp nhận List của BẤT KỲ kiểu nào
-    for (Object item : list) { // chỉ có thể coi phần tử là Object — không biết chính xác kiểu gì
-        System.out.println(item);
-    }
-}
-```
-```java
-printList(List.of("a", "b"));      // ✅ hợp lệ
-printList(List.of(1, 2, 3));       // ✅ hợp lệ
-```
-Dùng khi method chỉ cần **đọc** dữ liệu theo cách chung chung (`toString()`, `size()`...), không quan tâm kiểu cụ thể.
-
-### `? extends X` — Upper Bounded Wildcard (chỉ ĐỌC, không GHI)
-
-```java
-public static double sumNumbers(List<? extends Number> list) {
-    // list có thể là List<Integer>, List<Double>, List<Number>...
-    double sum = 0;
-    for (Number n : list) { // ĐỌC an toàn — chắc chắn mọi phần tử ít nhất là Number
-        sum += n.doubleValue();
-    }
-    // list.add(10); // ❌ Lỗi compile — không biết chính xác list là List<Integer> hay List<Double>, thêm bậy sẽ phá vỡ type safety
-    return sum;
-}
-```
-```java
-sumNumbers(List.of(1, 2, 3));       // List<Integer> — hợp lệ
-sumNumbers(List.of(1.5, 2.5));      // List<Double> — hợp lệ
-```
-
-### `? super X` — Lower Bounded Wildcard (chỉ GHI, đọc ra chỉ chắc chắn là Object)
-
-```java
-public static void addNumbers(List<? super Integer> list) {
-    // list có thể là List<Integer>, List<Number>, List<Object>...
-    list.add(1); // ✅ GHI an toàn — mọi kiểu trong "list" đều là Integer hoặc kiểu cha của nó, nên thêm Integer luôn hợp lệ
-    list.add(2);
-    // Integer x = list.get(0); // ❌ Lỗi compile — không chắc chắn phần tử lấy ra là Integer (có thể list thực ra là List<Object>)
-    Object x = list.get(0); // ✅ chỉ chắc chắn được kiểu Object
-}
-```
 ```java
 List<Integer> ints = new ArrayList<>();
-addNumbers(ints); // hợp lệ
+// List<Number> nums = ints;        // ❌ LỖI COMPILE — dù Integer LÀ Number
+// List<Object> objs = ints;        // ❌ cũng lỗi
+```
 
-List<Number> numbers = new ArrayList<>();
-addNumbers(numbers); // cũng hợp lệ — Number là kiểu cha của Integer
+> **Generic là *bất biến* (invariant):** `List<Integer>` **không phải** là con của `List<Number>`, dù `Integer` là con của `Number`. `List<A>` và `List<B>` không có quan hệ cha–con nào trừ khi `A` và `B` giống hệt nhau.
+
+### Vì sao phải bất biến? Đối chiếu với mảng (Module 01.1)
+
+Mảng thì **hiệp biến (covariant)** — và đó chính là *lỗ hổng*:
+
+```java
+Integer[] ia = {1, 2, 3};
+Number[]  na = ia;             // hợp lệ — mảng covariant
+na[0] = 3.14;                  // biên dịch OK, nhưng 💥 ArrayStoreException lúc RUNTIME
+```
+
+Nếu generic cũng covariant thì đoạn sau sẽ lọt qua compiler và hỏng **âm thầm** (không có `ArrayStoreException` vì erasure — mục 8):
+
+```java
+List<Integer> ints = new ArrayList<>();
+List<Number> nums = ints;      // GIẢ SỬ hợp lệ...
+nums.add(3.14);                // ...thì Double lọt vào List<Integer>
+int x = ints.get(0);          // 💥 ClassCastException ở NƠI KHÁC, khó lần
+```
+
+→ Java chọn cấm ở bước gán. Muốn "một list của kiểu nào đó là con của Number" → dùng **wildcard**.
+
+---
+
+## 6. Wildcard — `?`, `? extends`, `? super` & capture
+
+Wildcard dùng khi **khai báo kiểu tham số/biến**, không dùng khi *định nghĩa* class/method generic.
+
+### `?` — unbounded: "List của kiểu nào đó, không rõ"
+
+```java
+public static void printSize(List<?> list) {
+    System.out.println(list.size());     // OK — thao tác không phụ thuộc kiểu phần tử
+    for (Object o : list) System.out.println(o);   // đọc ra chỉ chắc là Object
+    // list.add("x");                     // ❌ không ghi được (trừ null)
+}
+printSize(List.of("a", "b"));   printSize(List.of(1, 2));
+```
+
+`List<?>` khác raw `List`: `List<?>` **vẫn an toàn kiểu** — compiler chặn mọi thao tác ghi có thể phá vỡ; raw `List` thì không.
+
+### `? extends X` — upper bound: ĐỌC được, KHÔNG ghi
+
+```java
+public static double sum(List<? extends Number> list) {
+    double s = 0;
+    for (Number n : list) s += n.doubleValue();    // đọc: chắc chắn ≥ Number
+    // list.add(1);                                 // ❌ không biết list là List<Integer> hay List<Double>
+    return s;
+}
+sum(List.of(1, 2, 3));        // List<Integer>
+sum(List.of(1.5, 2.5));       // List<Double>
+```
+
+### `? super X` — lower bound: GHI được, đọc ra chỉ là Object
+
+```java
+public static void addInts(List<? super Integer> list) {
+    list.add(1); list.add(2);          // ghi: mọi kiểu của list đều là Integer hoặc cha → nhận Integer OK
+    // Integer i = list.get(0);         // ❌ list có thể là List<Object>
+    Object o = list.get(0);            // chỉ chắc Object
+}
+addInts(new ArrayList<Integer>());
+addInts(new ArrayList<Number>());
+addInts(new ArrayList<Object>());
+```
+
+### Không khởi tạo được wildcard; capture
+
+```java
+// new ArrayList<? extends Number>()    // ❌ vô nghĩa — kiểu phần tử phải xác định
+List<? extends Number> l = new ArrayList<Integer>();   // ✅ biến thì được
+```
+
+Khi compiler gặp `?`, nó gán một **kiểu bắt được (captured type)** tạm gọi `CAP#1`. Lỗi kiểu `capture of ?` xuất hiện khi bạn cố dùng hai `?` như thể chúng là **cùng** một kiểu. Cách lách: **capture helper** — một private generic method đặt tên được cho kiểu:
+
+```java
+public static void swap(List<?> list, int i, int j) {   // API công khai: gọn
+    swapHelper(list, i, j);
+}
+private static <E> void swapHelper(List<E> list, int i, int j) {   // E "bắt" cái ?
+    E tmp = list.get(i);
+    list.set(i, list.set(j, tmp));
+}
 ```
 
 ---
 
-## 6. PECS — Producer Extends, Consumer Super
+## 7. PECS — Producer Extends, Consumer Super
 
-Đây là **quy tắc ghi nhớ kinh điển** (do Joshua Bloch đề xuất trong cuốn "Effective Java") giúp quyết định dùng `extends` hay `super`:
+Quy tắc kinh điển (Joshua Bloch, *Effective Java*) để chọn `extends` hay `super`:
 
 > **PECS = Producer Extends, Consumer Super**
 
-- Nếu tham số **"sản xuất" (Producer)** dữ liệu — tức là method sẽ **ĐỌC (get)** dữ liệu ra từ nó → dùng `? extends X`.
-- Nếu tham số **"tiêu thụ" (Consumer)** dữ liệu — tức là method sẽ **GHI (add/put)** dữ liệu vào nó → dùng `? super X`.
-- Nếu method **vừa đọc vừa ghi** → **không nên dùng wildcard**, dùng type parameter thông thường (`T`) là hợp lý hơn.
+| Vai trò tham số | Method làm gì với nó | Wildcard |
+|---|---|---|
+| **Producer** — nguồn dữ liệu | **đọc / lấy ra** (`get`, duyệt) | `? extends X` |
+| **Consumer** — nơi nhận dữ liệu | **ghi / bỏ vào** (`add`, `set`) | `? super X` |
+| Vừa đọc vừa ghi | cả hai | **không dùng wildcard** — dùng `T` |
 
-### Ví dụ kinh điển: method `copy()` trong `java.util.Collections`
+### Ví dụ: `Collections.copy`
 
 ```java
 public static <T> void copy(List<? super T> dest, List<? extends T> src) {
-    for (int i = 0; i < src.size(); i++) {
-        dest.set(i, src.get(i));
-    }
-}
-```
-- `src` (nguồn — bị **đọc** ra, "sản xuất" dữ liệu để copy đi) → `? extends T` (Producer Extends).
-- `dest` (đích — bị **ghi** vào, "tiêu thụ" dữ liệu được copy đến) → `? super T` (Consumer Super).
-
-```java
-List<Integer> ints = List.of(1, 2, 3);
-List<Number> numbers = new ArrayList<>(List.of(0, 0, 0));
-Collections.copy(numbers, ints); // src là List<Integer> (extends Number), dest là List<Number> (super Integer) — hợp lệ
-```
-
-> **Mẹo ghi nhớ nhanh khi đọc code người khác:** thấy `? extends` → có thể an tâm **lấy dữ liệu ra dùng**; thấy `? super` → có thể an tâm **đưa dữ liệu vào**; thấy `?` trơn → chỉ nên coi là `Object` để đọc, không ghi được gì có ý nghĩa.
-
----
-
-## 7. Type Erasure — cơ chế Generics hoạt động thế nào lúc runtime
-
-Đây là kiến thức **nâng cao nhưng quan trọng** để hiểu vì sao Generics trong Java có một số hạn chế kỳ lạ.
-
-**Type Erasure** nghĩa là: thông tin type parameter (`T`, `E`...) **chỉ tồn tại lúc compile-time**, để compiler kiểm tra kiểu — nhưng **bị "xóa" (erase)** khi biên dịch ra bytecode, thay bằng `Object` (hoặc bound cụ thể nếu có `extends`).
-
-```java
-List<String> stringList = new ArrayList<>();
-List<Integer> intList = new ArrayList<>();
-
-System.out.println(stringList.getClass() == intList.getClass()); // TRUE!
-// Vì lúc runtime, CẢ 2 đều chỉ là "ArrayList" thuần túy — thông tin <String> và <Integer> đã bị xóa
-```
-
-### Hệ quả thực tế của Type Erasure — những điều KHÔNG làm được với Generics
-
-```java
-public class Box<T> {
-    // private T[] items = new T[10];       // ❌ Không thể tạo mảng generic trực tiếp
-    // if (obj instanceof T) { }              // ❌ Không thể dùng instanceof với type parameter
-    // T instance = new T();                  // ❌ Không thể new T() trực tiếp (không biết T là gì lúc runtime)
-
-    public static <T> void method(T t) { }
-    // public static <T> void method(List<T> list) { } // ❌ Lỗi "erasure of method is same" nếu overload cả 2 — sau erasure cả 2 đều thành method(Object)
+    for (int i = 0; i < src.size(); i++) dest.set(i, src.get(i));
 }
 ```
 
-> Không cần nhớ chi tiết cách khắc phục từng trường hợp trên (khá hiếm gặp trong code backend nghiệp vụ thông thường) — điều quan trọng là **hiểu khái niệm Type Erasure tồn tại**, để không bất ngờ khi gặp các lỗi compile "khó hiểu" liên quan đến Generics, và để trả lời được câu hỏi phỏng vấn "Generics trong Java có thực sự tồn tại lúc runtime không?" (**Câu trả lời: KHÔNG** — đây khác với một số ngôn ngữ khác như C# có "reified generics" giữ nguyên thông tin kiểu lúc runtime).
+- `src` bị **đọc** → Producer → `? extends T`.
+- `dest` bị **ghi** → Consumer → `? super T`.
+
+```java
+List<Integer> src = List.of(1, 2, 3);
+List<Number>  dst = new ArrayList<>(List.of(0, 0, 0));
+Collections.copy(dst, src);      // src: extends Number ✓   dst: super Integer ✓
+```
+
+### PECS ở khắp JDK
+
+```java
+Stream<T>.forEach(Consumer<? super T> action)              // consumer → super
+boolean Collection<E>.addAll(Collection<? extends E> c)    // c là producer → extends
+void List<E>.sort(Comparator<? super E> c)                 // comparator "tiêu thụ" phần tử → super
+static <T> T Collections.max(Collection<? extends T> coll) // coll là producer → extends
+Optional<T>.ifPresent(Consumer<? super T>)                 // super
+```
+
+> **Quy tắc kèm theo:** **đừng dùng wildcard ở kiểu trả về.** `List<? extends Number> load()` ép mọi nơi gọi phải xử lý wildcard. Trả `List<Number>` hoặc `List<Integer>` cụ thể.
+
+> **Mẹo đọc code:** thấy `? extends` → yên tâm **lấy ra dùng**; thấy `? super` → yên tâm **bỏ vào**; thấy `?` trơn → coi như `Object`, chỉ đọc.
 
 ---
 
-## 8. Generics trong thực tế Spring/JDK
+## 8. Type Erasure — Generics lúc runtime
 
-Hiểu Generics giúp đọc hiểu ngay các signature quen thuộc sẽ gặp xuyên suốt lộ trình:
+**Type erasure:** thông tin type parameter (`T`, `E`...) **chỉ tồn tại lúc compile** để compiler kiểm tra kiểu; khi ra bytecode nó bị **xóa** — `T` không bound → thay bằng `Object`; `T extends Number` → thay bằng `Number`. Compiler tự chèn **cast** ở chỗ cần.
 
 ```java
-// Spring Data JPA (Module 14) — T là kiểu Entity, ID là kiểu khóa chính
+List<String> a = new ArrayList<>();
+List<Integer> b = new ArrayList<>();
+a.getClass() == b.getClass();     // TRUE — cả hai chỉ là "ArrayList" lúc runtime
+
+// Nguồn:
+class Box<T> { T v; T get() { return v; } }
+// Sau erasure (khái niệm):
+class Box { Object v; Object get() { return v; } }
+```
+
+### Bridge method
+
+Khi generic gặp override, compiler sinh thêm **method cầu nối** để giữ tính đa hình sau erasure:
+
+```java
+class MyInt implements Comparable<MyInt> {
+    public int compareTo(MyInt o) { ... }
+}
+// Compiler sinh thêm:
+// public int compareTo(Object o) { return compareTo((MyInt) o); }   // bridge — cầu nối tới bản thật
+```
+
+Vì vậy stack trace đôi khi hiện `compareTo(Object)` hoặc dòng "synthetic".
+
+### Câu phỏng vấn kinh điển
+
+> "Generics trong Java có tồn tại lúc runtime không?" → **KHÔNG.** Java dùng erasure (để tương thích ngược với bytecode trước Java 5). Khác với C#/Kotlin-`reified`, nơi generic được *reified* (giữ nguyên kiểu lúc runtime).
+
+**Cái *được* reify trong Java:** mảng, raw type, và unbounded wildcard `List<?>`. **Không reify:** `List<String>`, `T`, `Pair<K,V>`.
+
+---
+
+## 9. Hệ quả của Erasure & cách lách
+
+| Không làm được | Vì sao | Cách lách |
+|---|---|---|
+| `new T()` | Runtime không biết T | Nhận `Supplier<T>` hoặc `Class<T>` rồi `cls.getDeclaredConstructor().newInstance()` |
+| `new T[n]` | Không tạo được mảng của kiểu đã xóa | `(T[]) new Object[n]` + `@SuppressWarnings("unchecked")`, **không lộ** ra ngoài dưới kiểu `T[]`; hoặc `Array.newInstance(cls, n)` |
+| `obj instanceof T` / `catch (T e)` | Không có kiểu để kiểm tra lúc runtime | `instanceof` với kiểu cụ thể; hoặc `cls.isInstance(obj)` |
+| `T.class`, `List<String>.class` | Không có `Class` cho kiểu đã xóa | Chỉ `List.class`; truyền `Class<T>` làm tham số |
+| `static` field kiểu `T` | `T` gắn với instance | Type parameter riêng cho method, hoặc thiết kế lại |
+| Hai overload `f(List<String>)` & `f(List<Integer>)` | Sau erasure đều là `f(List)` — "same erasure" | Đổi tên method |
+| `class X extends Throwable<T>` | Exception phải reify để `catch` khớp | Không cho phép — exception không generic được |
+
+### `Class<T>` token — mẫu phổ biến nhất
+
+```java
+public static <T> T fromJson(String json, Class<T> type) {
+    // ... parse rồi type.cast(result)
+}
+User u = fromJson(body, User.class);      // T suy ra User; type.cast an toàn
+
+public static <T> T create(Class<T> cls) throws ReflectiveOperationException {
+    return cls.getDeclaredConstructor().newInstance();
+}
+```
+
+Hạn chế: `Class<T>` không mang được kiểu **tham số hóa** (`List<User>.class` không tồn tại). Cần điều đó → *super type token*: Gson `TypeToken<List<User>>`, Spring `ParameterizedTypeReference<List<User>>` (khai thác việc kiểu của **lớp cha** trong anonymous class *được* giữ trong metadata).
+
+### Generic array & `toArray`
+
+```java
+// Mẫu chuẩn JDK — nhận sẵn mảng đúng kiểu từ caller:
+<T> T[] toArray(T[] a)      // list.toArray(new String[0])
+
+// Tự tạo trong class, KHÔNG trả ra ngoài dưới kiểu T[]:
+@SuppressWarnings("unchecked")
+private final T[] buf = (T[]) new Object[16];   // OK khi buf chỉ dùng nội bộ
+```
+
+### Generics + varargs → `@SafeVarargs`
+
+```java
+@SafeVarargs                                   // "tôi cam kết không gây heap pollution"
+static <T> List<T> listOf(T... items) {        // varargs generic tạo mảng T[] ẩn → warning
+    return new ArrayList<>(Arrays.asList(items));
+}
+```
+
+Chỉ đặt `@SafeVarargs` khi method **chỉ đọc** mảng varargs, **không** ghi vào nó và **không** trả nó ra ngoài.
+
+---
+
+## 10. Generics trong Spring/JDK thực tế
+
+```java
+// Spring Data JPA (Module 14) — T = Entity, ID = kiểu khóa chính
 public interface JpaRepository<T, ID> extends PagingAndSortingRepository<T, ID> { }
+public interface UserRepository extends JpaRepository<User, Long> { }   // T=User, ID=Long
 
-// Cách dùng cụ thể:
-public interface UserRepository extends JpaRepository<User, Long> { }
-// → T = User, ID = Long
+// Spring Web (Module 16)
+ResponseEntity<UserDTO> res = ResponseEntity.ok(dto);
 
-// Spring Web (Module 16) — bọc response REST API với generic type
-public class ResponseEntity<T> { }
-ResponseEntity<UserDTO> response = ResponseEntity.ok(userDTO);
+// java.util
+Optional<User> u = repo.findById(1L);
+Comparator<Employee> byName = Comparator.comparing(Employee::name);   // sort nhận Comparator<? super E>
 
-// Optional (Module 06) — bọc giá trị có thể null một cách an toàn kiểu
-Optional<User> user = userRepository.findById(1L);
+// java.util.function (Module 03.3)
+Function<String, Integer> len = String::length;      // Function<T, R>
 
-// Functional Interface (Module 06) — hầu hết đều dùng Generics
-Function<String, Integer> parseLength = String::length; // Function<T, R>
+// Super type token — lấy về List<User> qua REST, giữ được kiểu tham số hóa
+ParameterizedTypeReference<List<User>> ref = new ParameterizedTypeReference<>() {};
 ```
 
-Nếu không nắm chắc Generics, những dòng code trên sẽ chỉ là "học thuộc cú pháp" — nắm chắc rồi thì **tự suy luận được ý nghĩa** ngay khi gặp bất kỳ class generic mới nào trong tài liệu Spring.
+Nắm generic thì các signature này **tự giải nghĩa** thay vì phải học thuộc.
 
 ---
 
-## 9. Tổng kết — Bảng ghi nhớ nhanh
+## 11. Bẫy thường gặp
 
-| Khái niệm | Điểm mấu chốt cần nhớ |
+### 11.1. Trộn raw type làm mất kiểm tra kiểu
+`List raw = genericList; raw.add(saiKiểu);` → chỉ warning, nổ ở chỗ khác. Không dùng raw type trong code mới.
+
+### 11.2. Tưởng `List<Object>` nhận được `List<String>`
+Không — invariance (mục 5). Tham số "list đọc bất kỳ" phải là `List<?>` hoặc `List<? extends Object>`.
+
+### 11.3. `? extends` rồi cố `add`
+`List<? extends Number>` không `add(1)` được. Cần ghi → `? super`, hoặc dùng `T`.
+
+### 11.4. Wildcard ở kiểu trả về
+`Map<String, ? extends Number> getConfig()` khiến caller vướng wildcard. Trả kiểu cụ thể.
+
+### 11.5. So sánh `Class` mà quên erasure
+`list.getClass() == ArrayList.class` đúng, nhưng không có cách phân biệt `ArrayList<String>` với `ArrayList<Integer>` lúc runtime.
+
+### 11.6. `new` mảng generic hoặc `T[]` lộ ra ngoài
+`(T[]) new Object[n]` trả ra dưới kiểu `T[]` → caller nhận `String[] s = ...` → `ClassCastException` (mảng thật là `Object[]`). Giữ nội bộ, hoặc dùng `toArray(T[])`.
+
+### 11.7. Autoboxing ẩn khi `T` là wrapper
+`List<Integer>` trong vòng lặp nóng → mỗi `add(int)`/`get()` box/unbox. Cần hiệu năng cao trên số nguyên thô → mảng primitive, không generic.
+
+### 11.8. `Collections.emptyList()` vào chỗ cần kiểu cụ thể
+Đôi khi suy luận ra `List<Object>`. Dùng type witness `Collections.<String>emptyList()` hoặc gán vào biến có kiểu rõ.
+
+---
+
+## 12. Tổng kết — Bảng ghi nhớ nhanh
+
+| Khái niệm | Điểm mấu chốt |
 |---|---|
-| Generics ra đời để giải quyết | Type safety lúc compile-time, tránh `ClassCastException` lúc runtime |
-| Generic Class | `class Box<T> { }` — type parameter gắn với cả class |
-| Generic Method | `<T> T method(T param)` — type parameter độc lập, khai báo trước kiểu trả về |
-| Bounded Type `<T extends X>` | Giới hạn T là X hoặc subtype — cho phép gọi method của X trên biến kiểu T |
-| `? extends X` | Chỉ ĐỌC an toàn (Producer) — không ghi được vì không rõ kiểu con cụ thể |
-| `? super X` | Chỉ GHI an toàn (Consumer) — đọc ra chỉ chắc chắn là Object |
-| PECS | Producer Extends, Consumer Super — quy tắc ghi nhớ khi chọn wildcard |
-| Type Erasure | Type parameter bị xóa lúc runtime, chỉ tồn tại lúc compile-time để kiểm tra kiểu |
-| Ứng dụng thực tế | `JpaRepository<T, ID>`, `ResponseEntity<T>`, `Optional<T>` — nền tảng đọc hiểu code Spring |
+| Generics giải quyết | Type safety **lúc compile**, hết ép kiểu thủ công, hết `ClassCastException` bất ngờ |
+| Raw type | Còn tồn tại vì tương thích ngược; dùng = **tắt kiểm tra generic** → heap pollution. Tránh. |
+| Generic class | `class Box<T>` — `T` gắn **instance**: không `static T`, không `new T()`, không `new T[]`, không primitive |
+| Generic method | `<T> T m(T x)` — `T` khai báo **trước kiểu trả về**; suy luận kiểu + diamond `<>`; type witness `Foo.<String>m()` khi cần |
+| Bounded `<T extends X>` | `T` là X/subtype → gọi được method của X. Interface vẫn viết `extends`. Nhiều bound: `A & B & C`, class đứng đầu |
+| Recursive bound | `<T extends Comparable<? super T>>` — cho phép kế thừa khả năng so sánh từ lớp cha (xem `Collections.max`) |
+| Invariance | `List<Integer>` **không** là `List<Number>`. Khác mảng (covariant → `ArrayStoreException`). Cần quan hệ cha–con → wildcard |
+| `?` | "kiểu nào đó" — an toàn hơn raw; đọc ra `Object`, không ghi (trừ `null`) |
+| `? extends X` | **Producer** — đọc ra ≥ X; **không** ghi |
+| `? super X` | **Consumer** — ghi X vào; đọc ra chỉ `Object` |
+| PECS | Producer Extends, Consumer Super. Vừa đọc vừa ghi → `T`. Đừng trả wildcard ra ngoài |
+| Capture (`CAP#1`) | Compiler đặt tên tạm cho `?`; lỗi "capture of ?" → tách **capture helper** `private <E> ...` |
+| Type erasure | `T` bị xóa lúc runtime (→ `Object`/bound). `List<String>` và `List<Integer>` cùng `getClass()`. Bridge method giữ đa hình |
+| Reified / không | Reified: mảng, raw, `List<?>`. Không: `List<String>`, `T` |
+| Lách erasure | `Class<T>` token, `Supplier<T>`, `cls.isInstance`, đổi tên method trùng erasure, `@SafeVarargs` |
+| Spring/JDK | `JpaRepository<T,ID>`, `ResponseEntity<T>`, `Optional<T>`, `Comparator<? super T>`, `ParameterizedTypeReference<...>` |
 
 ---
 
-## 10. Bài tập luyện tập
+## 13. Bài tập luyện tập
 
 ### Phần A — Trắc nghiệm nhận định (giải thích lý do)
 
-**Câu 1.** Đoạn code sau có lỗi compile không? Giải thích.
+**Câu 1.** Đoạn sau có lỗi compile không? Vì sao?
 ```java
 public class Container<T> {
     private T item;
-    public boolean isSameType(T other) {
-        return item.getClass() == other.getClass();
-    }
+    public boolean sameTypeAs(T other) { return item.getClass() == other.getClass(); }
 }
 ```
 
-**Câu 2.** Method sau thiếu gì để compile được? Sửa lại đúng cú pháp.
+**Câu 2.** Method sau thiếu gì để compile? Sửa lại đúng.
 ```java
 public static T findMax(List<T> list) {
     T max = list.get(0);
-    for (T item : list) {
-        if (item.compareTo(max) > 0) max = item;
-    }
+    for (T x : list) if (x.compareTo(max) > 0) max = x;
     return max;
 }
 ```
 
-**Câu 3.** Đoạn code sau có compile được không? Giải thích theo cơ chế wildcard.
+**Câu 3.** Dòng nào compile, dòng nào không? Giải thích bằng invariance.
 ```java
-public static void addAnimal(List<? extends Animal> animals) {
-    animals.add(new Dog()); // ?
+List<Integer> a = new ArrayList<>();
+List<Number>  b = a;                 // (1)
+List<? extends Number> c = a;        // (2)
+Object[] d = new Integer[3];         // (3)
+```
+
+**Câu 4.** Đoạn này compile được không? Giải thích theo wildcard.
+```java
+public static void addDog(List<? extends Animal> list) { list.add(new Dog()); }
+```
+
+**Câu 5.** Áp dụng PECS: điền `extends` hay `super`, giải thích.
+```java
+public static <T> void moveAll(List<? ___ T> dst, List<? ___ T> src) {
+    for (T x : src) dst.add(x);
+    src.clear();
 }
 ```
 
-**Câu 4.** Áp dụng PECS, chọn `extends` hay `super` cho tham số sau, giải thích lý do:
-```java
-public static <T> void fillList(List<? ??? T> list, T value, int count) {
-    for (int i = 0; i < count; i++) {
-        list.add(value); // list bị GHI vào
-    }
-}
-```
-
-**Câu 5.** Vì sao đoạn code sau gây lỗi compile? Liên hệ với khái niệm Type Erasure.
+**Câu 6.** Vì sao đoạn này lỗi compile? Liên hệ erasure. Viết cách sửa dùng `Class<T>`.
 ```java
 public class Box<T> {
-    public boolean isInstance(Object obj) {
-        return obj instanceof T; // ?
-    }
+    public boolean holds(Object o) { return o instanceof T; }
 }
 ```
+
+**Câu 7.** Hai method sau cùng class — vì sao không compile?
+```java
+void process(List<String> xs) { }
+void process(List<Integer> xs) { }
+```
+
+**Câu 8.** `List raw = new ArrayList<String>(); raw.add(42);` — compile ra sao (lỗi/warning/sạch)? Dòng `String s = ((List<String>) raw).get(0);` chuyện gì xảy ra lúc chạy? Tên hiện tượng?
 
 ---
 
 ### Phần B — Bài tập viết code
 
-**Bài 1 — Generic Class `Pair<K, V>` hoàn chỉnh.**
-Viết lại class `Pair<K, V>` với constructor, getter, và override `equals()`/`hashCode()`/`toString()` đúng chuẩn (liên hệ Module 02.4 — dựa trên cả `key` và `value`). Viết `main` tạo vài `Pair<String, Integer>`, chứng minh `equals()` hoạt động đúng khi so sánh 2 Pair có nội dung giống nhau.
+**Bài 1 — `Pair<K, V>` hoàn chỉnh.**
+`Pair<K, V>` với field `final`, constructor, getter, `equals()`/`hashCode()`/`toString()` chuẩn (dựa cả `key` và `value` — Module 02.4). Thêm generic method `static <A, B> Pair<B, A> swapped(Pair<A, B> p)`. `main` chứng minh `equals()` đúng và `swapped(swapped(p)).equals(p)`.
 
-**Bài 2 — Generic Method giới hạn (Bounded Type).**
-Viết method generic `<T extends Comparable<T>> T findMin(List<T> list)` tìm phần tử nhỏ nhất trong danh sách bất kỳ (miễn kiểu phần tử có implement `Comparable`). Thử gọi với `List<Integer>`, `List<String>`, `List<Double>` để chứng minh tính tái sử dụng của generic method.
+**Bài 2 — Bounded generic method.**
+`<T extends Comparable<? super T>> T minOf(List<T> list)` (dùng recursive bound như `Collections.max`). Gọi với `List<Integer>`, `List<String>`, và một cặp `class Employee`/`class Manager extends Employee` mà chỉ `Employee implements Comparable<Employee>` — chứng minh `minOf(List<Manager>)` vẫn biên dịch.
 
-**Bài 3 — Áp dụng Wildcard đúng theo PECS.**
-Viết method `static double sumAll(List<? extends Number> numbers)` tính tổng danh sách bất kỳ kiểu con nào của `Number`. Viết thêm method `static void fillWithZero(List<? super Integer> list, int count)` thêm `count` số 0 vào danh sách. Viết `main` thử gọi cả 2 method với `List<Integer>`, `List<Double>`, `List<Number>` để kiểm chứng tính linh hoạt.
+**Bài 3 — Wildcard theo PECS.**
+`static double sum(List<? extends Number> src)` và `static void fillZeros(List<? super Integer> dst, int n)`. `main` gọi cả hai với `List<Integer>`, `List<Double>`, `List<Number>`, `List<Object>` ở những chỗ hợp lệ; ghi chú (comment) những lời gọi **không** hợp lệ và vì sao.
 
-**Bài 4 — Generic Stack tự cài đặt (dùng ArrayDeque nội bộ).**
-Viết class `MyStack<T>` với các method `push(T item)`, `pop()`, `peek()`, `isEmpty()`, dùng `ArrayDeque<T>` làm cấu trúc lưu trữ bên trong (liên hệ Module 03.1). Đảm bảo `pop()` khi Stack rỗng ném ra `NoSuchElementException` với message rõ ràng thay vì để lỗi mặc định khó hiểu.
+**Bài 4 — `MyStack<T>` bằng `ArrayDeque` nội bộ.**
+`push`/`pop`/`peek`/`isEmpty`/`size`. `pop()`/`peek()` khi rỗng → `throw new NoSuchElementException("Stack rỗng")` (không để `null` lan truyền). Thêm `static <T> MyStack<T> of(T... items)` với `@SafeVarargs` — giải thích trong comment vì sao ở đây `@SafeVarargs` an toàn.
 
-**Bài 5 — Bài toán tổng hợp: Generic Repository đơn giản (chuẩn bị tư duy cho Spring Data JPA).**
-Viết `interface Repository<T, ID>` với các method: `T save(T entity)`, `Optional<T> findById(ID id)`, `List<T> findAll()`, `void deleteById(ID id)`. Cài đặt `class InMemoryUserRepository implements Repository<User, Long>` dùng `Map<Long, User>` làm nơi lưu trữ tạm trong bộ nhớ (giả lập database). Đây chính là mô hình thu nhỏ của `JpaRepository<T, ID>` sẽ gặp lại ở Module 14 — hoàn thành tốt bài này nghĩa là đã sẵn sàng về mặt tư duy generic cho phần đó.
+**Bài 5 — Generic array & capture helper.**
+(a) `static <T> void swap(List<?> list, int i, int j)` dùng **capture helper** — giải thích vì sao bản viết trực tiếp `list.set(i, list.set(j, list.get(i)))` trên `List<?>` không compile.
+(b) `static <T> T[] toArray(List<T> list, IntFunction<T[]> gen)` (gọi kiểu `toArray(list, String[]::new)`) — giải thích vì sao cần `gen` thay vì `new T[list.size()]`.
+
+**Bài 6 — Generic Repository (chuẩn bị cho Spring Data JPA).**
+`interface Repository<T, ID> { T save(T e); Optional<T> findById(ID id); List<T> findAll(); void deleteById(ID id); }`. Cài `class InMemoryUserRepo implements Repository<User, Long>` dùng `Map<Long, User>` + `AtomicLong` sinh id. `main` CRUD thử. So sánh signature với `JpaRepository<T, ID>` thật.
 
 ---
 
-### Phần C — Gợi ý đáp án (tự chấm)
+### Phần C — Nâng cao
+
+**Câu 1.** Giải thích chính xác vì sao generic phải **invariant** trong khi mảng **covariant**, và điều gì khác nhau về thời điểm phát hiện lỗi (`ArrayStoreException` runtime vs lỗi compile). Vì sao "generic covariant giả định" còn *tệ hơn* mảng covariant (gợi ý: erasure → không có `ArrayStoreException` để cứu).
+
+**Câu 2.** `Collections.max` có signature `<T extends Object & Comparable<? super T>> T max(Collection<? extends T> coll)`. Giải nghĩa **từng mảnh**: vì sao `& Object` (gợi ý: binary compatibility / kiểu trả về sau erasure), vì sao `Comparable<? super T>` chứ không `Comparable<T>`, vì sao `Collection<? extends T>`.
+
+**Câu 3.** Type erasure sinh **bridge method**. Cho `class Node implements Comparable<Node>`, liệt kê các method `compareTo` thực sự có trong bytecode và quan hệ gọi giữa chúng. Điều này ảnh hưởng gì tới stack trace và tới việc dùng reflection tìm method?
+
+**Câu 4.** So sánh ba cách "mang kiểu vào runtime": `Class<T>` token, super type token (`ParameterizedTypeReference`/`TypeToken`), và truyền `Supplier<T>`/factory. Mỗi cách giải quyết hạn chế nào của erasure, và giới hạn còn lại là gì?
+
+**Câu 5.** `@SafeVarargs` — heap pollution qua varargs generic xảy ra thế nào? Viết một method varargs generic **không an toàn** (ghi vào mảng varargs hoặc trả nó ra) minh họa `ClassCastException`, rồi giải thích vì sao đánh `@SafeVarargs` lên nó là sai.
+
+**Câu 6.** `List<?>` được coi là *reifiable* còn `List<String>` thì không. Định nghĩa "reifiable type" và liệt kê đầy đủ các nhóm reifiable trong Java. Vì sao `instanceof List<?>` hợp lệ nhưng `instanceof List<String>` thì không?
+
+**Câu 7.** Cho API `<T> Optional<T> firstMatching(List<T> list, Predicate<? super T> p)`. Giải thích vì sao `Predicate<? super T>` (không phải `Predicate<T>` hay `Predicate<? extends T>`), và cho ví dụ lời gọi mà `Predicate<T>` sẽ **từ chối** còn `? super T` thì nhận (gợi ý: `Predicate<Object>` kiểm `Objects::nonNull`).
+
+---
+
+### Phần D — Gợi ý đáp án (tự chấm)
 
 <details>
 <summary>Bấm để xem gợi ý đáp án Phần A</summary>
 
-1. **Không lỗi** — vì `getClass()` là method của `Object`, mọi kiểu `T` (dù chưa bounded) đều thừa hưởng được từ `Object`. Đoạn code này hợp lệ.
-2. Thiếu khai báo type parameter `<T extends Comparable<T>>` trước kiểu trả về, và thiếu ở tên method. Sửa:
-```java
-public static <T extends Comparable<T>> T findMax(List<T> list) {
-    T max = list.get(0);
-    for (T item : list) {
-        if (item.compareTo(max) > 0) max = item;
-    }
-    return max;
-}
-```
-3. **Không compile được** — vì `List<? extends Animal>` chỉ cho phép **đọc** (Producer), compiler không biết chính xác `animals` là `List<Dog>`, `List<Cat>`, hay `List<Animal>` — nếu cho phép `add(new Dog())` mà thực ra `animals` là `List<Cat>`, sẽ phá vỡ type safety. Đây chính là lý do quy tắc PECS tồn tại.
-4. Dùng `super`: `List<? super T>` — vì `list` đóng vai trò **Consumer** (bị ghi giá trị `value` vào), áp dụng đúng "Consumer Super" trong PECS.
-5. Lỗi vì **Type Erasure** — tại runtime, thông tin `T` cụ thể là gì đã bị xóa (chỉ còn là `Object` sau khi biên dịch), nên JVM **không có cách nào biết** `obj` có phải kiểu `T` hay không tại thời điểm chạy — Java cấm dùng `instanceof` trực tiếp với type parameter vì lý do này.
+1. **Không lỗi.** `getClass()` là method của `Object`, mọi `T` (kể cả chưa bounded) đều có. Hợp lệ.
+2. Thiếu khai báo type parameter **và** bound cho `compareTo`. Sửa:
+   ```java
+   public static <T extends Comparable<? super T>> T findMax(List<T> list) {
+       T max = list.get(0);
+       for (T x : list) if (x.compareTo(max) > 0) max = x;
+       return max;
+   }
+   ```
+3. (1) **Không compile** — generic invariant, `List<Integer>` không phải `List<Number>`. (2) **Compile** — `? extends Number` chấp nhận `List<Integer>`. (3) **Compile** — mảng covariant (`Integer[]` là `Object[]`), nhưng ghi phần tử sai kiểu vào `d` sẽ `ArrayStoreException` lúc chạy.
+4. **Không compile.** `List<? extends Animal>` là Producer — chỉ đọc. Compiler không biết `list` thực là `List<Dog>` hay `List<Cat>`; cho `add(new Dog())` mà nó là `List<Cat>` sẽ phá type safety. Đây là lý do PECS.
+5. `dst` bị **ghi** (`add`) → Consumer → `? super T`. `src` bị **đọc** (`for`) → Producer → `? extends T`. (`src.clear()` không cần kiểu phần tử nên không ảnh hưởng.)
+6. `o instanceof T` — sau erasure `T` là `Object`, JVM không có kiểu để kiểm tra → Java cấm `instanceof` với type parameter. Sửa:
+   ```java
+   public class Box<T> {
+       private final Class<T> type;
+       public Box(Class<T> type) { this.type = type; }
+       public boolean holds(Object o) { return type.isInstance(o); }
+   }
+   ```
+7. Sau erasure cả hai đều là `process(List)` — "name clash: same erasure" → không phải overload hợp lệ. Đổi tên (`processStrings` / `processInts`).
+8. Compile ra **warning** ("unchecked call to add(E)"), không phải lỗi. Lúc chạy: `raw.add(42)` bỏ `Integer` vào list; `((List<String>) raw).get(0)` — cast list không nổ, nhưng gán vào `String s` khiến compiler chèn cast `(String)` → **`ClassCastException`**. Hiện tượng: **heap pollution**.
 
 </details>
 
 <details>
 <summary>Bấm để xem gợi ý đáp án Phần B</summary>
 
-- **Bài 1:** `equals()` nên kiểm tra cả `key` và `value` bằng `Objects.equals()`; `hashCode()` dùng `Objects.hash(key, value)` — áp dụng đúng nguyên tắc đã học ở Module 02.4, chỉ khác là bây giờ field có kiểu generic `K`/`V` thay vì kiểu cụ thể.
-- **Bài 3:** Kết quả mong đợi: cả `sumAll()` lẫn `fillWithZero()` đều hoạt động linh hoạt với nhiều kiểu `List` khác nhau — đây chính là minh chứng thực tế cho lợi ích của wildcard so với việc phải viết nhiều overload riêng cho từng kiểu cụ thể (`sumAllInt`, `sumAllDouble`...).
-- **Bài 4:** Vì `ArrayDeque` không có sẵn method `peek()` ném exception khi rỗng (nó trả về `null`), cần tự kiểm tra `isEmpty()` trước và chủ động `throw new NoSuchElementException("Stack đang rỗng")` để có thông báo lỗi rõ ràng, dễ debug hơn so với việc để `null` lan truyền âm thầm rồi gây `NullPointerException` ở một chỗ khác xa nguồn gốc lỗi thực sự.
-- **Bài 5:** Đây là bài tập quan trọng nhất của module — khi hoàn thành, hãy so sánh lại `interface Repository<T, ID>` bạn vừa viết với `interface JpaRepository<T, ID>` thực tế của Spring Data (sẽ gặp ở Module 14) để thấy rõ chúng có cấu trúc tư duy **gần như giống hệt nhau**, chỉ khác là Spring Data đã cài đặt sẵn phần kết nối database thực sự thay vì `Map` giả lập trong bộ nhớ.
+- **Bài 1:** `equals()` so `Objects.equals(key, o.key) && Objects.equals(value, o.value)`; `hashCode()` = `Objects.hash(key, value)`. `swapped`: `new Pair<>(p.getValue(), p.getKey())`. `swapped(swapped(p))` trả về Pair nội dung như `p` → `equals` true.
+- **Bài 2:** `<T extends Comparable<? super T>> T minOf(List<T> list)`. Với `Manager extends Employee implements Comparable<Employee>`: `T = Manager`, cần `Manager extends Comparable<? super Manager>` — thỏa vì `Comparable<Employee>` và `Employee` là *super* của `Manager`. Nếu viết `Comparable<T>` thì cần `Comparable<Manager>` → **không** thỏa → chứng minh vì sao dùng `? super`.
+- **Bài 3:** `sum`: hợp lệ với mọi `List<Integer/Double/Number>`; **không** với `List<Object>` (Object không phải Number). `fillZeros`: hợp lệ với `List<Integer/Number/Object>`; **không** với `List<Double>` (Double không phải cha của Integer).
+- **Bài 4:** `ArrayDeque.peek()` trả `null` khi rỗng (không ném) → tự `if (isEmpty()) throw new NoSuchElementException(...)`. `@SafeVarargs` an toàn vì `of` chỉ **đọc** `items` để `push`, không ghi vào mảng varargs, không trả nó ra ngoài.
+- **Bài 5:** (a) `list.set(i, list.set(j, list.get(i)))` trên `List<?>` không compile vì `list.set(index, ...)` cần đối số kiểu `CAP#1` mà `list.get(i)` trả `CAP#1` — compiler *không chứng minh được* hai `?` là cùng kiểu. Capture helper `<E>` đặt tên `E` cho cái `?` → trong helper mọi thứ là `E` nhất quán. (b) `new T[n]` bị erasure cấm; `IntFunction<T[]> gen` (ví dụ `String[]::new`) để **caller** tạo mảng đúng kiểu thật.
+- **Bài 6:** `save`: nếu `id == null` thì `e.setId(seq.incrementAndGet())`, `map.put(id, e)`, return `e`. `findById`: `Optional.ofNullable(map.get(id))`. Signature khớp gần hệt `JpaRepository<T, ID>` — chỉ khác Spring cài sẵn phần persistence.
+
+</details>
+
+<details>
+<summary>Bấm để xem gợi ý đáp án Phần C</summary>
+
+1. Mảng **giữ kiểu phần tử lúc runtime** (reified) nên mỗi lần ghi JVM kiểm tra và ném `ArrayStoreException` — covariant mà *vẫn* an toàn bộ nhớ, chỉ là lỗi bị đẩy sang runtime. Generic bị **erasure**: `List<Integer>` lúc runtime chỉ là `List`, không có gì để kiểm tra khi `add`. Nếu Java cho generic covariant, `Double` lọt vào `List<Integer>` sẽ **không có** exception nào tại điểm ghi; lỗi nổ ở một `get()` xa xôi dưới dạng `ClassCastException` do cast do compiler chèn — khó lần hơn hẳn. Nên generic chọn cấm ở compile-time.
+2. `& Object`: sau erasure, bound đầu tiên quyết định kiểu xóa và **kiểu trả về trong bytecode**; ghi `Object &` để `max` erase thành `Object max(Collection)` (giữ tương thích nhị phân với JDK cũ trước khi `Comparable` được generic hóa) thay vì `Comparable max(...)`. `Comparable<? super T>`: cho phép `T` kế thừa `compareTo` từ lớp cha (`Manager` dùng `Comparable<Employee>`). `Collection<? extends T>`: `coll` chỉ bị **đọc** → Producer → `extends`.
+3. Bytecode có `int compareTo(Node)` (bản thật) **và** `int compareTo(Object)` (bridge, synthetic) — bridge cast đối số về `Node` rồi gọi bản thật; nó tồn tại để `Comparable.compareTo(Object)` sau erasure vẫn dispatch đúng. Ảnh hưởng: stack trace có thể hiện khung `compareTo(Object)`; reflection `getMethods()` trả **cả hai**, cần lọc `Method::isBridge`/`isSynthetic` khi tìm "method thật".
+4. `Class<T>`: giải quyết `new T()`, `instanceof T`, cast — nhưng **không** mang kiểu tham số hóa (`List<User>`). Super type token: khai thác việc kiểu *generic superclass* của anonymous class được lưu trong metadata (`Class.getGenericSuperclass()`) → lấy được `List<User>` đầy đủ — nhưng phải tạo `new X<...>(){}` (có `{}`). `Supplier<T>`/factory: giải quyết *khởi tạo* mà không cần reflection/constructor công khai — nhưng caller phải cung cấp cách tạo, và vẫn không cho `instanceof`.
+5. Varargs generic `f(T... a)` thực chất tạo mảng `T[]` mà lúc runtime là `Object[]`. Nếu method **ghi** một giá trị sai kiểu vào `a[0]`, hoặc **trả `a` ra ngoài** rồi nơi khác đọc dưới kiểu `T[]` cụ thể → `ClassCastException`. Ví dụ không an toàn: `static <T> T[] toArray(T... a) { return a; }` rồi `String[] s = toArray("x", 1);` — mảng thật `Object[]`, gán `String[]` nổ. Đánh `@SafeVarargs` lên nó là **nói dối compiler** — annotation chỉ *tắt cảnh báo*, không làm code an toàn.
+6. **Reifiable type** = kiểu mà thông tin đầy đủ của nó *có* lúc runtime. Nhóm reifiable: kiểu primitive; non-generic class/interface; kiểu tham số hóa mà **mọi** đối số là **unbounded wildcard** (`List<?>`, `Map<?, ?>`); raw type (`List`); mảng của reifiable; kiểu `? extends`/`? super` thì **không**. `instanceof List<?>` hợp lệ vì runtime chỉ cần biết "có phải `List` không" — `?` không thêm ràng buộc; `instanceof List<String>` cần kiểm tra kiểu phần tử đã bị xóa → cấm.
+7. `Predicate<? super T>` vì predicate **tiêu thụ** `T` (nhận `T`, trả `boolean`) → Consumer → `super`. `Predicate<T>` sẽ từ chối `Predicate<Object> nonNull = Objects::nonNull` khi `T = String` (vì `Predicate<Object>` không phải `Predicate<String>`); `? super String` thì nhận, vì `Object` là cha của `String`. `? extends` sai hoàn toàn ở đây — sẽ cho `Predicate<Integer>` áp lên `List<String>`.
 
 </details>
 
