@@ -1,6 +1,8 @@
 # Module 03.3 — Stream API & Lambda
 
-> **Mức độ ưu tiên: Trung bình → Cao trong thực tế** — Dù xếp "trung bình" trong lộ trình lý thuyết, đây là phong cách viết code **được dùng nhiều nhất** trong mọi codebase Spring Boot hiện đại. Không thành thạo Stream API sẽ khiến việc đọc code đồng nghiệp, hoặc code trong tài liệu Spring, trở nên chật vật — gần như mọi service xử lý danh sách dữ liệu ngày nay đều dùng Stream thay vì vòng lặp `for` truyền thống.
+> **Mức độ ưu tiên: Cao trong thực tế** — Dù xếp "trung bình" trong lộ trình lý thuyết, đây là phong cách viết code **dùng nhiều nhất** trong mọi codebase Spring Boot hiện đại. Không thành thạo Stream/lambda thì đọc code đồng nghiệp hoặc tài liệu Spring sẽ chật vật, và dễ viết pipeline sai một cách khó phát hiện (dựa vào `peek`, tái dùng Stream, `parallelStream()` có side-effect...).
+
+> **Phạm vi bài này:** lambda, functional interface, method reference, Stream API tuần tự & song song, `Collectors`, lazy evaluation. **Chỉ nhắc tên, không đi sâu:** `equals`/`hashCode` (Module 02.4 — `distinct` phụ thuộc vào nó), Collections (Module 03.1), Generics (Module 03.2 — signature các functional interface), Concurrency/`ForkJoinPool` (Module 09 — `parallelStream` chạy trên đó), Optional đầy đủ (Module 04). Các chỗ chạm chủ đề khác chỉ nêu đủ để bài trọn vẹn.
 
 ---
 
@@ -8,493 +10,674 @@
 
 1. [Functional Interface — nền tảng của Lambda](#1-functional-interface--nền-tảng-của-lambda)
 2. [Lambda Expression](#2-lambda-expression)
-3. [4 Functional Interface cốt lõi trong `java.util.function`](#3-4-functional-interface-cốt-lõi-trong-javautilfunction)
+3. [Họ functional interface trong `java.util.function`](#3-họ-functional-interface-trong-javautilfunction)
 4. [Method Reference (`::`)](#4-method-reference-)
-5. [Stream API — tổng quan pipeline](#5-stream-api--tổng-quan-pipeline)
-6. [Các thao tác trung gian (Intermediate Operations)](#6-các-thao-tác-trung-gian-intermediate-operations)
-7. [Các thao tác kết thúc (Terminal Operations)](#7-các-thao-tác-kết-thúc-terminal-operations)
+5. [Tạo Stream — nhiều nguồn & stream nguyên thủy](#5-tạo-stream--nhiều-nguồn--stream-nguyên-thủy)
+6. [Thao tác trung gian (Intermediate Operations)](#6-thao-tác-trung-gian-intermediate-operations)
+7. [Thao tác kết thúc (Terminal Operations)](#7-thao-tác-kết-thúc-terminal-operations)
 8. [`Collectors` — thu thập kết quả](#8-collectors--thu-thập-kết-quả)
-9. [Lazy Evaluation — Stream chỉ chạy khi có Terminal Operation](#9-lazy-evaluation--stream-chỉ-chạy-khi-có-terminal-operation)
-10. [Khi nào NÊN và KHÔNG NÊN dùng Stream](#10-khi-nào-nên-và-không-nên-dùng-stream)
-11. [Tổng kết — Bảng ghi nhớ nhanh](#11-tổng-kết--bảng-ghi-nhớ-nhanh)
-12. [Bài tập luyện tập](#12-bài-tập-luyện-tập)
+9. [Lazy Evaluation & ngữ nghĩa Stream](#9-lazy-evaluation--ngữ-nghĩa-stream)
+10. [`parallelStream()` — song song & cạm bẫy](#10-parallelstream--song-song--cạm-bẫy)
+11. [Khi nào NÊN và KHÔNG NÊN dùng Stream](#11-khi-nào-nên-và-không-nên-dùng-stream)
+12. [Tổng kết — Bảng ghi nhớ nhanh](#12-tổng-kết--bảng-ghi-nhớ-nhanh)
+13. [Bài tập luyện tập](#13-bài-tập-luyện-tập)
 
 ---
 
 ## 1. Functional Interface — nền tảng của Lambda
 
-**Functional Interface** là 1 interface chỉ có **đúng 1 method trừu tượng** (có thể có thêm default/static method — không tính, đã học ở Module 02.2).
+**Functional interface** = interface có **đúng một method trừu tượng** (Single Abstract Method — SAM). Được phép có thêm `default`/`static`/`private` method (Module 02.2) mà vẫn là functional interface.
 
 ```java
-@FunctionalInterface // annotation KHÔNG bắt buộc, nhưng nên dùng — compiler sẽ báo lỗi nếu vô tình thêm method trừu tượng thứ 2
+@FunctionalInterface   // KHÔNG bắt buộc, nhưng nên có — compiler báo lỗi nếu vô tình thêm method trừu tượng thứ 2
 public interface Calculator {
-    int calculate(int a, int b); // ĐÚNG 1 method trừu tượng
+    int calculate(int a, int b);
 }
 ```
 
-Vì chỉ có **duy nhất 1 method** cần cài đặt, Java cho phép dùng **Lambda Expression** để viết implementation cực kỳ gọn, thay vì phải tạo hẳn 1 class hoặc anonymous class dài dòng.
+### Ngoại lệ: method của `Object` không tính vào SAM
+
+Một functional interface **được** khai báo lại các method `public` của `Object` (`equals`, `hashCode`, `toString`) mà không phá số đếm SAM — vì mọi implementation đã có sẵn chúng từ `Object`. `java.util.Comparator` là ví dụ: nó có `compare(T,T)` **và** `equals(Object)` nhưng vẫn là functional interface.
+
+```java
+@FunctionalInterface
+public interface MyComparator<T> {
+    int compare(T a, T b);        // SAM duy nhất
+    boolean equals(Object o);      // không tính — kế thừa từ Object
+}
+```
+
+Vì chỉ có **một** method cần cài đặt, Java cho phép thay thế bằng **lambda** hoặc **method reference** thay vì viết class/anonymous class dài dòng.
 
 ---
 
 ## 2. Lambda Expression
 
-### So sánh: Anonymous Class (cách cũ) vs Lambda (cách mới, Java 8+)
+### Anonymous class (cũ) vs Lambda (Java 8+)
 
 ```java
-// Cách CŨ — Anonymous Class, dài dòng
-Calculator addition = new Calculator() {
-    @Override
-    public int calculate(int a, int b) {
-        return a + b;
-    }
+// CŨ — anonymous class
+Calculator add = new Calculator() {
+    @Override public int calculate(int a, int b) { return a + b; }
 };
-
-// Cách MỚI — Lambda Expression, ngắn gọn
-Calculator addition2 = (a, b) -> a + b;
+// MỚI — lambda
+Calculator add2 = (a, b) -> a + b;
 ```
 
-### Cú pháp Lambda
+### Cú pháp
 
 ```java
-(tham số) -> biểu thức_hoặc_khối_lệnh
+Calculator add   = (a, b) -> a + b;                      // biểu thức đơn — tự return
+Calculator add2  = (int a, int b) -> { return a + b; };   // khối lệnh — cần {} và return
+Runnable   task  = () -> System.out.println("Chạy");      // không tham số
+Runnable   task2 = () -> { log("A"); log("B"); };          // nhiều lệnh
+Function<Integer,Integer> sq = n -> n * n;                 // 1 tham số — bỏ được ngoặc
 ```
+
+### Lambda KHÔNG có kiểu cố hữu — "target typing"
+
+Cùng một lambda có thể mang nhiều kiểu tùy ngữ cảnh nơi nó xuất hiện:
 
 ```java
-Calculator add = (a, b) -> a + b;                  // biểu thức đơn — tự động return
-Calculator add2 = (int a, int b) -> { return a + b; }; // khối lệnh — cần {} và return tường minh
-
-Runnable task = () -> System.out.println("Chạy");   // không tham số
-Runnable task2 = () -> { System.out.println("A"); System.out.println("B"); }; // nhiều dòng lệnh
-
-// Java thường suy luận được kiểu tham số (type inference) — có thể bỏ khai báo kiểu
-Calculator add3 = (a, b) -> a + b; // không cần ghi (int a, int b)
+Calculator        c  = (a, b) -> a + b;   // Calculator
+IntBinaryOperator op = (a, b) -> a + b;   // IntBinaryOperator — cùng thân, khác kiểu đích
+// var x = (a, b) -> a + b;               // ❌ không suy luận được: không có "kiểu đích"
 ```
 
-### Lambda "bắt giữ" biến bên ngoài (Variable Capture)
+### Lambda vs anonymous class — `this` và bản chất
 
 ```java
-int discount = 10; // biến local
-
-Calculator applyDiscount = (price, unused) -> price - discount; // Lambda "capture" biến discount từ scope bên ngoài
+class Widget {
+    private String id = "W1";
+    Runnable asLambda()    { return () -> System.out.println(id + " / " + this.getClass()); }
+    Runnable asAnonymous() { return new Runnable() {
+        public void run() { System.out.println(/* id vẫn OK */ " / " + this.getClass()); }  // this = Runnable ẩn danh
+    }; }
+}
 ```
 
-> ⚠️ **Ràng buộc quan trọng:** biến local bị "capture" bởi Lambda phải là **effectively final** — nghĩa là dù không bắt buộc ghi từ khóa `final`, biến đó **không được phép gán lại giá trị** sau khi khai báo, nếu không sẽ lỗi compile:
-> ```java
-> int counter = 0;
-> Runnable r = () -> System.out.println(counter);
-> counter = 5; // ❌ Lỗi compile: "Variable used in lambda expression should be final or effectively final"
-> ```
-> Lý do kỹ thuật: Lambda có thể chạy ở thời điểm khác, hoặc thread khác — Java cần đảm bảo giá trị biến capture không đổi để tránh tình trạng dữ liệu không nhất quán.
+| | Lambda | Anonymous class |
+|---|---|---|
+| `this` | **Instance bao ngoài** (`Widget`) | **Chính object ẩn danh** |
+| File `.class` riêng | Không — dịch bằng `invokedynamic` + `LambdaMetafactory` lúc chạy | Có — `Widget$1.class` |
+| Che biến bao ngoài (shadowing) | Không được | Được |
+| Có state/field riêng | Không | Có |
+| Không "capture" gì | Tái dùng **một** instance (non-capturing → singleton) | Tạo instance mới mỗi lần |
+
+Liên hệ Module 01.3 (mục `this` trong lambda vs anonymous).
+
+### Variable capture — phải "effectively final"
+
+```java
+int discount = 10;
+Calculator apply = (price, q) -> price - discount;   // capture discount
+
+int counter = 0;
+Runnable r = () -> System.out.println(counter);
+// counter = 5;   // ❌ "Variable used in lambda should be final or effectively final"
+```
+
+- Biến local bị capture **không được gán lại** (dù không cần từ khóa `final`).
+- **Field** của object thì được sửa thoải mái (capture qua `this`, không phải biến local): `() -> this.count++` hợp lệ.
+- "Lách" bằng mảng 1 phần tử `int[] box = {0}; ... box[0]++;` hoặc `AtomicInteger` — chạy được nhưng là **code smell**: thường nên dùng `reduce`/`Collectors`/`IntStream.sum()` thay vì tích lũy vào biến ngoài (nhất là khi chạy song song → race condition).
+
+### Checked exception trong lambda
+
+`Function`, `Consumer`... **không khai báo `throws`** → lambda ném checked exception sẽ không compile:
+
+```java
+// Function<String,byte[]> read = p -> Files.readAllBytes(Path.of(p));   // ❌ IOException không khớp
+Function<String,byte[]> read = p -> {
+    try { return Files.readAllBytes(Path.of(p)); }
+    catch (IOException e) { throw new UncheckedIOException(e); }          // bọc thành unchecked
+};
+```
+
+Giải pháp khác: tự định nghĩa `@FunctionalInterface ThrowingFunction<T,R,E extends Exception>` rồi có helper `unchecked(...)`.
 
 ---
 
-## 3. 4 Functional Interface cốt lõi trong `java.util.function`
+## 3. Họ functional interface trong `java.util.function`
 
-JDK đã cung cấp sẵn rất nhiều functional interface thông dụng trong package `java.util.function`, không cần tự định nghĩa lại cho mọi trường hợp.
+### Bốn interface cốt lõi
 
-| Interface | Method trừu tượng | Ý nghĩa | Ví dụ |
+| Interface | Method | Ý nghĩa | Ví dụ |
 |---|---|---|---|
-| `Function<T, R>` | `R apply(T t)` | Nhận `T`, trả về `R` (biến đổi dữ liệu) | `Function<String, Integer> len = String::length;` |
-| `Predicate<T>` | `boolean test(T t)` | Nhận `T`, trả về `boolean` (kiểm tra điều kiện) | `Predicate<Integer> isEven = n -> n % 2 == 0;` |
-| `Supplier<T>` | `T get()` | Không nhận gì, trả về `T` (cung cấp giá trị) | `Supplier<String> greet = () -> "Hello";` |
-| `Consumer<T>` | `void accept(T t)` | Nhận `T`, không trả về gì (tiêu thụ/xử lý dữ liệu) | `Consumer<String> print = System.out::println;` |
+| `Function<T,R>` | `R apply(T)` | Biến đổi `T` → `R` | `Function<String,Integer> len = String::length;` |
+| `Predicate<T>` | `boolean test(T)` | Kiểm tra điều kiện | `Predicate<Integer> even = n -> n % 2 == 0;` |
+| `Supplier<T>` | `T get()` | Cung cấp giá trị (lười) | `Supplier<UUID> id = UUID::randomUUID;` |
+| `Consumer<T>` | `void accept(T)` | Tiêu thụ, không trả về | `Consumer<String> log = System.out::println;` |
+
+### Biến thể arity & "cùng kiểu"
 
 ```java
-Function<String, Integer> stringLength = s -> s.length();
-System.out.println(stringLength.apply("Java")); // 4
-
-Predicate<Integer> isPositive = n -> n > 0;
-System.out.println(isPositive.test(-5)); // false
-
-Supplier<Double> randomValue = () -> Math.random();
-System.out.println(randomValue.get()); // giá trị ngẫu nhiên mỗi lần gọi
-
-Consumer<String> logger = message -> System.out.println("[LOG] " + message);
-logger.accept("Ứng dụng đã khởi động");
+BiFunction<Integer,Integer,Integer> add = Integer::sum;   // 2 tham số
+BiPredicate<String,Integer> lenIs = (s, n) -> s.length() == n;
+BiConsumer<String,Integer> put = map::put;
+UnaryOperator<String>  up  = String::toUpperCase;          // Function<T,T>
+BinaryOperator<Integer> sum = Integer::sum;                // BiFunction<T,T,T>
 ```
 
-### Các biến thể hay gặp
+> Không có `TriFunction` — quá 2 tham số phải tự khai báo functional interface riêng.
+
+### Biến thể nguyên thủy — TRÁNH boxing
+
+`Function<Integer,Integer>` box/unbox mỗi lần gọi. Với số, dùng bản chuyên biệt:
+
+| Nhóm | Ví dụ |
+|---|---|
+| `IntPredicate`, `LongPredicate`, `DoublePredicate` | `IntPredicate pos = n -> n > 0;` |
+| `IntFunction<R>`, `ToIntFunction<T>`, `IntToLongFunction` | `ToIntFunction<String> l = String::length;` |
+| `IntUnaryOperator`, `IntBinaryOperator` | `IntBinaryOperator max = Math::max;` |
+| `IntSupplier`, `BooleanSupplier` | `IntSupplier dice = () -> 1 + rnd.nextInt(6);` |
+| `IntConsumer`, `ObjIntConsumer<T>` | `IntConsumer p = System.out::println;` |
+
+### Tổ hợp — `compose`, `andThen`, `and/or/negate`, `identity`
 
 ```java
-BiFunction<Integer, Integer, Integer> add = (a, b) -> a + b; // nhận 2 tham số
-UnaryOperator<Integer> square = n -> n * n;                   // Function<T,T> — vào ra cùng kiểu
-BinaryOperator<Integer> sum = (a, b) -> a + b;                // BiFunction<T,T,T> — vào ra cùng kiểu
-```
+Function<Integer,Integer> f = x -> x + 1;
+Function<Integer,Integer> g = x -> x * 2;
+f.andThen(g).apply(3);   // g(f(3)) = (3+1)*2 = 8
+f.compose(g).apply(3);   // f(g(3)) = (3*2)+1 = 7
+Function.<String>identity().apply("x");   // "x" — hay dùng trong Collectors.toMap
 
-### Kết hợp Predicate — `and()`, `or()`, `negate()`
+Predicate<Integer> pos  = n -> n > 0;
+Predicate<Integer> even = n -> n % 2 == 0;
+pos.and(even).test(4);   // true
+pos.or(even).test(-4);   // true
+pos.negate().test(-1);   // true
+Predicate.not(String::isBlank);   // Java 11 — phủ định method reference gọn hơn negate()
 
-```java
-Predicate<Integer> isPositive = n -> n > 0;
-Predicate<Integer> isEven = n -> n % 2 == 0;
-
-Predicate<Integer> isPositiveAndEven = isPositive.and(isEven);
-Predicate<Integer> isPositiveOrEven = isPositive.or(isEven);
-Predicate<Integer> isNegative = isPositive.negate();
-
-System.out.println(isPositiveAndEven.test(4));  // true
-System.out.println(isPositiveAndEven.test(-4)); // false
+Consumer<String> a = s -> System.out.print("[");
+Consumer<String> b = System.out::println;
+a.andThen(b).accept("x");   // in "[" rồi "x\n"
 ```
 
 ---
 
 ## 4. Method Reference (`::`)
 
-Khi Lambda **chỉ đơn giản gọi lại 1 method đã tồn tại**, có thể viết gọn hơn bằng **Method Reference**.
+Khi lambda **chỉ gọi lại một method có sẵn**, viết gọn bằng method reference.
 
-| Loại | Cú pháp Lambda | Method Reference tương đương |
+| Loại | Lambda | Method reference | Ghi chú |
+|---|---|---|---|
+| Static | `n -> Integer.parseInt(n)` | `Integer::parseInt` | |
+| Instance của **object cụ thể** (bound) | `s -> out.println(s)` | `out::println` | receiver cố định, bắt tại thời điểm tạo |
+| Instance của **kiểu bất kỳ** (unbound) | `(String s) -> s.toUpperCase()` | `String::toUpperCase` | **tham số đầu tiên trở thành receiver** |
+| Constructor | `() -> new ArrayList<>()` | `ArrayList::new` | |
+| Constructor mảng | `n -> new String[n]` | `String[]::new` | kiểu là `IntFunction<String[]>` |
+| `super` method | `() -> super.toString()` | `super::toString` | trong instance method |
+
+```java
+List<String> names = new ArrayList<>(List.of("pho", "an", "binh"));
+
+names.forEach(System.out::println);                         // bound
+names.replaceAll(String::toUpperCase);                       // unbound — receiver là phần tử
+names.sort(String::compareToIgnoreCase);                     // unbound 2 tham số: a.compareToIgnoreCase(b)
+String[] arr = names.stream().toArray(String::new);          // ✗ sai — cần String[]::new
+String[] ok  = names.stream().toArray(String[]::new);        // ✓
+
+Supplier<List<String>> factory = ArrayList::new;
+BiFunction<String,String,Boolean> eq = String::equals;      // unbound: (a,b) -> a.equals(b)
+```
+
+> **Nguyên tắc chọn:** lambda dạng `x -> x.m()` hoặc `x -> C.m(x)` — **không thêm logic** — thì đổi sang method reference. Còn `x -> x.m() + 1` hay `x -> C.m(x, other)` thì giữ lambda.
+
+---
+
+## 5. Tạo Stream — nhiều nguồn & stream nguyên thủy
+
+```java
+Collection<T>.stream()                       // phổ biến nhất
+Arrays.stream(array)                          // từ mảng (có bản cho int[]/long[]/double[])
+Stream.of("a", "b", "c")                      // từ vài giá trị rời
+Stream.empty()                                // rỗng
+Stream.ofNullable(maybeNull)                  // Java 9 — 0 hoặc 1 phần tử
+Stream.iterate(1, n -> n * 2)                 // VÔ HẠN: 1,2,4,8,... → cần limit()
+Stream.iterate(1, n -> n <= 100, n -> n * 2) // Java 9 — có điều kiện dừng → HỮU HẠN
+Stream.generate(Math::random).limit(5)       // VÔ HẠN theo Supplier → cần limit()
+"hello".chars()                              // IntStream các mã ký tự
+Pattern.compile(",").splitAsStream("a,b,c")  // tách chuỗi lười
+Files.lines(path)                            // từng dòng file (nên dùng trong try-with-resources)
+```
+
+### `IntStream` / `LongStream` / `DoubleStream` — không boxing
+
+```java
+int total = IntStream.rangeClosed(1, 100).sum();               // range: [0,n)  rangeClosed: [1,n]
+OptionalDouble avg = words.stream().mapToInt(String::length).average();
+IntSummaryStatistics st = words.stream().mapToInt(String::length).summaryStatistics();
+// st.getCount() getSum() getMin() getMax() getAverage()
+
+List<Integer> boxed = IntStream.range(0, 5).boxed().toList();   // IntStream → Stream<Integer>
+Stream<String> labels = IntStream.range(0, 3).mapToObj(i -> "row" + i);
+```
+
+Chuyển đổi hai chiều: `stream.mapToInt(...)` / `intStream.boxed()` / `intStream.mapToObj(...)`.
+
+---
+
+## 6. Thao tác trung gian (Intermediate Operations)
+
+Trả về **Stream mới**, cho nối chuỗi, **lazy** (mục 9). Chia hai nhóm:
+
+| Nhóm | Đặc điểm | Ví dụ |
 |---|---|---|
-| Static method | `n -> Integer.parseInt(n)` | `Integer::parseInt` |
-| Instance method của object cụ thể | `s -> System.out.println(s)` | `System.out::println` |
-| Instance method của kiểu tham số (bất kỳ object nào thuộc kiểu đó) | `s -> s.toUpperCase()` | `String::toUpperCase` |
-| Constructor | `() -> new ArrayList<>()` | `ArrayList::new` |
+| **Stateless** — xử lý từng phần tử độc lập | Rẻ, song song hóa tốt | `filter`, `map`, `mapToInt`, `flatMap`, `peek` |
+| **Stateful** — cần nhìn phần tử khác / đệm toàn bộ | Đắt hơn, có thể chặn stream vô hạn | `sorted` (đệm hết), `distinct` (nhớ đã thấy), `limit`, `skip`, `takeWhile`, `dropWhile` |
 
 ```java
-List<String> names = List.of("pho", "an", "binh");
-
-names.forEach(name -> System.out.println(name)); // Lambda
-names.forEach(System.out::println);              // Method Reference — gọn hơn, cùng ý nghĩa
-
-List<String> upper = names.stream()
-    .map(name -> name.toUpperCase())   // Lambda
-    .toList();
-List<String> upper2 = names.stream()
-    .map(String::toUpperCase)          // Method Reference — "toUpperCase" gọi trên CHÍNH phần tử đang xử lý
-    .toList();
-
-Supplier<List<String>> listCreator = ArrayList::new; // Constructor reference
+List<Integer> ns = List.of(5, 3, 8, 1, 9, 2, 8);
+ns.stream().filter(n -> n > 3);
+ns.stream().map(n -> n * 2);
+ns.stream().sorted(Comparator.reverseOrder());
+ns.stream().distinct();                 // dựa equals()/hashCode() — Module 02.4
+ns.stream().limit(3);
+ns.stream().skip(2);
+ns.stream().takeWhile(n -> n < 8);      // Java 9 — lấy tới khi gặp phần tử SAI điều kiện: [5,3]
+ns.stream().dropWhile(n -> n < 8);      // Java 9 — bỏ tiền tố thỏa điều kiện: [8,1,9,2,8]
 ```
 
-> **Nguyên tắc chọn:** khi Lambda có dạng `x -> x.method()` hoặc `x -> ClassName.method(x)` — tức là **không thêm logic gì khác** ngoài việc gọi lại 1 method có sẵn — nên chuyển sang Method Reference để code gọn và dễ đọc hơn.
+> ⚠️ **`peek` không đáng tin cho logic.** Đặc tả cho phép runtime **bỏ qua** `peek` nếu kết quả không cần duyệt phần tử — ví dụ `Stream.of(1,2,3).peek(System.out::println).count()` từ Java 9 có thể **không in gì** (vì `count()` suy ra được số lượng mà không chạy pipeline). Chỉ dùng `peek` để debug tạm, không để tạo side-effect thật.
+
+### `flatMap` — làm phẳng cấu trúc lồng
+
+```java
+List<List<String>> nested = List.of(List.of("Java","Spring"), List.of("Go"));
+List<String> flat = nested.stream().flatMap(List::stream).toList();   // [Java, Spring, Go]
+
+// Thường gặp: 1 object chứa nhiều con
+record Order(String id, List<String> products) {}
+List<String> allProducts = orders.stream()
+    .flatMap(o -> o.products().stream())
+    .distinct().sorted().toList();
+```
+
+- `map`: 1 phần tử vào → **1** phần tử ra. `flatMap`: 1 phần tử vào → **một Stream con** → nối tất cả lại thành một Stream phẳng.
+- `mapMulti` (Java 16) — thay thế `flatMap` khi mỗi phần tử sinh ít phần tử con, tránh tạo Stream trung gian: `stream.mapMulti((o, sink) -> o.products().forEach(sink))`.
 
 ---
 
-## 5. Stream API — tổng quan pipeline
+## 7. Thao tác kết thúc (Terminal Operations)
 
-**Stream** là một chuỗi các phần tử hỗ trợ xử lý dữ liệu theo phong cách **functional programming** — không sửa đổi dữ liệu nguồn, mà tạo ra 1 luồng xử lý qua nhiều bước.
-
-```
-Nguồn dữ liệu (List, Set, Array...) 
-      │
-      ▼
-  .stream()  ────►  Intermediate Operations (map, filter, sorted...) — CÓ THỂ nối tiếp nhiều bước, LAZY (chưa chạy ngay)
-      │                        │
-      │                        ▼
-      └──────────────►  Terminal Operation (collect, forEach, reduce...) — KÍCH HOẠT toàn bộ pipeline chạy thực sự
-```
+**Kích hoạt** pipeline, trả về kết quả **không phải Stream**. Sau đó Stream **hết hạn** (mục 9).
 
 ```java
-List<String> names = List.of("Pho", "An", "Binh", "Cuong", "Dung");
-
-List<String> result = names.stream()               // (1) tạo Stream từ List
-    .filter(name -> name.length() > 3)              // (2) Intermediate — giữ lại tên dài hơn 3 ký tự
-    .map(String::toUpperCase)                        // (3) Intermediate — chuyển hoa toàn bộ
-    .sorted()                                         // (4) Intermediate — sắp xếp alphabet
-    .collect(Collectors.toList());                    // (5) Terminal — thu thập kết quả thành List
-
-System.out.println(result); // [BINH, CUONG, DUNG]
+List<Integer> ns = List.of(5, 3, 8, 1, 9);
+ns.stream().forEach(System.out::println);          // không đảm bảo thứ tự khi song song
+ns.stream().forEachOrdered(System.out::println);   // giữ encounter order kể cả song song
+long c = ns.stream().filter(n -> n > 3).count();
+Optional<Integer> mx = ns.stream().max(Integer::compareTo);
+boolean any  = ns.stream().anyMatch(n -> n > 8);   // short-circuit: dừng ngay khi thấy true
+boolean all  = ns.stream().allMatch(n -> n > 0);
+boolean none = ns.stream().noneMatch(n -> n < 0);
+Integer[] arr = ns.stream().toArray(Integer[]::new);
 ```
 
-> **So sánh trực quan với cách viết vòng lặp truyền thống:** đoạn Stream trên tương đương đúng 1 vòng `for` + `if` + `StringBuilder`/List trung gian + `Collections.sort()` — Stream giúp diễn đạt **ý định (intent)** rõ ràng hơn nhiều, đọc gần giống ngôn ngữ tự nhiên ("lọc, rồi biến đổi, rồi sắp xếp, rồi thu thập").
-
----
-
-## 6. Các thao tác trung gian (Intermediate Operations)
-
-Đặc điểm chung: trả về **1 Stream mới**, cho phép nối tiếp (`chaining`) nhiều bước, và **LAZY** (không thực thi ngay — xem mục 9).
+### `findFirst` vs `findAny`
 
 ```java
-List<Integer> numbers = List.of(5, 3, 8, 1, 9, 2, 8);
-
-numbers.stream().filter(n -> n > 3);        // filter — giữ lại phần tử thỏa điều kiện Predicate
-numbers.stream().map(n -> n * 2);            // map — biến đổi mỗi phần tử theo Function
-numbers.stream().sorted();                   // sorted — sắp xếp tăng dần (hoặc theo Comparator truyền vào)
-numbers.stream().distinct();                 // distinct — loại bỏ trùng lặp (dựa trên equals())
-numbers.stream().limit(3);                   // limit — chỉ lấy N phần tử đầu
-numbers.stream().skip(2);                    // skip — bỏ qua N phần tử đầu
-numbers.stream().peek(System.out::println);  // peek — "nhìn trộm" từng phần tử, dùng để DEBUG, không nên dùng để thay đổi trạng thái (side-effect)
+Optional<Integer> a = ns.stream().filter(n -> n > 3).findFirst();  // phần tử ĐẦU theo encounter order
+Optional<Integer> b = ns.parallelStream().filter(n -> n > 3).findAny();  // BẤT KỲ phần tử thỏa — nhanh hơn khi song song
 ```
 
-### `flatMap` — làm phẳng cấu trúc lồng nhau (rất hay dùng, hay bị hỏi)
+### `reduce` — ba dạng
 
 ```java
-List<List<String>> nestedList = List.of(
-    List.of("Java", "Spring"),
-    List.of("Python", "Django"),
-    List.of("Go")
-);
+// 1) reduce(BinaryOperator) → Optional (rỗng nếu stream rỗng)
+Optional<Integer> s1 = ns.stream().reduce(Integer::sum);
 
-List<String> flatList = nestedList.stream()
-    .flatMap(list -> list.stream()) // "làm phẳng" từ Stream<List<String>> thành Stream<String>
-    .toList();
+// 2) reduce(identity, accumulator) → giá trị (identity khi stream rỗng)
+int s2 = ns.stream().reduce(0, Integer::sum);
 
-System.out.println(flatList); // [Java, Spring, Python, Django, Go]
+// 3) reduce(identity, accumulator, combiner) → khi kiểu tích lũy KHÁC kiểu phần tử, hoặc chạy song song
+int totalLen = words.stream()
+    .reduce(0, (acc, w) -> acc + w.length(), Integer::sum);
+//         ^acc:int      ^w:String           ^gộp 2 kết quả từ 2 luồng song song
 ```
 
-> **Phân biệt `map` vs `flatMap`:** `map` biến đổi **1-thành-1** (mỗi phần tử vào cho ra đúng 1 phần tử ra); `flatMap` dùng khi mỗi phần tử vào tạo ra **1 Stream con**, rồi "làm phẳng" tất cả các Stream con đó thành **1 Stream duy nhất** — dùng phổ biến khi xử lý dữ liệu lồng nhau (danh sách của danh sách, hoặc 1 object chứa nhiều object con cần "trải phẳng" ra).
+Yêu cầu để `reduce` (nhất là song song) đúng:
+- `identity`: `combiner.apply(identity, x) == x` (0 cho cộng, 1 cho nhân, `""` cho nối).
+- `accumulator` & `combiner`: **kết hợp được (associative)**, không phụ thuộc thứ tự, không side-effect.
 
----
-
-## 7. Các thao tác kết thúc (Terminal Operations)
-
-Đặc điểm chung: **kích hoạt** toàn bộ pipeline chạy, trả về kết quả **không phải Stream** (giá trị đơn, Collection, hoặc `void`) — và **Stream chỉ dùng được 1 lần**, gọi Terminal Operation xong là Stream đó "hết hạn".
-
-```java
-List<Integer> numbers = List.of(5, 3, 8, 1, 9);
-
-numbers.stream().forEach(System.out::println);      // forEach — duyệt qua từng phần tử, không trả về gì
-long count = numbers.stream().filter(n -> n > 3).count(); // count — đếm số phần tử
-Optional<Integer> max = numbers.stream().max(Integer::compareTo); // max/min — trả về Optional (an toàn khi Stream rỗng)
-boolean anyMatch = numbers.stream().anyMatch(n -> n > 8);   // anyMatch — CÓ ít nhất 1 phần tử thỏa điều kiện?
-boolean allMatch = numbers.stream().allMatch(n -> n > 0);   // allMatch — TẤT CẢ phần tử đều thỏa điều kiện?
-boolean noneMatch = numbers.stream().noneMatch(n -> n < 0); // noneMatch — KHÔNG có phần tử nào thỏa điều kiện?
-
-int sum = numbers.stream().reduce(0, Integer::sum); // reduce — "gộp" toàn bộ phần tử thành 1 giá trị duy nhất
-```
-
-### `reduce()` — đào sâu vì hay bị hỏi phỏng vấn
-
-```java
-int sum = numbers.stream().reduce(0, (a, b) -> a + b);
-// 0 = giá trị khởi tạo (identity)
-// (a, b) -> a + b = cách "gộp" 2 giá trị lại — a là kết quả tích lũy tạm thời, b là phần tử tiếp theo
-
-// Diễn giải từng bước: 0+5=5, 5+3=8, 8+8=16, 16+1=17, 17+9=26
-System.out.println(sum); // 26
-```
-`reduce()` chính là cách tổng quát hóa của `sum()`, `max()`, `min()` — hiểu được `reduce()` nghĩa là hiểu được ý tưởng nền tảng "gộp nhiều giá trị thành 1" theo phong cách functional.
+> `count()` (Java 9+) có thể trả kết quả **mà không chạy** các thao tác trung gian nếu số lượng suy ra được từ nguồn (`SIZED`) và pipeline không có `filter`/`flatMap` — lý do khác để không nhét logic vào `peek`.
 
 ---
 
 ## 8. `Collectors` — thu thập kết quả
 
-`Collectors` là lớp tiện ích cung cấp các cách "thu thập" Stream thành cấu trúc dữ liệu cụ thể — dùng cùng với `collect()`.
-
 ```java
+import static java.util.stream.Collectors.*;
+
 List<String> names = List.of("Pho", "An", "Binh", "Cuong");
 
-// Thu thập thành List / Set
-List<String> asList = names.stream().collect(Collectors.toList());
-Set<String> asSet = names.stream().collect(Collectors.toSet());
-// Java 16+ có cách viết gọn hơn cho toList(): names.stream().toList(); (bất biến - immutable)
-
-// Nối chuỗi
-String joined = names.stream().collect(Collectors.joining(", ")); // "Pho, An, Binh, Cuong"
-String joinedWithBrackets = names.stream().collect(Collectors.joining(", ", "[", "]")); // "[Pho, An, Binh, Cuong]"
-
-// Thu thập thành Map
-Map<String, Integer> nameToLength = names.stream()
-    .collect(Collectors.toMap(name -> name, name -> name.length()));
-// {Pho=3, An=2, Binh=4, Cuong=5}
-
-// GROUPING — cực kỳ hay dùng trong thực tế backend (báo cáo, thống kê)
-record Employee(String name, String department, double salary) {}
-
-List<Employee> employees = List.of(
-    new Employee("Pho", "IT", 15_000_000),
-    new Employee("An", "IT", 18_000_000),
-    new Employee("Binh", "Sales", 12_000_000)
-);
-
-Map<String, List<Employee>> byDepartment = employees.stream()
-    .collect(Collectors.groupingBy(Employee::department));
-// {IT=[Pho, An], Sales=[Binh]}
-
-Map<String, Long> countByDepartment = employees.stream()
-    .collect(Collectors.groupingBy(Employee::department, Collectors.counting()));
-// {IT=2, Sales=1}
-
-Map<String, Double> avgSalaryByDepartment = employees.stream()
-    .collect(Collectors.groupingBy(Employee::department, Collectors.averagingDouble(Employee::salary)));
-// {IT=16500000.0, Sales=12000000.0}
-
-// PARTITIONING — chia thành ĐÚNG 2 nhóm dựa trên true/false
-Map<Boolean, List<Employee>> partitioned = employees.stream()
-    .collect(Collectors.partitioningBy(e -> e.salary() > 15_000_000));
-// {false=[Binh], true=[Pho, An]}
+names.stream().collect(toList());          // List (khả biến, kiểu không đảm bảo)
+names.stream().toList();                    // Java 16 — BẤT BIẾN, ngắn hơn; ưu tiên khi chỉ đọc
+names.stream().collect(toSet());
+names.stream().collect(toUnmodifiableList());   // Java 10 — bất biến, tường minh
+names.stream().collect(joining(", ", "[", "]"));   // "[Pho, An, Binh, Cuong]"
 ```
 
-> **Liên hệ trực tiếp thực tế:** `groupingBy` chính là cách viết Java tương đương với `GROUP BY` trong SQL (Module 10) — nếu đã quen SQL, `Collectors.groupingBy()` sẽ rất dễ tiếp thu vì cùng bản chất tư duy.
-
----
-
-## 9. Lazy Evaluation — Stream chỉ chạy khi có Terminal Operation
-
-Đây là đặc tính quan trọng, hay gây bất ngờ cho người mới:
+### `toMap` — bốn dạng, chú ý va chạm key
 
 ```java
-List<String> names = List.of("Pho", "An", "Binh");
+// 2 tham số — NÉM IllegalStateException nếu 2 phần tử cho cùng key
+Map<Integer,String> m1 = names.stream().collect(toMap(String::length, s -> s));   // "Pho" & "Binh"? → nổ
 
-Stream<String> stream = names.stream()
-    .filter(name -> {
-        System.out.println("Đang filter: " + name); // sẽ KHÔNG chạy ngay ở dòng này!
-        return name.length() > 2;
-    });
+// 3 tham số — merge function xử lý va chạm
+Map<Integer,String> m2 = names.stream()
+    .collect(toMap(String::length, s -> s, (a, b) -> a + "|" + b));
 
-System.out.println("Đã tạo xong Stream, chưa có gì được in ra ở trên");
+// 4 tham số — chọn loại Map
+Map<Integer,String> m3 = names.stream()
+    .collect(toMap(String::length, s -> s, (a, b) -> a, TreeMap::new));
 
-long count = stream.count(); // CHỈ ĐẾN ĐÂY, dòng "Đang filter..." mới thực sự được in ra
+// Đảo List thành Map<id, object>:
+Map<Long,User> byId = users.stream().collect(toMap(User::id, Function.identity()));
 ```
 
-**Lý do:** các Intermediate Operation (`filter`, `map`...) chỉ **"ghi nhận" các bước xử lý** vào 1 pipeline, chưa thực sự chạy trên dữ liệu. Chỉ khi gặp **Terminal Operation** (`count()`, `collect()`, `forEach()`...), Stream mới thực sự **duyệt qua từng phần tử và áp dụng toàn bộ các bước đã ghi nhận, theo đúng thứ tự, cho từng phần tử một** (không phải chạy hết `filter` cho mọi phần tử rồi mới chạy `map` cho mọi phần tử — mà mỗi phần tử đi qua toàn bộ pipeline trước khi phần tử tiếp theo bắt đầu).
+### `groupingBy` — ba dạng + downstream collector
 
-> **Hệ quả thực tế cần nhớ:** một Stream **chỉ dùng được đúng 1 lần**. Gọi Terminal Operation xong, nếu cố gọi lại `stream.count()` lần nữa sẽ ném `IllegalStateException: stream has already been operated upon or closed`. Muốn xử lý lại, phải tạo Stream mới từ nguồn dữ liệu (`list.stream()` lần nữa).
+```java
+record Employee(String name, String dept, double salary) {}
+
+Map<String,List<Employee>> g1 = emp.stream().collect(groupingBy(Employee::dept));
+Map<String,Long>           g2 = emp.stream().collect(groupingBy(Employee::dept, counting()));
+Map<String,Double>         g3 = emp.stream().collect(groupingBy(Employee::dept, summingDouble(Employee::salary)));
+Map<String,Double>         g4 = emp.stream().collect(groupingBy(Employee::dept, averagingDouble(Employee::salary)));
+Map<String,List<String>>   g5 = emp.stream().collect(groupingBy(Employee::dept, mapping(Employee::name, toList())));
+Map<String,Set<String>>    g6 = emp.stream().collect(groupingBy(Employee::dept, mapping(Employee::name, toSet())));
+Map<String,Optional<Employee>> g7 = emp.stream()
+    .collect(groupingBy(Employee::dept, maxBy(comparingDouble(Employee::salary))));
+
+// Bỏ Optional bằng collectingAndThen:
+Map<String,Employee> topPerDept = emp.stream().collect(groupingBy(Employee::dept,
+    collectingAndThen(maxBy(comparingDouble(Employee::salary)), Optional::get)));
+
+// Chọn loại Map + lồng nhiều tầng:
+Map<String, Map<Boolean, List<Employee>>> g8 = emp.stream().collect(
+    groupingBy(Employee::dept, TreeMap::new,
+        partitioningBy(e -> e.salary() >= 15_000_000)));
+
+// Java 9: filtering / flatMapping làm downstream (khác đặt filter TRƯỚC groupingBy: vẫn giữ key nhóm rỗng)
+Map<String,List<Employee>> g9 = emp.stream()
+    .collect(groupingBy(Employee::dept, filtering(e -> e.salary() > 10_000_000, toList())));
+```
+
+### `partitioningBy` — luôn có ĐỦ hai key `true`/`false`
+
+```java
+Map<Boolean,List<Employee>> p = emp.stream().collect(partitioningBy(e -> e.salary() > 15_000_000));
+// p.get(true) và p.get(false) LUÔN tồn tại (có thể là list rỗng) — khác groupingBy trên boolean
+```
+
+### `teeing` (Java 12) — hai collector song song rồi gộp
+
+```java
+record MinMax(int min, int max) {}
+MinMax r = Stream.of(3, 1, 4, 1, 5).collect(teeing(
+    minBy(Integer::compareTo),
+    maxBy(Integer::compareTo),
+    (mn, mx) -> new MinMax(mn.orElseThrow(), mx.orElseThrow())));
+```
+
+### Sắp xếp `Map` theo value → `LinkedHashMap`
+
+```java
+Map<String,Double> sorted = revenue.entrySet().stream()
+    .sorted(Map.Entry.<String,Double>comparingByValue().reversed())
+    .collect(toMap(Map.Entry::getKey, Map.Entry::getValue,
+                   (a, b) -> a, LinkedHashMap::new));   // giữ đúng thứ tự đã sort
+```
+
+> `groupingBy` ↔ `GROUP BY` trong SQL (Module 12). Nếu quen SQL thì downstream collector chính là `COUNT`/`SUM`/`AVG`/`HAVING`.
 
 ---
 
-## 10. Khi nào NÊN và KHÔNG NÊN dùng Stream
+## 9. Lazy Evaluation & ngữ nghĩa Stream
 
-| Nên dùng Stream khi | Nên dùng vòng lặp `for` truyền thống khi |
+### Trung gian chỉ "ghi nhận", terminal mới chạy
+
+```java
+Stream<String> s = names.stream().filter(n -> {
+    System.out.println("filter: " + n);   // chưa in gì ở đây
+    return n.length() > 2;
+});
+System.out.println("Đã dựng pipeline");
+long c = s.count();                        // ĐẾN ĐÂY "filter:" mới in
+```
+
+Mỗi phần tử đi **hết** pipeline rồi mới tới phần tử sau (per-element, không phải theo tầng). Nhờ vậy `findFirst`/`anyMatch`/`limit` **short-circuit** được — dừng sớm, xử lý được cả nguồn vô hạn.
+
+### Bốn quy tắc bắt buộc nhớ
+
+| Quy tắc | Hệ quả nếu vi phạm |
 |---|---|
-| Xử lý dữ liệu qua nhiều bước biến đổi (filter → map → collect) | Logic đơn giản, chỉ 1 bước, dùng Stream sẽ "làm màu" không cần thiết |
-| Cần group/partition/thống kê dữ liệu | Cần `break`/`continue` phức tạp giữa chừng (Stream không hỗ trợ trực tiếp) |
-| Ưu tiên tính dễ đọc, khai báo ý định rõ ràng (declarative style) | Cần hiệu năng tối đa tuyệt đối cho vòng lặp cực lớn, cực nhạy cảm hiệu năng (Stream có overhead nhỏ so với for-loop thuần) |
-| Có thể tận dụng xử lý song song dễ dàng (`parallelStream()`) | Logic có nhiều side-effect (thay đổi biến bên ngoài) — không hợp phong cách functional |
+| **Stream dùng một lần** | Gọi terminal lần 2 → `IllegalStateException: stream has already been operated upon or closed`. Muốn xử lý lại → `list.stream()` mới. |
+| **Không sửa nguồn khi pipeline đang chạy** (interference) | `list.stream().forEach(x -> list.add(x))` → `ConcurrentModificationException` hoặc kết quả sai. |
+| **Behavioral parameter phải stateless & không side-effect** | Lambda trong `map`/`filter` đọc–ghi biến chia sẻ → sai khi song song, khó hiểu khi tuần tự. |
+| **`peek` có thể bị bỏ qua** | Đừng đặt logic vào `peek`. |
 
-> **Lưu ý về `parallelStream()`:** cho phép Stream tự động chia nhỏ và xử lý song song trên nhiều thread — nghe hấp dẫn nhưng **không nên dùng bừa bãi**. Chỉ hiệu quả với tập dữ liệu đủ lớn và logic xử lý không có side-effect; với dữ liệu nhỏ, overhead quản lý thread còn tốn hơn lợi ích, và nếu logic có side-effect (sửa biến ngoài, ghi log không đồng bộ...) rất dễ gây race condition (liên hệ Module 05 — Multithreading).
+### Encounter order
+
+Nguồn có thứ tự (`List`, mảng, `sorted`) → Stream có *encounter order*; `HashSet`, `Stream.generate` → không. `forEach` song song **không** giữ order (dùng `forEachOrdered` nếu cần). `unordered()` chủ động bỏ ràng buộc order để `distinct`/`limit` chạy nhanh hơn khi song song.
 
 ---
 
-## 11. Tổng kết — Bảng ghi nhớ nhanh
+## 10. `parallelStream()` — song song & cạm bẫy
 
-| Khái niệm | Điểm mấu chốt cần nhớ |
+```java
+long n = bigList.parallelStream().filter(x -> x > 0).count();
+int sum = list.stream().parallel().mapToInt(Integer::intValue).sum();   // .parallel() bật trên stream đã có
+```
+
+### Cơ chế & giới hạn
+
+- Chạy trên **`ForkJoinPool.commonPool()`** dùng chung toàn JVM, kích thước ≈ *số nhân − 1*. Một tác vụ song song nặng làm chậm mọi `parallelStream` khác trong tiến trình.
+- Muốn pool riêng: `new ForkJoinPool(4).submit(() -> list.parallelStream()....).get();`
+- Hiệu quả chia việc phụ thuộc **`Spliterator`**: `ArrayList`/mảng/`IntStream.range` chia đôi rẻ → tốt; `LinkedList`, `Files.lines`, `Stream.iterate` chia kém → thường **chậm hơn** tuần tự.
+
+### Khi nào KHÔNG dùng
+
+| Trường hợp | Lý do |
 |---|---|
-| Functional Interface | Đúng 1 method trừu tượng — nền tảng để dùng Lambda |
-| Lambda | `(params) -> expression`; biến capture phải effectively final |
-| `Function/Predicate/Supplier/Consumer` | 4 functional interface cốt lõi trong `java.util.function` |
-| Method Reference | `Class::method` — dùng khi Lambda chỉ đơn giản gọi lại 1 method có sẵn |
-| Stream pipeline | Nguồn → Intermediate (nhiều bước, lazy) → Terminal (kích hoạt, dùng 1 lần) |
-| `map` vs `flatMap` | map: 1-thành-1; flatMap: làm phẳng cấu trúc lồng nhau |
-| `reduce()` | Tổng quát hóa của sum/max/min — "gộp" nhiều giá trị thành 1 |
-| `Collectors.groupingBy()` | Tương đương `GROUP BY` trong SQL |
-| Lazy Evaluation | Intermediate Operation chỉ ghi nhận, KHÔNG chạy cho đến khi có Terminal Operation |
-| Stream dùng 1 lần | Gọi Terminal xong là "hết hạn" — cần Stream mới nếu muốn xử lý lại |
+| Dữ liệu nhỏ (< ~10⁴ phần tử, thao tác rẻ) | Overhead fork/join/merge > lợi ích |
+| Tác vụ I/O (gọi DB, HTTP, đọc file) | Chặn thread pool dùng chung; nên dùng thread pool riêng / async |
+| Lambda có side-effect / state chia sẻ | Race condition — `Collectors.groupingBy` (không `Concurrent`) và `reduce` với `identity` không hợp lệ đều cho kết quả sai |
+| Cần giữ thứ tự nghiêm ngặt trong `forEach` | Phải `forEachOrdered` → mất phần lớn lợi ích song song |
+
+> **Quy tắc:** mặc định dùng `stream()` tuần tự. Chỉ đổi sang `parallelStream()` khi đã **benchmark** trên dữ liệu thật và thấy lợi ích rõ ràng.
 
 ---
 
-## 12. Bài tập luyện tập
+## 11. Khi nào NÊN và KHÔNG NÊN dùng Stream
+
+| Nên dùng Stream | Nên dùng vòng lặp `for` |
+|---|---|
+| Nhiều bước biến đổi nối tiếp (`filter → map → collect`) | Một bước đơn giản — Stream chỉ làm rối |
+| Group / partition / thống kê | Cần `break`/`continue`/`return` giữa chừng phức tạp |
+| Ưu tiên diễn đạt ý định (declarative) | Cần chỉ số phần tử (`i`), hoặc duyệt nhiều collection song song theo index |
+| Có thể tận dụng song song | Logic nhiều side-effect (ghi biến ngoài, I/O tuần tự) |
+| | Vòng lặp cực nóng, cực nhạy hiệu năng (Stream có overhead nhỏ + boxing nếu không dùng `IntStream`) |
+
+Nhược điểm cần cân nhắc: stack trace của lambda khó đọc hơn; debug từng bước phải đặt breakpoint trong lambda; checked exception phải bọc.
+
+---
+
+## 12. Tổng kết — Bảng ghi nhớ nhanh
+
+| Khái niệm | Điểm mấu chốt |
+|---|---|
+| Functional interface | Đúng 1 method trừu tượng (method của `Object` không tính). `@FunctionalInterface` để compiler canh. |
+| Lambda | Không có kiểu cố hữu — target typing. `this` = instance bao ngoài (khác anonymous class). Không sinh `.class` riêng. |
+| Capture | Biến local phải effectively final; field thì sửa được; "lách" bằng holder là code smell. |
+| Checked exception | Không khớp `Function`/`Consumer` → bọc `UncheckedIOException` hoặc functional interface tự định nghĩa. |
+| 4 core + biến thể | `Function/Predicate/Supplier/Consumer`; `Bi*`, `UnaryOperator`, `BinaryOperator`; bản `Int/Long/Double*` tránh boxing. |
+| Tổ hợp | `andThen`/`compose`/`identity`; `and`/`or`/`negate`/`Predicate.not`. |
+| Method reference | 4 loại: static, bound, **unbound** (tham số đầu = receiver), constructor (`Type::new`, `Type[]::new`). |
+| Tạo Stream | `stream()`, `Stream.of`, `Arrays.stream`, `iterate`/`generate` (+`limit`), `IntStream.range`, `chars()`, `Files.lines`. |
+| Stream nguyên thủy | `IntStream`/`LongStream`/`DoubleStream` — `sum`/`average`/`summaryStatistics`, `boxed`/`mapToObj`. |
+| Trung gian | Lazy, trả Stream mới. Stateless (`filter`/`map`/`flatMap`) vs stateful (`sorted`/`distinct`/`limit`/`takeWhile`). |
+| `peek` | Chỉ để debug — runtime được phép bỏ qua. |
+| `map` vs `flatMap` | 1→1 vs 1→Stream-con rồi làm phẳng. `mapMulti` (Java 16) thay thế nhẹ hơn. |
+| Kết thúc | Kích hoạt pipeline, Stream hết hạn. `findFirst` (order) vs `findAny` (song song). Short-circuit: `anyMatch`/`findFirst`/`limit`. |
+| `reduce` | 3 dạng; song song cần identity hợp lệ + accumulator/combiner associative, không side-effect. |
+| `Collectors` | `toList`(Java 16 bất biến) / `toUnmodifiable*`; `toMap` cần merge function khi trùng key; `groupingBy` + downstream (`counting`/`summingX`/`mapping`/`maxBy`/`collectingAndThen`); `partitioningBy` luôn đủ 2 key; `teeing`. |
+| Lazy & ngữ nghĩa | Dùng 1 lần; không sửa nguồn khi chạy; behavioral param stateless; encounter order. |
+| `parallelStream` | Chạy trên common `ForkJoinPool`; tốt với `ArrayList`/`range`, tệ với `LinkedList`/I/O; benchmark trước khi dùng. |
+
+---
+
+## 13. Bài tập luyện tập
 
 ### Phần A — Trắc nghiệm nhận định (giải thích lý do)
 
-**Câu 1.** Đoạn code sau có lỗi compile không? Giải thích.
+**Câu 1.** Có lỗi compile không? Vì sao? Viết lại đúng "kiểu functional".
 ```java
 int total = 0;
-List<Integer> numbers = List.of(1, 2, 3);
-numbers.forEach(n -> total += n);
+List.of(1, 2, 3).forEach(n -> total += n);
 ```
 
-**Câu 2.** Đoạn code sau in ra gì? Giải thích thứ tự thực thi.
+**Câu 2.** In ra gì, theo thứ tự nào?
 ```java
 List.of(1, 2, 3).stream()
-    .peek(n -> System.out.println("Peek: " + n))
+    .peek(n -> System.out.println("peek " + n))
     .filter(n -> n % 2 == 0)
-    .forEach(n -> System.out.println("ForEach: " + n));
+    .forEach(n -> System.out.println("each " + n));
 ```
 
-**Câu 3.** Đoạn code sau gây lỗi gì lúc chạy? Giải thích.
+**Câu 3.** Lỗi gì lúc chạy? Ở dòng nào? Vì sao?
 ```java
-Stream<Integer> stream = List.of(1, 2, 3).stream();
-long count1 = stream.count();
-long count2 = stream.count();
+Stream<Integer> s = List.of(1, 2, 3).stream();
+long a = s.count();
+long b = s.count();
 ```
 
-**Câu 4.** Phân biệt kết quả của 2 đoạn sau — vì sao khác nhau?
+**Câu 4.** Hai đoạn khác kết quả thế nào, vì sao?
 ```java
-// Đoạn A
-List<List<Integer>> a = List.of(List.of(1,2), List.of(3,4)).stream()
-    .map(list -> list) // map giữ nguyên cấu trúc
-    .toList();
-
-// Đoạn B
-List<Integer> b = List.of(List.of(1,2), List.of(3,4)).stream()
-    .flatMap(list -> list.stream())
-    .toList();
+var a = Stream.of(List.of(1, 2), List.of(3, 4)).map(x -> x).toList();
+var b = Stream.of(List.of(1, 2), List.of(3, 4)).flatMap(List::stream).toList();
 ```
 
-**Câu 5.** Chuyển đoạn vòng lặp sau sang Stream API (dùng `filter`, `map`, `collect`):
+**Câu 5.** Đoạn này có thể ném exception gì lúc chạy? Cách sửa để không nổ?
 ```java
-List<String> result = new ArrayList<>();
-for (String name : List.of("pho", "an", "binh", "cuong")) {
-    if (name.length() > 2) {
-        result.add(name.toUpperCase());
-    }
-}
+Map<Integer, String> m = Stream.of("Pho", "An", "Binh", "Cuong")
+    .collect(Collectors.toMap(String::length, s -> s));
+```
+
+**Câu 6.** `findFirst()` và `findAny()` khác nhau ở điểm nào? Trên `stream()` tuần tự chúng có luôn cho cùng kết quả không? Trên `parallelStream()` thì sao?
+
+**Câu 7.** Vì sao đoạn này **không đáng tin**? Từ Java mấy thì nó có thể "không in gì"?
+```java
+long c = Stream.of("a", "b", "c").peek(System.out::println).count();
+```
+
+**Câu 8.** Chuyển sang Stream (dùng `filter`, `map`, `toList`):
+```java
+List<String> r = new ArrayList<>();
+for (String n : List.of("pho", "an", "binh", "cuong"))
+    if (n.length() > 2) r.add(n.toUpperCase());
 ```
 
 ---
 
 ### Phần B — Bài tập viết code
 
-**Bài 1 — Xử lý danh sách sinh viên bằng Stream (bài tổng hợp cơ bản).**
-Cho `record Student(String name, int age, double gpa)`, tạo danh sách ít nhất 8 sinh viên. Dùng Stream API để:
-- Lọc ra sinh viên có `gpa >= 3.5`.
-- Lấy danh sách tên (chỉ tên, không phải cả object) của những sinh viên đó, đã sắp xếp alphabet.
-- Tính GPA trung bình của toàn bộ danh sách gốc (dùng `Collectors.averagingDouble` hoặc `mapToDouble().average()`).
-- Tìm sinh viên có GPA cao nhất (dùng `max()` với `Comparator`, trả về `Optional<Student>`).
+**Bài 1 — Xử lý danh sách sinh viên.**
+`record Student(String name, int age, double gpa)`, ≥ 8 phần tử. Dùng Stream:
+- Lọc `gpa >= 3.5`, lấy danh sách **tên** đã sắp alphabet.
+- GPA trung bình toàn danh sách bằng `mapToDouble(Student::gpa).average()` → xử lý `OptionalDouble`.
+- `IntSummaryStatistics` của tuổi (`mapToInt`) — in min/max/avg/count.
+- Sinh viên GPA cao nhất bằng `max(Comparator.comparingDouble(Student::gpa))` → `Optional<Student>`.
 
-**Bài 2 — Group By & thống kê nâng cao.**
-Dùng lại danh sách `Employee(name, department, salary)` ở mục 8. Viết chương trình:
-- Nhóm nhân viên theo `department`, trong mỗi nhóm chỉ lấy **danh sách tên** (không phải cả object) — gợi ý: `Collectors.groupingBy(..., Collectors.mapping(Employee::name, Collectors.toList()))`.
-- Tìm nhân viên có lương cao nhất **trong từng phòng ban** (gợi ý: `Collectors.groupingBy(..., Collectors.maxBy(Comparator.comparingDouble(Employee::salary)))`).
-- Tính tổng quỹ lương toàn công ty bằng `mapToDouble().sum()`.
+**Bài 2 — Group By & downstream collector.**
+Dùng `Employee(name, dept, salary)`:
+- `Map<String, List<String>>` — theo `dept`, mỗi nhóm chỉ **tên** (`groupingBy` + `mapping` + `toList`).
+- `Map<String, Employee>` — nhân viên lương cao nhất **mỗi phòng** (`groupingBy` + `collectingAndThen(maxBy(...), Optional::get)`).
+- `Map<String, Double>` — tổng quỹ lương mỗi phòng, **sắp giảm dần** theo tổng, thu vào `LinkedHashMap`.
+- Tổng quỹ lương công ty bằng `mapToDouble(...).sum()`.
 
-**Bài 3 — flatMap với dữ liệu lồng nhau thực tế.**
-Cho `record Order(String customerId, List<String> productNames)` — mỗi đơn hàng có nhiều sản phẩm. Cho danh sách ít nhất 4 `Order`. Dùng `flatMap` để lấy ra **danh sách duy nhất, không trùng lặp** (dùng `distinct()`) của tất cả sản phẩm đã từng được đặt mua trong toàn bộ đơn hàng, sắp xếp alphabet.
+**Bài 3 — flatMap dữ liệu lồng.**
+`record Order(String customerId, List<String> products)`, ≥ 4 đơn. Dùng `flatMap` lấy danh sách sản phẩm **không trùng**, sắp alphabet. Rồi dùng `flatMap` + `Collectors.groupingBy` + `counting` để đếm mỗi sản phẩm xuất hiện trong bao nhiêu đơn.
 
-**Bài 4 — So sánh hiệu năng Stream tuần tự vs song song.**
-Tạo `List<Integer>` chứa 10 triệu phần tử ngẫu nhiên. So sánh thời gian tính tổng bằng 3 cách: (a) vòng lặp `for` truyền thống, (b) `stream().reduce()`, (c) `parallelStream().reduce()`. Đo bằng `System.nanoTime()`, in bảng so sánh, nêu nhận xét (gợi ý: kết quả có thể khác nhau tùy số nhân CPU của máy chạy — quan trọng là hiểu **xu hướng** và **lý do**, không phải con số tuyệt đối).
+**Bài 4 — Stream vô hạn + short-circuit.**
+Dùng `Stream.iterate` sinh dãy Fibonacci, `limit(20)` in 20 số đầu. Dùng `Stream.iterate(seed, hasNext, next)` (3 tham số) sinh các lũy thừa của 2 **nhỏ hơn 1_000_000** mà không cần `limit`. Dùng `IntStream.rangeClosed(2, n)` + `noneMatch` viết `isPrime(int n)`.
 
-**Bài 5 — Bài toán tổng hợp: Báo cáo doanh thu (mô phỏng thực tế backend).**
-Cho `record OrderItem(String category, String productName, double price, int quantity)`. Tạo danh sách ít nhất 10 `OrderItem` thuộc 3 category khác nhau. Dùng Stream API viết method `Map<String, Double> revenueByCategory(List<OrderItem> items)` tính **tổng doanh thu (price × quantity)** theo từng category, trả về `Map<String, Double>` đã sắp xếp theo doanh thu **giảm dần** (gợi ý: `groupingBy` để tính tổng trước, sau đó cần thêm bước sắp xếp `Map` — có thể dùng `LinkedHashMap` để giữ thứ tự sau khi sort thủ công bằng Stream trên `entrySet()`).
+**Bài 5 — reduce ba dạng.**
+Cho `List<String> words`. Tính: (a) tổng độ dài bằng `reduce(0, (acc,w) -> acc + w.length(), Integer::sum)` — giải thích vai trò combiner; (b) từ dài nhất bằng `reduce((x,y) -> x.length() >= y.length() ? x : y)` → `Optional<String>`; (c) nối tất cả bằng `reduce("", String::concat)` rồi so sánh hiệu năng với `Collectors.joining()` trên danh sách lớn, giải thích vì sao `joining` nhanh hơn.
+
+**Bài 6 — Báo cáo doanh thu (mô phỏng backend).**
+`record OrderItem(String category, String product, double price, int qty)`, ≥ 10 phần tử, 3 category. Viết `Map<String, Double> revenueByCategory(List<OrderItem>)`: tổng `price * qty` theo category, trả `LinkedHashMap` sắp **giảm dần** theo doanh thu. Viết thêm `teeing` để trả về đồng thời `(tổng toàn bộ, category doanh thu cao nhất)` trong một lần duyệt.
+
+**Bài 7 — Song song có đo đạc.**
+`List<Long>` 10 triệu phần tử ngẫu nhiên. So sánh `System.nanoTime()` cho tổng bằng: (a) `for`, (b) `stream().mapToLong(...).sum()`, (c) `parallelStream().mapToLong(...).sum()`, (d) `parallelStream()` bọc trong `new ForkJoinPool(2).submit(...)`. In bảng, nhận xét về `Spliterator` của `ArrayList` vs nếu đổi sang `LinkedList`.
 
 ---
 
-### Phần C — Gợi ý đáp án (tự chấm)
+### Phần C — Nâng cao
+
+**Câu 1.** Giải thích "target typing": vì sao `Object o = (a, b) -> a + b;` không compile còn `Runnable r = () -> {};` thì được. Lambda có kiểu tại thời điểm nào — parse, compile, hay runtime?
+
+**Câu 2.** `this` trong lambda vs trong anonymous class khác nhau ra sao, và điều đó ảnh hưởng gì tới việc dùng lambda làm listener cần `removeListener(this)`? Vì sao lambda không sinh file `.class` riêng (nhắc `invokedynamic`/`LambdaMetafactory`)?
+
+**Câu 3.** Phân biệt **capturing** và **non-capturing** lambda về mặt cấp phát object. Vì sao `list.forEach(x -> total[0] += x)` với `int[] total` chạy được nhưng sai khi `list.parallelStream().forEach(...)`? Cách đúng để "tích lũy" là gì?
+
+**Câu 4.** Với `reduce(identity, accumulator, combiner)` chạy song song: phát biểu chính xác ba điều kiện (identity, associativity, không can thiệp) và cho một ví dụ `identity` **sai** (gợi ý: dùng `1` cho phép cộng, hoặc list rỗng chia sẻ) khiến kết quả song song khác kết quả tuần tự.
+
+**Câu 5.** So sánh ba cách "đếm theo nhóm rồi bỏ nhóm rỗng": (a) `filter` trước `groupingBy`, (b) `groupingBy` + downstream `filtering` (Java 9), (c) `groupingBy` xong rồi `entrySet().removeIf`. Kết quả khác nhau thế nào về **các key xuất hiện** trong Map?
+
+**Câu 6.** `Collectors.toMap` không có merge function ném `IllegalStateException` khi trùng key; `Collectors.groupingBy` thì không. Giải thích vì sao thiết kế khác nhau. Khi nào `toMap(..., HashMap::new)` vẫn ném dù đã truyền supplier?
+
+**Câu 7.** `parallelStream()` dùng `ForkJoinPool.commonPool()`. Nêu ba hệ quả vận hành trong một service Spring Boot xử lý nhiều request đồng thời, và giải thích vì sao tác vụ I/O (gọi REST/DB) trong `parallelStream` đặc biệt nguy hiểm. Cách cô lập bằng pool riêng có nhược điểm gì?
+
+---
+
+### Phần D — Gợi ý đáp án (tự chấm)
 
 <details>
 <summary>Bấm để xem gợi ý đáp án Phần A</summary>
 
-1. **Lỗi compile** — `total` không phải effectively final (bị gán lại giá trị bên trong lambda thông qua `+=`), vi phạm ràng buộc variable capture. Muốn cộng dồn, nên dùng `reduce()` hoặc `IntStream.sum()` thay vì biến ngoài.
-2. In xen kẽ theo **từng phần tử một** qua toàn bộ pipeline (không phải chạy hết `peek` cho mọi phần tử rồi mới `filter`):
-```
-Peek: 1
-Peek: 2
-ForEach: 2
-Peek: 3
-```
-(Số 1 và 3 bị `filter` loại nên không có dòng `ForEach` tương ứng — nhưng `peek` vẫn chạy cho MỌI phần tử vì nó đứng trước filter trong pipeline.)
-3. Lỗi `IllegalStateException: stream has already been operated upon or closed` ở dòng `count2` — vì Stream chỉ dùng được đúng 1 lần, `count1` đã "tiêu thụ" hết `stream` rồi.
-4. Đoạn A: `map(list -> list)` không thay đổi gì, kết quả vẫn là `List<List<Integer>>` (cấu trúc lồng nhau giữ nguyên). Đoạn B: `flatMap` "làm phẳng" từng `List<Integer>` con thành các phần tử `Integer` riêng lẻ trong 1 Stream duy nhất, kết quả là `List<Integer>` phẳng: `[1, 2, 3, 4]`.
-5.
-```java
-List<String> result = Stream.of("pho", "an", "binh", "cuong")
-    .filter(name -> name.length() > 2)
-    .map(String::toUpperCase)
-    .collect(Collectors.toList());
-```
+1. **Lỗi compile** — `total` bị gán lại trong lambda (`+=`) nên không effectively final. Đúng kiểu functional: `int total = List.of(1,2,3).stream().mapToInt(Integer::intValue).sum();` hoặc `.reduce(0, Integer::sum)`.
+2. Mỗi phần tử đi hết pipeline rồi mới tới phần tử sau:
+   ```
+   peek 1
+   peek 2
+   each 2
+   peek 3
+   ```
+   `peek` chạy cho **mọi** phần tử (đứng trước `filter`); `1` và `3` bị `filter` loại nên không có `each` tương ứng.
+3. `IllegalStateException: stream has already been operated upon or closed` tại dòng `b` — Stream chỉ dùng một lần, `a` đã tiêu thụ `s`.
+4. `a` là `List<List<Integer>>` `[[1,2],[3,4]]` — `map(x -> x)` không đổi cấu trúc. `b` là `List<Integer>` `[1,2,3,4]` — `flatMap` trải mỗi list con thành phần tử rời trong một Stream phẳng.
+5. `IllegalStateException: Duplicate key` — "Pho"(3) và ... thực ra "An"(2), "Pho"(3), "Binh"(4), "Cuong"(5) không trùng độ dài, nhưng nếu thêm "Ba"(2) sẽ trùng key 2. Sửa: thêm merge function `toMap(String::length, s -> s, (x, y) -> x + "|" + y)`.
+6. `findFirst` trả phần tử **đầu tiên theo encounter order**; `findAny` trả **bất kỳ** phần tử thỏa (cho runtime tự do chọn). Tuần tự: thường cùng kết quả (đều là phần tử đầu), nhưng không có cam kết cho `findAny`. Song song: `findFirst` phải điều phối để lấy đúng phần tử đầu (chậm hơn), `findAny` trả về cái nào tìm thấy trước — nhanh hơn, không xác định.
+7. `peek` chỉ để quan sát; đặc tả cho phép runtime bỏ qua nếu không cần duyệt phần tử. Từ **Java 9**, `count()` trên nguồn `SIZED` không có `filter`/`flatMap` trả thẳng số lượng → `peek` không chạy → không in gì.
+8. `List<String> r = Stream.of("pho","an","binh","cuong").filter(n -> n.length() > 2).map(String::toUpperCase).toList();`
 
 </details>
 
 <details>
 <summary>Bấm để xem gợi ý đáp án Phần B</summary>
 
-- **Bài 1:** Ví dụ lấy top sinh viên GPA cao:
-```java
-List<String> topNames = students.stream()
-    .filter(s -> s.gpa() >= 3.5)
-    .map(Student::name)
-    .sorted()
-    .toList();
-```
-- **Bài 3:** Ví dụ đoạn `flatMap` cốt lõi:
-```java
-List<String> allProducts = orders.stream()
-    .flatMap(order -> order.productNames().stream())
-    .distinct()
-    .sorted()
-    .toList();
-```
-- **Bài 4:** Với 10 triệu phần tử, `parallelStream()` **thường** nhanh hơn `stream()` tuần tự trên máy nhiều nhân CPU (do chia nhỏ công việc xử lý song song), nhưng chênh lệch không phải lúc nào cũng tuyến tính theo số nhân do overhead chia việc/gộp kết quả — bài học quan trọng nhất là: **luôn đo đạc thực tế (benchmark) trước khi quyết định dùng `parallelStream()`**, không nên mặc định cho rằng "song song luôn nhanh hơn".
-- **Bài 5:** Gợi ý cấu trúc lời giải — bước 1 tính tổng theo category bằng `groupingBy` + `summingDouble`; bước 2 sắp xếp kết quả `Map` bằng cách đưa `entrySet()` vào Stream, `sorted()` theo value giảm dần, rồi `collect` lại vào `LinkedHashMap` (dùng `Collectors.toMap(..., ..., mergeFunction, LinkedHashMap::new)` để giữ đúng thứ tự đã sắp xếp — đây là kỹ thuật khá nâng cao, đáng để thực hành kỹ vì rất hay gặp trong các bài toán báo cáo/thống kê thực tế).
+- **Bài 1:** `OptionalDouble avg = students.stream().mapToDouble(Student::gpa).average();` → `avg.orElse(0.0)`. Top: `students.stream().max(Comparator.comparingDouble(Student::gpa))`.
+- **Bài 2:** Lương cao nhất mỗi phòng: `groupingBy(Employee::dept, collectingAndThen(maxBy(comparingDouble(Employee::salary)), Optional::get))`. Sắp `Map` theo tổng giảm dần: tính `groupingBy(dept, summingDouble(salary))` trước, rồi `entrySet().stream().sorted(Map.Entry.<String,Double>comparingByValue().reversed()).collect(toMap(k,v,(a,b)->a,LinkedHashMap::new))`.
+- **Bài 3:** `orders.stream().flatMap(o -> o.products().stream()).distinct().sorted().toList()`. Đếm số đơn chứa mỗi sản phẩm: `orders.stream().flatMap(o -> o.products().stream().distinct()).collect(groupingBy(p -> p, counting()))`.
+- **Bài 4:** Fibonacci: `Stream.iterate(new long[]{0,1}, a -> new long[]{a[1], a[0]+a[1]}).limit(20).map(a -> a[0])`. Lũy thừa 2: `Stream.iterate(1, n -> n < 1_000_000, n -> n * 2)`. `isPrime`: `n > 1 && IntStream.rangeClosed(2, (int)Math.sqrt(n)).noneMatch(d -> n % d == 0)`.
+- **Bài 5:** (a) combiner `Integer::sum` gộp kết quả từ các luồng con khi chạy song song (kiểu tích lũy `int` khác kiểu phần tử `String`). (b) `words.stream().reduce((x,y) -> x.length() >= y.length() ? x : y)`. (c) `reduce("", String::concat)` tạo chuỗi trung gian mới mỗi bước → O(n²); `Collectors.joining()` dùng `StringBuilder` nội bộ → O(n).
+- **Bài 6:** `items.stream().collect(groupingBy(OrderItem::category, summingDouble(i -> i.price() * i.qty())))` rồi sort vào `LinkedHashMap`. `teeing`: `collect(teeing(summingDouble(i -> i.price()*i.qty()), maxBy(comparingDouble(i -> i.price()*i.qty())), (tong, top) -> ...))` — hoặc teeing hai collector `summingDouble` và `groupingBy` rồi hậu xử lý.
+- **Bài 7:** Thường (c) nhanh hơn (b) trên máy nhiều nhân với `ArrayList` (Spliterator chia đôi mảng rẻ). (d) giới hạn 2 thread nên chậm hơn (c) dùng cả common pool, nhưng cô lập được. Đổi sang `LinkedList` → (c) có thể **chậm hơn** (b) vì Spliterator phải duyệt tuần tự để chia.
+
+</details>
+
+<details>
+<summary>Bấm để xem gợi ý đáp án Phần C</summary>
+
+1. Lambda **không có kiểu tự thân**; kiểu của nó do "kiểu đích" (target type) tại vị trí gán/tham số quyết định, và điều này xảy ra lúc **compile**. `Object` không phải functional interface nên không có SAM để khớp → không compile. `Runnable` có SAM `run()` khớp `() -> {}`. `var` cũng thất bại vì `var` cần suy ra kiểu từ vế phải, mà lambda lại cần kiểu đích từ vế trái → vòng luẩn quẩn.
+2. Lambda: `this` = instance của class bao ngoài. Anonymous class: `this` = chính object ẩn danh. Hệ quả: `button.addListener(e -> ...)` rồi muốn `button.removeListener(this)` — `this` là object bao ngoài, không phải listener; phải giữ tham chiếu lambda vào biến. Lambda không sinh `.class` riêng vì compiler phát ra một lệnh `invokedynamic`; lần chạy đầu, `LambdaMetafactory` dựng (spin) một lớp ẩn hiện thực functional interface và cache lại — tránh "class explosion" khi có hàng nghìn lambda.
+3. Non-capturing lambda (không tham chiếu biến ngoài/`this`) được biên dịch thành **một instance singleton** tái dùng. Capturing lambda tạo **instance mới mỗi lần evaluate** (mang theo biến bắt được). `total[0] += x` chạy được vì `total` (biến local kiểu mảng) là effectively final — chỉ *nội dung* mảng đổi; nhưng song song thì nhiều thread cùng ghi `total[0]` → race, mất cập nhật. Đúng: `mapToInt(...).sum()` / `reduce` / `Collectors`.
+4. (i) *identity*: `combiner.apply(identity, u).equals(u)` với mọi `u` — `0` cho cộng, `1` cho nhân, `""` cho nối. (ii) *associativity*: `(a op b) op c == a op (b op c)` — trừ và chia vi phạm. (iii) *không can thiệp / không side-effect*: accumulator & combiner không đọc–ghi state chia sẻ, không sửa nguồn. Ví dụ sai: `reduce(1, Integer::sum, Integer::sum)` — mỗi lần chia luồng song song cộng thêm một `1` thừa → tổng song song > tổng tuần tự. Hoặc `identity` là một `ArrayList` dùng chung → các luồng cùng add vào một list.
+5. (a) `filter` trước `groupingBy`: phần tử bị loại **trước khi phân nhóm** → key nào không còn phần tử nào thì **không xuất hiện** trong Map. (b) `filtering` downstream (Java 9): phân nhóm trước, lọc trong từng nhóm → key vẫn xuất hiện với **list rỗng**. (c) `groupingBy` đầy đủ rồi `removeIf`: giống (a) về key cuối cùng nhưng đã tốn công dựng nhóm. Khác biệt cốt lõi: **(b) giữ key nhóm rỗng, (a)/(c) không**.
+6. `toMap` mô hình hóa quan hệ **1 key → 1 value**; hai phần tử cùng key là mâu thuẫn dữ liệu → ném để lập trình viên biết. `groupingBy` bản chất là **1 key → nhiều value** (gom list) nên trùng key là bình thường. Supplier `HashMap::new` chỉ chọn *loại Map*, không đổi luật va chạm — vẫn ném `IllegalStateException` nếu không có merge function và có hai phần tử cùng key.
+7. (i) Common pool dùng chung toàn JVM → một request chạy `parallelStream` nặng làm chậm `parallelStream` của các request khác. (ii) Kích thước pool ≈ số nhân − 1, không co giãn theo tải → nghẽn. (iii) Không có cách ly lỗi/tài nguyên giữa các request. Tác vụ I/O nguy hiểm vì thread common pool bị **chặn** chờ mạng/DB — vài request đủ để cạn pool, mọi `parallelStream` khác đứng hình (fork/join giả định tác vụ CPU-bound, ngắn). Pool riêng (`new ForkJoinPool(n)`) cô lập được nhưng: tốn tài nguyên tạo/quản lý, dễ tạo quá nhiều pool, và vẫn không phải mô hình đúng cho I/O (nên dùng async / thread pool chuyên cho I/O — Module 09).
 
 </details>
 
