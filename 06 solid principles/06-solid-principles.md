@@ -1,492 +1,968 @@
-# Module 02.3 — SOLID Principles
+# Module 01.6 — SOLID Principles trong Java
 
-> **Mức độ ưu tiên: Cao** — SOLID là bộ nguyên lý thiết kế OOP quan trọng nhất trong lập trình backend hiện đại. Đây **không phải** kiến thức "học cho biết" — nó là **nền tảng tư duy trực tiếp** giải thích tại sao Spring Framework thiết kế Dependency Injection, `@Autowired`, interface-based programming như vậy. Câu hỏi "Giải thích SOLID với ví dụ thực tế" gần như chắc chắn xuất hiện ở phỏng vấn Middle/Senior.
+> **Mức độ ưu tiên: Cao** — SOLID giúp thiết kế phần mềm dễ thay đổi, dễ kiểm thử và ít ảnh hưởng dây chuyền. Giá trị của SOLID nằm ở khả năng nhận ra đúng nguồn thay đổi và đặt ranh giới phụ thuộc hợp lý, không nằm ở số lượng interface hay class.
+
+> **Phạm vi bài học:** tư duy thiết kế và refactor theo SRP, OCP, LSP, ISP, DIP; mối quan hệ với coupling, cohesion, composition và Dependency Injection. Cú pháp interface/abstract class đã học ở Bài 05; Design Patterns học sâu ở Bài 16; IoC Container và Spring DI học ở Bài 21.
 
 ---
 
 ## Mục lục
 
-1. [Tổng quan SOLID](#1-tổng-quan-solid)
+1. [SOLID giải quyết vấn đề gì?](#1-solid-giải-quyết-vấn-đề-gì)
 2. [S — Single Responsibility Principle](#2-s--single-responsibility-principle)
 3. [O — Open/Closed Principle](#3-o--openclosed-principle)
 4. [L — Liskov Substitution Principle](#4-l--liskov-substitution-principle)
 5. [I — Interface Segregation Principle](#5-i--interface-segregation-principle)
 6. [D — Dependency Inversion Principle](#6-d--dependency-inversion-principle)
-7. [SOLID và Spring Framework — mối liên hệ trực tiếp](#7-solid-và-spring-framework--mối-liên-hệ-trực-tiếp)
-8. [Tổng kết — Bảng ghi nhớ nhanh](#8-tổng-kết--bảng-ghi-nhớ-nhanh)
-9. [Bài tập luyện tập](#9-bài-tập-luyện-tập)
+7. [DIP, Dependency Injection và IoC](#7-dip-dependency-injection-và-ioc)
+8. [Năm nguyên lý phối hợp trong một thiết kế](#8-năm-nguyên-lý-phối-hợp-trong-một-thiết-kế)
+9. [Code smell và quy trình refactor](#9-code-smell-và-quy-trình-refactor)
+10. [SOLID trong Spring](#10-solid-trong-spring)
+11. [Giới hạn và trade-off](#11-giới-hạn-và-trade-off)
+12. [Tổng kết — Bảng ghi nhớ nhanh](#12-tổng-kết--bảng-ghi-nhớ-nhanh)
+13. [Bài tập luyện tập](#13-bài-tập-luyện-tập)
 
 ---
 
-## 1. Tổng quan SOLID
+## 1. SOLID giải quyết vấn đề gì?
 
-SOLID là 5 nguyên lý thiết kế hướng đối tượng do Robert C. Martin (Uncle Bob) tổng hợp, giúp code **dễ mở rộng, dễ bảo trì, dễ test**, giảm thiểu việc sửa 1 chỗ làm hỏng nhiều chỗ khác (hiệu ứng domino).
+SOLID là tên ghép từ năm nguyên lý thiết kế hướng đối tượng được Robert C. Martin phổ biến:
 
-| Chữ cái | Tên đầy đủ | Câu hỏi cốt lõi |
+| Chữ | Nguyên lý | Câu hỏi kiểm tra nhanh |
 |---|---|---|
-| **S** | Single Responsibility Principle | Class này có đang làm **quá nhiều việc** không? |
-| **O** | Open/Closed Principle | Khi cần thêm tính năng, tôi phải **sửa code cũ** hay chỉ cần **thêm code mới**? |
-| **L** | Liskov Substitution Principle | Subclass thay thế được cho class cha mà **không phá vỡ** logic chương trình không? |
-| **I** | Interface Segregation Principle | Interface có đang **ép** class implement những method nó **không cần dùng** không? |
-| **D** | Dependency Inversion Principle | Class có đang phụ thuộc vào **chi tiết cụ thể** thay vì **abstraction** không? |
+| **S** | Single Responsibility Principle | Thành phần này có bao nhiêu **lý do độc lập để thay đổi**? |
+| **O** | Open/Closed Principle | Biến thể mới có thể được thêm mà không sửa logic ổn định không? |
+| **L** | Liskov Substitution Principle | Mọi implementation có giữ đúng hợp đồng của abstraction không? |
+| **I** | Interface Segregation Principle | Client có bị phụ thuộc vào method nó không dùng không? |
+| **D** | Dependency Inversion Principle | Chính sách nghiệp vụ có phụ thuộc trực tiếp vào chi tiết kỹ thuật không? |
 
-> **Lưu ý quan trọng khi trả lời phỏng vấn:** SOLID không phải luật cứng nhắc phải áp dụng 100% mọi lúc — mục tiêu là **giảm coupling (sự phụ thuộc chặt)** và **tăng cohesion (tính gắn kết nội tại)**. Áp dụng SOLID quá mức cho một ứng dụng nhỏ, đơn giản có thể gây **over-engineering** (thiết kế phức tạp không cần thiết) — nên biết cân bằng.
+SOLID hướng đến hai thuộc tính:
+
+- **High cohesion:** các phần trong một module cùng phục vụ một mục đích rõ ràng.
+- **Low coupling:** thay đổi một module ít buộc module khác thay đổi theo.
+
+SOLID không phải thước đo kiểu “càng nhiều class/interface càng tốt”. Một thiết kế tốt phải phục vụ **những thay đổi thực tế**. Trừu tượng hóa sai chỗ chỉ chuyển sự phức tạp từ một file sang nhiều file.
+
+### SOLID áp dụng ở nhiều cấp độ
+
+“Class” thường xuất hiện trong định nghĩa để dễ học, nhưng nguyên lý có thể áp dụng cho method, package, module hoặc service:
+
+- Một method vừa validate, vừa lưu dữ liệu, vừa gửi email có vấn đề SRP.
+- Một package nghiệp vụ import trực tiếp SDK nhà cung cấp có vấn đề DIP.
+- Một API buộc mọi client nhận khả năng không cần thiết có nét tương tự ISP.
+
+### Nguyên lý, pattern và kỹ thuật
+
+| Khái niệm | Vai trò | Ví dụ |
+|---|---|---|
+| **Nguyên lý** | Tiêu chí đánh giá thiết kế | SRP, OCP, LSP, ISP, DIP |
+| **Pattern** | Khuôn giải pháp cho một ngữ cảnh | Strategy, Adapter, Decorator |
+| **Kỹ thuật** | Cơ chế ngôn ngữ/framework | interface, constructor injection, lambda |
+
+Strategy có thể giúp đạt OCP; constructor injection có thể giúp đạt DIP. Dùng pattern hoặc kỹ thuật chưa tự động bảo đảm nguyên lý.
 
 ---
 
 ## 2. S — Single Responsibility Principle
 
-> **Một class chỉ nên có DUY NHẤT MỘT lý do để thay đổi.**
+> **Một module chỉ nên có một lý do để thay đổi.** Chính xác hơn: module nên chịu trách nhiệm trước **một actor hoặc một nhóm yêu cầu thay đổi gắn kết**.
 
-Nghĩa là: một class chỉ nên chịu trách nhiệm cho **một nhiệm vụ (responsibility)** cụ thể — không gộp nhiều mối quan tâm (concern) không liên quan vào cùng 1 class.
+### “Một trách nhiệm” không có nghĩa là “một method”
 
-### ❌ Vi phạm SRP
+Một `BankAccount` có thể có `deposit`, `withdraw`, `freeze` và `balance`. Các method cùng bảo vệ quy tắc tài khoản nên vẫn có cohesion cao. Tách mỗi method thành một class sẽ phá mô hình miền.
+
+SRP bị vi phạm khi các thay đổi độc lập bị trộn:
 
 ```java
-public class Invoice {
-    private double amount;
+public final class InvoiceService {
+    public long calculateTotal(Invoice invoice) {
+        return invoice.lines().stream()
+                .mapToLong(line -> line.unitPrice() * line.quantity())
+                .sum();
+    }
+    public void save(Invoice invoice) { /* JDBC / SQL */ }
+    public byte[] renderPdf(Invoice invoice) { return new byte[0]; }
+    public void emailCustomer(Invoice invoice) { /* SMTP */ }
+}
+```
 
-    public double calculateTotal() { // trách nhiệm 1: TÍNH TOÁN nghiệp vụ
-        return amount * 1.1; // giả sử cộng thuế 10%
+Luật tính tiền, schema database, mẫu PDF và nhà cung cấp email là bốn trục thay đổi.
+
+### Tách theo nguồn thay đổi
+
+```java
+public final class InvoiceCalculator {
+    public long totalOf(Invoice invoice) {
+        return invoice.lines().stream()
+                .mapToLong(line -> line.unitPrice() * line.quantity())
+                .sum();
+    }
+}
+
+public interface InvoiceRepository {
+    void save(Invoice invoice);
+}
+
+public interface InvoiceRenderer {
+    byte[] render(Invoice invoice);
+}
+
+public interface InvoiceNotifier {
+    void notifyCreated(Invoice invoice);
+}
+```
+
+```java
+public final class CreateInvoiceUseCase {
+    private final InvoiceRepository repository;
+    private final InvoiceNotifier notifier;
+
+    public CreateInvoiceUseCase(
+            InvoiceRepository repository,
+            InvoiceNotifier notifier) {
+        this.repository = repository;
+        this.notifier = notifier;
     }
 
-    public void saveToDatabase() { // trách nhiệm 2: LƯU TRỮ dữ liệu
-        System.out.println("Đang lưu hóa đơn vào database...");
-    }
-
-    public void printInvoice() { // trách nhiệm 3: XUẤT/IN ấn
-        System.out.println("In hóa đơn: " + calculateTotal());
-    }
-
-    public void sendEmailNotification() { // trách nhiệm 4: GỬI THÔNG BÁO
-        System.out.println("Gửi email hóa đơn cho khách hàng...");
+    public void execute(Invoice invoice) {
+        repository.save(invoice);
+        notifier.notifyCreated(invoice);
     }
 }
 ```
 
-**Vấn đề:** `Invoice` đang gánh **4 lý do khác nhau để thay đổi** — nếu đổi công thức tính thuế, đổi loại database, đổi định dạng in ấn, hay đổi nhà cung cấp email, đều phải sửa **cùng 1 class** này. Điều này làm class trở nên **cồng kềnh, khó test riêng lẻ, dễ xung đột khi nhiều người cùng sửa**.
+`CreateInvoiceUseCase` có nhiều dependency nhưng vẫn có một trách nhiệm: điều phối ca sử dụng “tạo hóa đơn”. Số dòng hoặc số dependency không tự quyết định SRP.
 
-### ✅ Áp dụng SRP — tách trách nhiệm ra từng class riêng
+### Cohesion và domain object
 
 ```java
-public class Invoice { // CHỈ chịu trách nhiệm chứa dữ liệu + tính toán nghiệp vụ liên quan trực tiếp
-    private double amount;
-    public double calculateTotal() { return amount * 1.1; }
-}
+public final class BankAccount {
+    private long balance;
+    private boolean frozen;
 
-public class InvoiceRepository { // CHỈ chịu trách nhiệm lưu trữ
-    public void save(Invoice invoice) { System.out.println("Đang lưu vào database..."); }
-}
-
-public class InvoicePrinter { // CHỈ chịu trách nhiệm in ấn
-    public void print(Invoice invoice) { System.out.println("In hóa đơn: " + invoice.calculateTotal()); }
-}
-
-public class InvoiceNotifier { // CHỈ chịu trách nhiệm gửi thông báo
-    public void sendEmail(Invoice invoice) { System.out.println("Gửi email..."); }
+    public void withdraw(long amount) {
+        if (frozen) throw new IllegalStateException("Account is frozen");
+        if (amount <= 0) throw new IllegalArgumentException("amount must be positive");
+        if (amount > balance) throw new IllegalStateException("Insufficient balance");
+        balance -= amount;
+    }
 }
 ```
 
-> **Liên hệ trực tiếp với kiến trúc backend thực tế:** đây chính là lý do vì sao một ứng dụng Spring Boot chuẩn luôn tách thành nhiều tầng: `Controller` (nhận request), `Service` (xử lý nghiệp vụ), `Repository` (truy xuất dữ liệu) — mỗi tầng là một "trách nhiệm" riêng biệt, không gộp chung.
+Validation và cập nhật `balance` cùng bảo vệ một invariant nên ở gần nhau. Đây là encapsulation tốt; đẩy từng phép kiểm tra sang class riêng sẽ làm giảm cohesion.
+
+### Dấu hiệu SRP có vấn đề
+
+- Tên mơ hồ như `Manager`, `Processor`, `Helper`, `CommonUtil`.
+- Class import đồng thời HTTP, JDBC, PDF, email và business model.
+- Một thay đổi nhỏ kéo theo sửa nhiều vùng không liên quan trong cùng file.
+- Test cần mock rất nhiều dependency cho một hành vi đơn giản.
+- Nhiều nhóm phụ trách sửa cùng class vì các lý do khác nhau.
+
+> Hãy hỏi “Ai hoặc yêu cầu nào khiến code này thay đổi?” thay vì chỉ đếm method.
 
 ---
 
 ## 3. O — Open/Closed Principle
 
-> **Class nên MỞ để mở rộng (open for extension), nhưng ĐÓNG để sửa đổi (closed for modification).**
+> **Một thực thể phần mềm nên mở cho mở rộng nhưng đóng cho sửa đổi.**
 
-Nghĩa là: khi cần thêm tính năng mới, nên **thêm code mới** (ví dụ tạo class mới implement 1 interface có sẵn), thay vì **sửa lại code đã hoạt động ổn định** — giảm rủi ro gây lỗi ở những phần code cũ đã được test kỹ.
+“Đóng” không có nghĩa là không bao giờ sửa code. Ý nghĩa thực tế: tại một **điểm biến thiên đã biết**, thêm biến thể mới không buộc sửa thuật toán ổn định đang sử dụng nó.
 
-### ❌ Vi phạm OCP
+### Vi phạm OCP: dispatch bằng điều kiện tăng dần
 
 ```java
-public class DiscountCalculator {
-    public double calculate(String customerType, double price) {
-        if (customerType.equals("REGULAR")) {
-            return price;
-        } else if (customerType.equals("VIP")) {
-            return price * 0.9;
-        } else if (customerType.equals("PREMIUM")) {
-            return price * 0.8;
-        }
-        // Mỗi khi có loại khách hàng MỚI, phải MỞ LẠI class này và thêm "else if"
-        return price;
+public final class ShippingCalculator {
+    public long calculate(String type, long weightGram) {
+        return switch (type) {
+            case "STANDARD" -> weightGram * 2;
+            case "EXPRESS"  -> weightGram * 5;
+            case "SAME_DAY" -> weightGram * 10;
+            default -> throw new IllegalArgumentException("Unknown type: " + type);
+        };
     }
 }
 ```
 
-**Vấn đề:** mỗi lần công ty ra mắt hạng khách hàng mới (`GOLD`, `PLATINUM`...), buộc phải **sửa trực tiếp** vào method đã hoạt động ổn định — rủi ro gây lỗi dây chuyền cho các loại khách hàng cũ đang chạy tốt.
+Nếu loại vận chuyển là điểm thường xuyên mở rộng, mỗi loại mới buộc sửa class và kiểm thử lại tất cả nhánh.
 
-### ✅ Áp dụng OCP — dùng Polymorphism + Abstraction thay vì if/else
+### Áp dụng OCP bằng Strategy
 
 ```java
-public interface DiscountStrategy {
-    double apply(double price);
+public interface ShippingPolicy {
+    long calculate(long weightGram);
 }
 
-public class RegularDiscount implements DiscountStrategy {
-    public double apply(double price) { return price; }
-}
-public class VipDiscount implements DiscountStrategy {
-    public double apply(double price) { return price * 0.9; }
-}
-public class PremiumDiscount implements DiscountStrategy {
-    public double apply(double price) { return price * 0.8; }
+public final class StandardShipping implements ShippingPolicy {
+    @Override
+    public long calculate(long weightGram) {
+        return weightGram * 2;
+    }
 }
 
-public class DiscountCalculator {
-    public double calculate(DiscountStrategy strategy, double price) {
-        return strategy.apply(price); // KHÔNG cần biết cụ thể là loại nào — đa hình xử lý hết
+public final class ExpressShipping implements ShippingPolicy {
+    @Override
+    public long calculate(long weightGram) {
+        return weightGram * 5;
+    }
+}
+
+public final class ShippingCalculator {
+    public long calculate(ShippingPolicy policy, long weightGram) {
+        return policy.calculate(weightGram);
     }
 }
 ```
 
+Thêm `InternationalShipping` bằng class mới; calculator không đổi.
+
+### OCP không đồng nghĩa với “cấm switch”
+
+`switch` vẫn phù hợp khi:
+
+- Tập trường hợp nhỏ, ổn định và thuộc cùng một module.
+- `enum` là tập đóng theo chủ đích.
+- Logic chỉ ánh xạ dữ liệu đơn giản.
+- Pattern matching kiểm tra đầy đủ một `sealed hierarchy`.
+
 ```java
-// Khi cần thêm hạng khách hàng MỚI — chỉ THÊM class mới, KHÔNG đụng đến code cũ
-public class GoldDiscount implements DiscountStrategy {
-    public double apply(double price) { return price * 0.85; }
+sealed interface Result permits Success, Failure {}
+record Success(String value) implements Result {}
+record Failure(String message) implements Result {}
+
+String describe(Result result) {
+    return switch (result) {
+        case Success(var value) -> value;
+        case Failure(var message) -> "Error: " + message;
+    };
 }
 ```
 
-> Đây chính là **Strategy Pattern** (sẽ học kỹ ở Module 08 — Design Patterns) — ứng dụng trực tiếp của OCP. `DiscountCalculator` giờ đây **"đóng" để sửa đổi** (không bao giờ cần sửa lại) nhưng **"mở" để mở rộng** (thêm class chiến lược mới bất cứ lúc nào).
+Hierarchy ở đây được thiết kế đóng. Exhaustive `switch` giúp compiler báo nơi cần cập nhật khi thêm subtype.
+
+### Các cơ chế mở rộng khác
+
+- Polymorphism qua interface hoặc abstract class.
+- Hàm/lambda cho hành vi nhỏ (`Predicate`, `Function`).
+- Composition và Decorator.
+- Registry `Map<Key, Handler>` thay chuỗi điều kiện.
+- Cấu hình/dữ liệu khi khác biệt chỉ là giá trị.
+
+```java
+Map<String, ShippingPolicy> policies = Map.of(
+        "STANDARD", new StandardShipping(),
+        "EXPRESS", new ExpressShipping()
+);
+
+ShippingPolicy policy = Optional.ofNullable(policies.get(type))
+        .orElseThrow(() -> new IllegalArgumentException("Unknown type: " + type));
+```
+
+### Tránh dự đoán mọi tương lai
+
+Không cần tạo interface khi chỉ có một implementation ổn định và chưa có ranh giới cần thay thế. OCP hiệu quả khi abstraction bảo vệ biến thiên có bằng chứng: nhà cung cấp thanh toán, quy tắc chiết khấu, kênh Email/SMS/Push.
+
+> Trừu tượng hóa quanh điểm thường thay đổi, không quanh mọi dòng code có thể thay đổi.
 
 ---
 
 ## 4. L — Liskov Substitution Principle
 
-> **Object của subclass phải có thể thay thế object của superclass mà KHÔNG làm thay đổi tính đúng đắn (correctness) của chương trình.**
+> Nếu `S` là subtype của `T`, object kiểu `S` phải thay thế được object kiểu `T` mà vẫn giữ tính đúng đắn của chương trình.
 
-Nói cách khác: nếu `B extends A`, thì ở bất kỳ đâu code đang dùng `A`, thay bằng `B` **không được gây lỗi hoặc hành vi bất ngờ**.
+LSP nói về **hợp đồng hành vi**, không chỉ về việc code compile. `implements` hoặc `extends` chỉ tạo quan hệ kiểu; implementation còn phải giữ kỳ vọng của client.
 
-### ❌ Vi phạm LSP — ví dụ kinh điển "Hình vuông không phải là Hình chữ nhật (trong lập trình)"
+### Hợp đồng hành vi
+
+Subtype đúng cần tôn trọng:
+
+1. **Precondition không mạnh hơn:** không đòi đầu vào khắt khe hơn kiểu cha.
+2. **Postcondition không yếu hơn:** kết quả không kém bảo đảm hơn kiểu cha.
+3. **Invariant được giữ nguyên:** trạng thái hợp lệ của abstraction luôn còn đúng.
+4. **Ngoại lệ phù hợp:** không bất ngờ từ chối thao tác hợp lệ.
+5. **Ngữ nghĩa và tác dụng phụ phù hợp:** tên và kết quả quan sát được giữ cùng ý nghĩa.
+
+### Subtype làm mạnh precondition
+
+```java
+public interface FileStore {
+    // Contract: lưu byte[] có kích thước từ 0 đến 10 MB
+    void save(String name, byte[] content);
+}
+
+public final class TinyFileStore implements FileStore {
+    @Override
+    public void save(String name, byte[] content) {
+        if (content.length > 1_000) { // chỉ nhận tối đa 1 KB
+            throw new IllegalArgumentException("Too large");
+        }
+    }
+}
+```
+
+Client có quyền truyền file 2 KB theo contract của `FileStore`, nhưng subtype từ chối. Precondition bị làm mạnh nên LSP bị vi phạm.
+
+### Ví dụ Rectangle–Square
 
 ```java
 public class Rectangle {
-    protected double width, height;
-    public void setWidth(double w) { this.width = w; }
-    public void setHeight(double h) { this.height = h; }
-    public double getArea() { return width * height; }
+    protected int width;
+    protected int height;
+
+    public void setWidth(int width) { this.width = width; }
+    public void setHeight(int height) { this.height = height; }
+    public int area() { return width * height; }
 }
 
 public class Square extends Rectangle {
     @Override
-    public void setWidth(double w) {
-        this.width = w;
-        this.height = w; // Square BẮT BUỘC width = height — phá vỡ kỳ vọng của Rectangle!
+    public void setWidth(int width) {
+        this.width = width;
+        this.height = width;
     }
+
     @Override
-    public void setHeight(double h) {
-        this.width = h;
-        this.height = h;
+    public void setHeight(int height) {
+        this.width = height;
+        this.height = height;
     }
 }
 ```
 
 ```java
-public void testRectangle(Rectangle r) {
-    r.setWidth(5);
-    r.setHeight(10);
-    assert r.getArea() == 50; // kỳ vọng hợp lý với Rectangle
+void resize(Rectangle rectangle) {
+    rectangle.setWidth(5);
+    rectangle.setHeight(10);
+    if (rectangle.area() != 50) {
+        throw new AssertionError("Broken Rectangle contract");
+    }
 }
-
-testRectangle(new Rectangle()); // ✅ Pass — area = 50
-testRectangle(new Square());    // ❌ FAIL! — vì setHeight(10) cũng ghi đè width thành 10, area = 100, không phải 50
 ```
 
-**Vấn đề:** dù về mặt hình học "hình vuông là 1 trường hợp đặc biệt của hình chữ nhật" nghe hợp lý, nhưng trong lập trình OOP, `Square` **không thể thay thế `Rectangle`** mà không phá vỡ hành vi mong đợi — đây là ví dụ kinh điển cho thấy quan hệ kế thừa **không nên chỉ dựa vào trực giác hình học/thực tế**, mà phải dựa vào **hành vi (behavior) có tương thích hay không**.
-
-### ✅ Sửa lại — tách quan hệ kế thừa hợp lý hơn
+`new Square()` làm hỏng kỳ vọng rằng width và height của `Rectangle` thay đổi độc lập. Quan hệ hình học không đủ để chứng minh quan hệ subtype hành vi.
 
 ```java
 public interface Shape {
-    double getArea();
+    int area();
 }
-public class Rectangle implements Shape {
-    private double width, height;
-    public Rectangle(double w, double h) { this.width = w; this.height = h; }
-    public double getArea() { return width * height; }
+
+public record Rectangle(int width, int height) implements Shape {
+    @Override public int area() { return width * height; }
 }
-public class Square implements Shape { // KHÔNG kế thừa Rectangle nữa — độc lập, tự định nghĩa hành vi riêng
-    private double side;
-    public Square(double side) { this.side = side; }
-    public double getArea() { return side * side; }
+
+public record Square(int side) implements Shape {
+    @Override public int area() { return side * side; }
 }
 ```
 
-### Dấu hiệu nhận biết vi phạm LSP trong code thực tế
+### `UnsupportedOperationException` là tín hiệu mạnh
 
-- Subclass **ném exception** ở method mà lớp cha không ném (ví dụ `UnsupportedOperationException`).
-- Subclass **override method nhưng làm ngược lại ý nghĩa gốc** của lớp cha.
-- Cần dùng `instanceof` để kiểm tra kiểu cụ thể trước khi gọi method — dấu hiệu rõ ràng cho thấy các subclass **không thực sự thay thế được cho nhau**.
+```java
+class ReadOnlyDocument extends Document {
+    @Override
+    public void save() {
+        throw new UnsupportedOperationException();
+    }
+}
+```
+
+Nếu `Document` hứa `save()` dùng được, subtype từ chối là vi phạm LSP. Có thể tách `ReadableDocument` và `WritableDocument`, hoặc dùng composition.
+
+Exception này không luôn chứng minh vi phạm: nếu contract gốc tuyên bố rõ thao tác là optional, implementation vẫn có thể đúng contract. Khi đó contract có thể khó dùng và vi phạm tinh thần ISP.
+
+### Java kiểm tra được gì?
+
+Java hỗ trợ một phần LSP ở compile time:
+
+- Override được trả về kiểu hẹp hơn (*covariant return type*).
+- Không được ném checked exception rộng hơn method cha.
+- Không được giảm mức truy cập.
+
+Compiler không kiểm tra được ý nghĩa nghiệp vụ, nullability, tính idempotent hoặc tác dụng phụ. Những điều này cần tài liệu contract và contract test.
+
+```java
+interface Cache {
+    // put cùng key/value nhiều lần không đổi kết quả quan sát được
+    void put(String key, String value);
+    Optional<String> get(String key);
+}
+```
+
+Mọi implementation có thể chạy chung một bộ test để chứng minh contract.
+
+### Dấu hiệu vi phạm LSP
+
+- Subtype ném exception cho đầu vào hợp lệ theo abstraction.
+- Override bỏ qua công việc client trông đợi.
+- Client dùng `instanceof` để né một subtype cụ thể.
+- Subtype trả `null` trong khi contract hứa giá trị khác null.
+- Subtype đổi nghĩa của method.
+- Kế thừa chỉ để tái sử dụng code dù quan hệ hành vi không đúng.
 
 ---
 
 ## 5. I — Interface Segregation Principle
 
-> **Không nên ép một class phải implement những method nó KHÔNG DÙNG ĐẾN. Nên chia nhỏ interface lớn thành nhiều interface nhỏ, chuyên biệt hơn.**
+> **Client không nên bị buộc phụ thuộc vào method mà nó không dùng.** Interface lớn nên được chia thành các interface nhỏ, theo vai trò, để mỗi client chỉ thấy phần liên quan.
 
-### ❌ Vi phạm ISP — interface "phình to" (fat interface)
+ISP nhìn abstraction từ **phía client**. SRP hỏi "nhà cung cấp có bao nhiêu lý do để thay đổi?"; ISP hỏi "client có bị kéo theo thay đổi mà nó không quan tâm không?".
+
+### Fat interface: một hợp đồng phục vụ nhiều vai trò
 
 ```java
-public interface Worker {
-    void work();
-    void eat();
-    void sleep();
+public interface Machine {
+    void print(Document d);
+    void scan(Document d);
+    void fax(Document d);
+    void staple(Document d);
 }
 
-public class HumanWorker implements Worker {
-    public void work() { System.out.println("Đang làm việc"); }
-    public void eat() { System.out.println("Đang ăn trưa"); }
-    public void sleep() { System.out.println("Đang nghỉ ngơi"); }
-}
-
-public class RobotWorker implements Worker {
-    public void work() { System.out.println("Robot đang làm việc"); }
-    public void eat() { throw new UnsupportedOperationException("Robot không ăn!"); } // ép buộc implement method vô nghĩa
-    public void sleep() { throw new UnsupportedOperationException("Robot không ngủ!"); }
+public final class SimplePrinter implements Machine {
+    @Override public void print(Document d) { /* ... */ }
+    @Override public void scan(Document d)  { throw new UnsupportedOperationException(); }
+    @Override public void fax(Document d)   { throw new UnsupportedOperationException(); }
+    @Override public void staple(Document d){ throw new UnsupportedOperationException(); }
 }
 ```
 
-**Vấn đề:** `RobotWorker` bị **ép buộc** implement `eat()` và `sleep()` dù hoàn toàn không liên quan đến bản chất của nó — dẫn đến code "giả vờ implement" bằng cách ném exception, đây là dấu hiệu thiết kế interface sai.
+Ba method rỗng hoặc ném exception là dấu hiệu interface không khớp với người cài đặt. Client chỉ cần in vẫn phải biên dịch lại khi `Machine` thêm `collate()`.
 
-### ✅ Áp dụng ISP — chia nhỏ interface theo từng khả năng riêng biệt
+### Tách theo vai trò (role interface)
 
 ```java
-public interface Workable {
-    void work();
-}
-public interface Eatable {
-    void eat();
-}
-public interface Sleepable {
-    void sleep();
+public interface Printer { void print(Document d); }
+public interface Scanner { void scan(Document d); }
+public interface Fax     { void fax(Document d); }
+
+public final class SimplePrinter implements Printer {
+    @Override public void print(Document d) { /* ... */ }
 }
 
-public class HumanWorker implements Workable, Eatable, Sleepable {
-    public void work() { System.out.println("Đang làm việc"); }
-    public void eat() { System.out.println("Đang ăn trưa"); }
-    public void sleep() { System.out.println("Đang nghỉ ngơi"); }
-}
-
-public class RobotWorker implements Workable { // CHỈ implement những gì thực sự liên quan
-    public void work() { System.out.println("Robot đang làm việc"); }
+public final class OfficeMachine implements Printer, Scanner, Fax {
+    @Override public void print(Document d) { /* ... */ }
+    @Override public void scan(Document d)  { /* ... */ }
+    @Override public void fax(Document d)   { /* ... */ }
 }
 ```
 
-> **Liên hệ thực tế Spring:** đây là lý do các interface trong Spring Data JPA được thiết kế phân tầng nhỏ (`CrudRepository` → `PagingAndSortingRepository` → `JpaRepository`) thay vì gộp hết mọi method vào 1 interface khổng lồ — cho phép chọn đúng mức độ khả năng cần dùng.
+`OfficeMachine` vẫn gom đủ khả năng khi cần, nhưng client khai báo phụ thuộc hẹp:
+
+```java
+public final class NightlyReportJob {
+    private final Printer printer;   // không thấy scan/fax → không bị ảnh hưởng khi chúng đổi
+    public NightlyReportJob(Printer printer) { this.printer = printer; }
+}
+```
+
+### ISP ở cấp tham số: phụ thuộc kiểu hẹp nhất đủ dùng
+
+```java
+// Kém: buộc caller đưa đúng ArrayList
+long sum(ArrayList<Integer> numbers) { /* ... */ }
+
+// Tốt: chỉ cần duyệt
+long sum(Iterable<Integer> numbers) { /* ... */ }
+```
+
+Nhận `Iterable` thay vì `List`, `List` thay vì `ArrayList`, `Reader` thay vì `FileReader`. Kiểu tham số càng hẹp, hàm càng dễ tái dùng và càng ít ràng buộc client.
+
+### `java.util.List` là ví dụ fat interface trong chính JDK
+
+`List` khai báo `add`, `remove`, `set`, `clear`... nhưng `List.of(...)` và `Arrays.asList(...)` ném `UnsupportedOperationException` cho các thao tác thay đổi. Đây là *optional operation* — một sự thỏa hiệp lịch sử. Bài học: khi thiết kế interface mới, tránh gộp "đọc" và "ghi" nếu có client chỉ đọc.
+
+```java
+public interface ReadOnlyCatalog {
+    Optional<Product> findById(String id);
+    List<Product> search(Query query);
+}
+
+public interface MutableCatalog extends ReadOnlyCatalog {
+    void add(Product product);
+    void remove(String id);
+}
+```
+
+### Default method giảm nhẹ nhưng không thay ISP
+
+Thêm `default` method rỗng vào interface lớn giúp client cũ biên dịch tiếp, nhưng client vẫn *nhìn thấy* method không liên quan trong autocomplete và tài liệu. Tách interface vẫn là giải pháp gốc.
+
+### Dấu hiệu ISP có vấn đề
+
+- Implementation có method rỗng hoặc ném `UnsupportedOperationException` theo nhóm.
+- Thêm method vào interface làm nhiều class không liên quan phải sửa.
+- Mock trong test phải stub nhiều method mà kịch bản không chạm tới.
+- Tên interface chung chung (`Service`, `Manager`, `Repository` không có ngữ cảnh) và có hơn 8–10 method thuộc các nhóm khác nhau.
 
 ---
 
 ## 6. D — Dependency Inversion Principle
 
-> **Module cấp cao (high-level) không nên phụ thuộc vào module cấp thấp (low-level). Cả hai nên phụ thuộc vào ABSTRACTION. Abstraction không nên phụ thuộc vào chi tiết cài đặt — chi tiết cài đặt nên phụ thuộc vào abstraction.**
+> **Module cấp cao không nên phụ thuộc module cấp thấp; cả hai phụ thuộc vào abstraction.** Và **abstraction không phụ thuộc chi tiết; chi tiết phụ thuộc abstraction.**
 
-Đây là nguyên lý **quan trọng nhất** trong 5 nguyên lý SOLID đối với lập trình backend — là nền tảng lý thuyết trực tiếp của **Dependency Injection** trong Spring.
+"Cấp cao" là chính sách nghiệp vụ (tính giá, duyệt đơn, quy trình). "Cấp thấp" là chi tiết kỹ thuật (JDBC, HTTP client, SDK nhà cung cấp, hệ thống file).
 
-### ❌ Vi phạm DIP — phụ thuộc trực tiếp vào implementation cụ thể
+### Phụ thuộc trực tiếp vào chi tiết
 
 ```java
-public class MySQLDatabase { // module cấp THẤP — chi tiết cài đặt cụ thể
-    public void save(String data) {
-        System.out.println("Lưu vào MySQL: " + data);
-    }
-}
+public final class CheckoutService {
+    private final StripeClient stripe = new StripeClient();   // cấp cao trói vào SDK cụ thể
 
-public class UserService { // module cấp CAO — logic nghiệp vụ
-    private MySQLDatabase database = new MySQLDatabase(); // ❌ PHỤ THUỘC TRỰC TIẾP vào class cụ thể
-
-    public void registerUser(String userData) {
-        database.save(userData);
+    public void checkout(Cart cart) {
+        long amount = cart.totalCents();
+        stripe.charge(amount, cart.customerToken());
     }
 }
 ```
 
-**Vấn đề:** `UserService` (logic nghiệp vụ quan trọng, cấp cao) bị **khóa cứng (hard-coded)** vào `MySQLDatabase` (chi tiết kỹ thuật, cấp thấp). Nếu muốn đổi sang PostgreSQL, hoặc MongoDB, hoặc cần viết Unit Test với database giả lập (mock) — **bắt buộc phải sửa `UserService`**, vi phạm cả OCP lẫn DIP.
+`CheckoutService` không thể kiểm thử nếu không gọi Stripe, không thể đổi cổng thanh toán nếu không sửa logic nghiệp vụ, và package nghiệp vụ giờ `import com.stripe.*`.
 
-### ✅ Áp dụng DIP — cả hai phụ thuộc vào Abstraction (interface)
+### Đảo phụ thuộc: abstraction thuộc phía chính sách
 
 ```java
-public interface Database { // ABSTRACTION — cả 2 tầng đều phụ thuộc vào đây
-    void save(String data);
+// Nằm trong package nghiệp vụ, do phía "cấp cao" định nghĩa và sở hữu
+public interface PaymentGateway {
+    PaymentResult charge(long amountCents, String customerRef);
 }
 
-public class MySQLDatabase implements Database {
-    public void save(String data) { System.out.println("Lưu vào MySQL: " + data); }
-}
+public final class CheckoutService {
+    private final PaymentGateway gateway;
 
-public class MongoDatabase implements Database { // dễ dàng thêm implementation mới
-    public void save(String data) { System.out.println("Lưu vào MongoDB: " + data); }
-}
-
-public class UserService {
-    private final Database database; // ✅ phụ thuộc vào INTERFACE, không phụ thuộc class cụ thể
-
-    public UserService(Database database) { // inject qua constructor — chính là "Dependency Injection"
-        this.database = database;
+    public CheckoutService(PaymentGateway gateway) {
+        this.gateway = gateway;
     }
 
-    public void registerUser(String userData) {
-        database.save(userData);
+    public void checkout(Cart cart) {
+        PaymentResult result = gateway.charge(cart.totalCents(), cart.customerRef());
+        if (!result.approved()) {
+            throw new PaymentDeclinedException(result.reason());
+        }
     }
 }
 ```
 
 ```java
-// Người gọi (caller) quyết định implementation cụ thể nào được inject vào
-UserService service1 = new UserService(new MySQLDatabase());
-UserService service2 = new UserService(new MongoDatabase());
+// Nằm trong package hạ tầng, phụ thuộc VÀO abstraction của nghiệp vụ
+public final class StripePaymentGateway implements PaymentGateway {
+    private final StripeClient stripe;
 
-// Khi viết Unit Test — dễ dàng "tiêm" vào 1 Database giả lập (mock) mà không đụng database thật
-UserService testService = new UserService(new FakeDatabaseForTesting());
+    public StripePaymentGateway(StripeClient stripe) {
+        this.stripe = stripe;
+    }
+
+    @Override
+    public PaymentResult charge(long amountCents, String customerRef) {
+        var response = stripe.charge(amountCents, customerRef);
+        return new PaymentResult(response.isPaid(), response.failureMessage());
+    }
+}
 ```
 
-### Sơ đồ minh họa "đảo ngược" luồng phụ thuộc
+### Điểm dễ hiểu sai: "dùng interface" chưa phải DIP
+
+Nếu interface `PaymentGateway` được đặt trong package hạ tầng và mô phỏng sát API Stripe (`charge(StripeChargeRequest)`), thì nghiệp vụ vẫn phụ thuộc chi tiết, chỉ thêm một lớp gián tiếp. DIP đạt được khi:
+
+1. Abstraction diễn đạt bằng **ngôn ngữ của nghiệp vụ**, không phải của công nghệ.
+2. Abstraction **được sở hữu bởi phía dùng nó** (package nghiệp vụ), không phải phía cài đặt.
+3. Chiều phụ thuộc mã nguồn: hạ tầng → nghiệp vụ, ngược với chiều lời gọi runtime.
+
+### Hình dạng phụ thuộc
 
 ```
-TRƯỚC (vi phạm DIP):
-  UserService  ────depends on────►  MySQLDatabase (class cụ thể)
+          Không có DIP                         Có DIP
 
-SAU (tuân thủ DIP):
-  UserService  ────depends on────►  Database (interface)
-                                          ▲
-                                          │ implements
-                                     MySQLDatabase
+  CheckoutService                      CheckoutService ──► PaymentGateway
+        │                                                        ▲
+        ▼                                                        │
+  StripePaymentGateway                 StripePaymentGateway ─────┘
+        │                                     │
+        ▼                                     ▼
+    StripeClient                          StripeClient
+
+  Nghiệp vụ phụ thuộc hạ tầng           Hạ tầng phụ thuộc abstraction nghiệp vụ
 ```
 
-Chú ý mũi tên phụ thuộc của `UserService` giờ trỏ vào **interface trừu tượng**, còn `MySQLDatabase` (chi tiết cụ thể) mới là bên phải "chạy theo" implement interface đó — đây chính là ý nghĩa của từ **"Inversion" (đảo ngược)**: thay vì module cấp cao phụ thuộc chi tiết cấp thấp (thông thường), cả hai giờ cùng phụ thuộc vào 1 abstraction chung ở giữa.
+Đây là ý tưởng cốt lõi của kiến trúc Ports and Adapters (Hexagonal): "port" là abstraction do miền định nghĩa, "adapter" là implementation ở rìa hệ thống.
 
-> **Đây CHÍNH XÁC là cách Spring Framework hoạt động:** bạn khai báo field/constructor kiểu `interface` (`UserRepository`, `PaymentService`...), Spring container **tự động "tiêm" (inject)** implementation cụ thể vào lúc chạy — bạn không bao giờ viết `new MySQLDatabase()` trực tiếp trong code nghiệp vụ nữa. Toàn bộ cơ chế `@Autowired`, `@Component`, `ApplicationContext` ở Module 12 (Spring Framework Core) đều xây dựng trên chính nguyên lý DIP này.
+### Dấu hiệu DIP có vấn đề
+
+- Package/module nghiệp vụ `import` SDK, driver JDBC, annotation ORM, class HTTP client.
+- `new` một class hạ tầng bên trong logic nghiệp vụ.
+- Không thể viết unit test cho quy tắc nghiệp vụ nếu không có database hoặc mạng.
+- Đổi thư viện kỹ thuật buộc phải sửa file chứa quy tắc nghiệp vụ.
 
 ---
 
-## 7. SOLID và Spring Framework — mối liên hệ trực tiếp
+## 7. DIP, Dependency Injection và IoC
 
-| Nguyên lý | Biểu hiện cụ thể trong Spring |
-|---|---|
-| **S**RP | Kiến trúc phân tầng `Controller` / `Service` / `Repository` — mỗi tầng một trách nhiệm |
-| **O**CP | Thêm 1 `@Bean` hoặc `@Component` implementation mới mà không sửa code Service đang dùng interface đó |
-| **L**SP | Mọi implementation của 1 interface (`@Service`) phải dùng thay thế lẫn nhau an toàn — nền tảng cho Spring chọn đúng Bean lúc runtime |
-| **I**SP | Interface Spring Data JPA chia nhỏ theo tầng (`CrudRepository`, `PagingAndSortingRepository`, `JpaRepository`) |
-| **D**IP | **Trái tim của toàn bộ Spring** — IoC Container + `@Autowired` chính là cơ chế tự động hóa việc "tiêm" implementation cụ thể vào nơi cần dùng abstraction |
+Ba khái niệm hay bị dùng lẫn:
 
-> Nắm chắc SOLID — đặc biệt là **DIP** — trước khi học Module 12 sẽ giúp hiểu Spring **"tại sao lại thiết kế vậy"** thay vì chỉ học thuộc cú pháp `@Autowired` một cách máy móc.
-
----
-
-## 8. Tổng kết — Bảng ghi nhớ nhanh
-
-| Nguyên lý | Ghi nhớ 1 câu | Dấu hiệu vi phạm cần chú ý |
+| Khái niệm | Loại | Nội dung |
 |---|---|---|
-| SRP | 1 class = 1 lý do để thay đổi | Class có tên chung chung như `Manager`, `Util`, `Helper` ôm quá nhiều logic không liên quan |
-| OCP | Thêm tính năng bằng cách thêm code mới, không sửa code cũ | Chuỗi `if/else if` hoặc `switch` liên tục phải sửa khi có case mới |
-| LSP | Subclass thay thế class cha không được gây lỗi | Subclass ném `UnsupportedOperationException`, hoặc code cần `instanceof` để check kiểu cụ thể |
-| ISP | Không ép implement method thừa không dùng | Interface có nhiều method mà nhiều class implement phải để trống hoặc ném exception |
-| DIP | Phụ thuộc vào interface, không phụ thuộc class cụ thể | Dùng `new ConcreteClass()` trực tiếp trong logic nghiệp vụ thay vì inject qua interface |
+| **Dependency Inversion Principle** | Nguyên lý thiết kế | Chính sách và chi tiết cùng phụ thuộc abstraction; abstraction thuộc phía chính sách |
+| **Dependency Injection** | Kỹ thuật | Dependency được **truyền vào** từ ngoài (constructor/setter/tham số) thay vì đối tượng tự tạo |
+| **Inversion of Control** | Nguyên tắc kiến trúc | Luồng điều khiển do framework/hạ tầng nắm; code ứng dụng được gọi lại (callback, lifecycle, container) |
+
+DI là một cách hiện thực IoC cho việc lắp ráp đối tượng. Có thể đạt DIP mà không cần container: chỉ cần constructor nhận abstraction và một nơi lắp ráp (composition root).
+
+### Constructor injection là mặc định nên chọn
+
+```java
+public final class CreateInvoiceUseCase {
+    private final InvoiceRepository repository;
+    private final InvoiceNotifier notifier;
+
+    public CreateInvoiceUseCase(InvoiceRepository repository, InvoiceNotifier notifier) {
+        this.repository = Objects.requireNonNull(repository);
+        this.notifier = Objects.requireNonNull(notifier);
+    }
+}
+```
+
+Ưu điểm so với setter/field injection:
+
+- Field `final` — đối tượng bất biến sau khi tạo, an toàn khi chia sẻ.
+- Dependency bắt buộc được nêu tường minh trong chữ ký; thiếu là lỗi biên dịch/khởi tạo, không phải `NullPointerException` lúc chạy.
+- Test dựng đối tượng bằng `new` với test double, không cần framework.
+- Danh sách tham số quá dài trở thành tín hiệu SRP.
+
+### Composition root: lắp ráp thủ công
+
+```java
+public final class Main {
+    public static void main(String[] args) {
+        var dataSource = new HikariDataSource(config());
+        InvoiceRepository repository = new JdbcInvoiceRepository(dataSource);
+        InvoiceNotifier notifier = new EmailInvoiceNotifier(new SmtpMailer(config()));
+
+        var useCase = new CreateInvoiceUseCase(repository, notifier);
+        new HttpServer(useCase).start();
+    }
+}
+```
+
+Chỉ một nơi biết các class cụ thể. Phần còn lại của hệ thống làm việc với abstraction.
+
+### Service Locator: đối lập nên tránh
+
+```java
+public final class CreateInvoiceUseCase {
+    public void execute(Invoice invoice) {
+        var repository = ServiceLocator.get(InvoiceRepository.class); // phụ thuộc bị giấu
+        repository.save(invoice);
+    }
+}
+```
+
+Dependency không còn xuất hiện trong chữ ký, khó thấy khi đọc code và khó kiểm soát trong test. Constructor injection giữ phụ thuộc **hiện diện và tường minh**.
 
 ---
 
-## 9. Bài tập luyện tập
+## 8. Năm nguyên lý phối hợp trong một thiết kế
+
+Một lát cắt "đăng ký người dùng rồi gửi thông báo chào mừng":
+
+```java
+// Chính sách nghiệp vụ (cấp cao). Sở hữu các abstraction mà nó cần.
+public interface UserRepository {                 // DIP: port do miền định nghĩa
+    boolean existsByEmail(String email);
+    void save(User user);
+}
+
+public interface WelcomeChannel {                 // ISP: chỉ một khả năng, hẹp
+    void sendWelcome(User user);
+}
+
+public final class RegisterUserUseCase {          // SRP: điều phối đúng một ca sử dụng
+    private final UserRepository users;
+    private final PasswordHasher hasher;
+    private final List<WelcomeChannel> channels;  // OCP: thêm kênh không sửa class này
+
+    public RegisterUserUseCase(UserRepository users, PasswordHasher hasher, List<WelcomeChannel> channels) {
+        this.users = users;
+        this.hasher = hasher;
+        this.channels = List.copyOf(channels);
+    }
+
+    public User execute(RegisterCommand command) {
+        if (users.existsByEmail(command.email())) {
+            throw new EmailAlreadyUsedException(command.email());
+        }
+        var user = User.create(command.email(), hasher.hash(command.rawPassword()));
+        users.save(user);
+        channels.forEach(channel -> channel.sendWelcome(user)); // LSP: mọi kênh giữ đúng hợp đồng
+        return user;
+    }
+}
+```
+
+```java
+// Chi tiết kỹ thuật (cấp thấp). Phụ thuộc vào abstraction phía trên.
+public final class JpaUserRepository implements UserRepository { /* ... */ }
+public final class EmailWelcomeChannel implements WelcomeChannel { /* ... */ }
+public final class SmsWelcomeChannel   implements WelcomeChannel { /* ... */ }
+```
+
+- **SRP:** use case chỉ điều phối; hashing, lưu trữ, gửi tin ở nơi khác.
+- **OCP:** thêm `PushWelcomeChannel` là thêm class và đăng ký vào danh sách; `execute` không đổi.
+- **LSP:** mọi `WelcomeChannel` phải thực sự gửi và không ném exception cho user hợp lệ.
+- **ISP:** use case phụ thuộc `WelcomeChannel` và `UserRepository` hẹp, không phụ thuộc một `NotificationManager` đồ sộ.
+- **DIP:** `RegisterUserUseCase` không biết JPA hay SMTP tồn tại.
+
+Không nguyên lý nào tự đứng một mình: ISP tạo ra abstraction hẹp để DIP đảo phụ thuộc; OCP dựa trên LSP để biến thể mới an toàn; SRP quyết định ranh giới để cả bốn cái còn lại có chỗ đặt.
+
+---
+
+## 9. Code smell và quy trình refactor
+
+Robert C. Martin mô tả các triệu chứng của thiết kế kém — thường xuất hiện cùng lúc:
+
+| Smell | Biểu hiện | Nguyên lý liên quan |
+|---|---|---|
+| **Rigidity** | Một thay đổi nhỏ lan ra nhiều module | SRP, DIP |
+| **Fragility** | Sửa chỗ này, vỡ chỗ không liên quan | SRP, LSP |
+| **Immobility** | Không tách được phần hữu ích để tái dùng vì dính quá nhiều thứ | SRP, ISP, DIP |
+| **Viscosity** | Cách "làm đúng" khó hơn cách "chắp vá" | Toàn bộ |
+| **Needless complexity** | Abstraction cho biến thiên chưa từng xảy ra | OCP (lạm dụng) |
+| **Needless repetition** | Cùng một logic sao chép nhiều nơi | SRP |
+| **Opacity** | Đọc code không hiểu ý định | SRP |
+
+### Quy trình refactor an toàn
+
+1. **Phủ test đặc tả (characterization test):** ghi lại hành vi hiện tại trước khi đổi cấu trúc.
+2. **Xác định trục thay đổi thật:** dựa trên lịch sử commit và yêu cầu sắp tới, không dựa cảm giác.
+3. **Tạo seam:** đưa một interface vào đúng ranh giới cần thay thế; ban đầu chỉ có một implementation.
+4. **Extract:** tách trách nhiệm phụ ra class/method riêng; giữ bước nhỏ, chạy test sau mỗi bước.
+5. **Đảo phụ thuộc:** cho phía cấp cao nhận abstraction qua constructor; đẩy việc `new` ra composition root.
+6. **Xóa nhánh điều kiện dispatch:** thay `switch`/`if` phân loại bằng polymorphism hoặc registry khi tập biến thể mở.
+7. **Kiểm chứng:** test xanh, và thử nghiệm thêm một biến thể mới để xác nhận điểm mở rộng hoạt động.
+
+> Refactor để phục vụ thay đổi đang tới. Nếu chưa có thay đổi nào ép buộc, việc chia nhỏ có thể chờ.
+
+---
+
+## 10. SOLID trong Spring
+
+Spring là một IoC container: nó tạo, cấu hình và lắp ráp bean, rồi gọi lại code ứng dụng.
+
+| Nguyên lý | Cách Spring hỗ trợ | Lưu ý |
+|---|---|---|
+| **SRP** | Mỗi `@Service`/`@Component` một trách nhiệm; tách `@Repository`, `@RestController`, mapper | Controller "mỏng", không chứa quy tắc nghiệp vụ |
+| **OCP** | Nhiều bean cùng interface; inject `List<T>` hoặc `Map<String, T>`; `@ConditionalOnMissingBean`, `@Profile` | Thêm implementation là thêm class có `@Component`, không sửa nơi dùng |
+| **LSP** | Program to interface (`UserService`), mọi impl chạy chung contract test | Proxy AOP: `@Transactional` trên method `private`/`final` hoặc gọi nội bộ (self-invocation) không có hiệu lực |
+| **ISP** | Interface repository hẹp theo aggregate; Spring Data sinh implementation | Tránh một `FacadeService` gom mọi thứ |
+| **DIP** | Constructor injection (khuyến nghị chính thức); `@Bean` đặt trong module nghiệp vụ, adapter ở module hạ tầng | Field injection (`@Autowired` trên field) làm test khó và giấu phụ thuộc |
+
+```java
+@Service
+public class RegisterUserService {
+    private final UserRepository users;
+    private final PasswordEncoder encoder;
+    private final List<WelcomeChannel> channels;   // Spring tự inject mọi bean WelcomeChannel
+
+    public RegisterUserService(UserRepository users, PasswordEncoder encoder, List<WelcomeChannel> channels) {
+        this.users = users;
+        this.encoder = encoder;
+        this.channels = channels;
+    }
+}
+```
+
+> Từ Spring 4.3, class có **một constructor** thì không cần `@Autowired`. Constructor injection cho phép field `final` và test bằng `new` không cần khởi động context.
+
+### Cạm bẫy proxy và LSP
+
+```java
+@Service
+public class ReportService {
+    @Transactional
+    public void generate() { buildRows(); }      // gọi nội bộ
+
+    @Transactional
+    public void buildRows() { /* ... */ }         // KHÔNG chạy trong transaction mới khi bị gọi từ generate()
+}
+```
+
+Proxy chỉ áp dụng khi lời gọi đi qua tham chiếu được inject. Đây là nơi hành vi "thay thế được" bị phá ngầm nếu không nắm cơ chế.
+
+---
+
+## 11. Giới hạn và trade-off
+
+SOLID là công cụ đánh giá, không phải luật bắt buộc áp cho mọi dòng code.
+
+### Trừu tượng hóa sớm tốn kém hơn lặp code
+
+Một abstraction sai buộc mọi implementation uốn theo hình dạng không phù hợp, và việc gỡ nó ra khó hơn xóa vài dòng trùng lặp. Nguyên tắc thực dụng: **chấp nhận lặp cho tới khi hình dạng của biến thiên rõ ràng** (thường là lần thứ ba), rồi mới rút abstraction.
+
+### Chi phí của lớp gián tiếp
+
+Mỗi interface thêm một bước khi đọc code: từ nơi gọi phải tìm implementation thật. Với hệ thống nhỏ hoặc script một lần, một class 200 dòng mạch lạc dễ bảo trì hơn tám file mỗi file 30 dòng.
+
+### Khi nào có thể hoãn SOLID
+
+- Prototype, thử nghiệm, code dùng một lần.
+- Miền nghiệp vụ chưa ổn định, chưa biết trục thay đổi.
+- Chỉ có một implementation và chưa có ranh giới cần test thay thế.
+
+### Khi nào nên đầu tư sớm
+
+- Ranh giới với hệ thống ngoài (thanh toán, email, lưu trữ) — gần như chắc chắn cần thay thế trong test.
+- Điểm đã có lịch sử thay đổi nhiều lần.
+- Code được nhiều nhóm cùng sửa vì các lý do khác nhau.
+
+> Câu hỏi quyết định luôn là "thay đổi nào sắp tới và nó tốn bao nhiêu nếu không chuẩn bị", không phải "thiết kế đã đủ nhiều tầng chưa".
+
+---
+
+## 12. Tổng kết — Bảng ghi nhớ nhanh
+
+| Nguyên lý | Một câu | Vi phạm điển hình | Công cụ thường dùng |
+|---|---|---|---|
+| **SRP** | Một module, một nguồn thay đổi / một actor | Class trộn nghiệp vụ + JDBC + PDF + email | Tách class, use case, domain object |
+| **OCP** | Mở để mở rộng, đóng để sửa | `switch` theo loại phình dần cho điểm hay mở rộng | Strategy, polymorphism, registry `Map`, `sealed` + exhaustive switch |
+| **LSP** | Subtype thay thế được mà giữ đúng hợp đồng hành vi | Subtype làm mạnh precondition, ném exception cho input hợp lệ, `instanceof` để né subtype | Contract test, tách interface theo khả năng, composition thay kế thừa |
+| **ISP** | Client không phụ thuộc method nó không dùng | Fat interface, method rỗng / `UnsupportedOperationException` theo nhóm | Role interface, tham số nhận kiểu hẹp nhất |
+| **DIP** | Chính sách và chi tiết cùng phụ thuộc abstraction do chính sách sở hữu | Nghiệp vụ `import` SDK, `new` class hạ tầng trong logic | Port do miền định nghĩa, constructor injection, composition root |
+
+| Phân biệt | Ý |
+|---|---|
+| DIP vs DI vs IoC | DIP = nguyên lý; DI = truyền phụ thuộc từ ngoài; IoC = framework nắm luồng điều khiển |
+| SRP vs ISP | SRP nhìn từ phía nhà cung cấp (lý do thay đổi); ISP nhìn từ phía client (phụ thuộc thừa) |
+| "Dùng interface" vs DIP | Có interface nhưng đặt ở phía hạ tầng và mô phỏng API kỹ thuật thì vẫn chưa đảo phụ thuộc |
+| Nguyên lý vs pattern | Strategy/Adapter/Decorator là khuôn giải pháp; SOLID là tiêu chí đánh giá |
+
+---
+
+## 13. Bài tập luyện tập
 
 ### Phần A — Trắc nghiệm nhận định (giải thích lý do)
 
-**Câu 1.** Class sau vi phạm nguyên lý SOLID nào? Giải thích và đề xuất cách sửa ngắn gọn.
+**Câu 1.** Class sau vi phạm nguyên lý nào? Có bao nhiêu trục thay đổi?
 ```java
-public class ReportGenerator {
-    public String generateReportData() { return "data"; }
-    public void exportToPDF(String data) { System.out.println("Xuất PDF: " + data); }
-    public void exportToExcel(String data) { System.out.println("Xuất Excel: " + data); }
-    public void sendReportByEmail(String data) { System.out.println("Gửi email: " + data); }
-}
-```
-
-**Câu 2.** Đoạn code sau vi phạm nguyên lý nào? Vì sao nó sẽ ngày càng khó bảo trì khi hệ thống phát triển?
-```java
-public class ShippingCostCalculator {
-    public double calculate(String shippingType, double weight) {
-        if (shippingType.equals("STANDARD")) return weight * 1000;
-        else if (shippingType.equals("EXPRESS")) return weight * 2000;
-        else if (shippingType.equals("SAME_DAY")) return weight * 5000;
-        return 0;
+public final class UserController {
+    public void register(HttpRequest req) {
+        var email = req.param("email");
+        if (!email.contains("@")) throw new IllegalArgumentException("bad email");
+        var sql = "INSERT INTO users(email) VALUES ('" + email + "')";
+        jdbc.execute(sql);
+        smtp.send(email, "Welcome", renderTemplate("welcome.html", email));
     }
 }
 ```
 
-**Câu 3.** Cho `interface Bird` sau, việc `Penguin implements Bird` có tiềm ẩn vi phạm SOLID không? Nguyên lý nào?
+**Câu 2.** Đoạn này "dùng interface" nhưng có đạt DIP không? Giải thích.
 ```java
-public interface Bird {
-    void fly();
-    void eat();
-}
-public class Penguin implements Bird {
-    public void fly() { throw new UnsupportedOperationException("Chim cánh cụt không biết bay!"); }
-    public void eat() { System.out.println("Đang ăn cá"); }
+package com.app.billing;
+import com.stripe.model.Charge;
+
+public interface StripeGateway {
+    Charge createCharge(long amount, String stripeToken);
 }
 ```
 
-**Câu 4.** So sánh 2 đoạn code sau — đoạn nào tuân thủ DIP tốt hơn? Giải thích.
-```java
-// Đoạn A
-public class OrderService {
-    private EmailSender sender = new EmailSender();
-}
+**Câu 3.** `Square extends Rectangle` với `setWidth`/`setHeight` đồng bộ hai cạnh vi phạm LSP ở điểm nào cụ thể? Nêu một client code bị hỏng.
 
-// Đoạn B
-public class OrderService {
-    private final NotificationSender sender;
-    public OrderService(NotificationSender sender) { this.sender = sender; }
+**Câu 4.** Interface sau có vấn đề ISP không? Nếu có, tách thế nào?
+```java
+public interface Repository<T> {
+    T findById(String id);
+    List<T> findAll();
+    void save(T entity);
+    void delete(String id);
+    void bulkImport(InputStream csv);
+    byte[] exportCsv();
+    void reindexSearch();
 }
 ```
 
-**Câu 5.** Nêu 1 ví dụ thực tế (không cần code, chỉ mô tả bằng lời) về việc áp dụng SOLID **quá mức** có thể gây "over-engineering" cho một ứng dụng nhỏ, đơn giản.
+**Câu 5.** Việc thay `switch` bằng Strategy trong `ShippingCalculator` (mục 3) có luôn tốt hơn không? Nêu hai điều kiện khiến `switch` vẫn là lựa chọn đúng.
+
+**Câu 6.** `RegisterUserService` nhận 6 dependency qua constructor. Đây có phải vi phạm SRP không? Dựa vào đâu để kết luận?
+
+**Câu 7.** Vì sao constructor injection được ưu tiên hơn field injection (`@Autowired` trên field) khi xét theo LSP và khả năng kiểm thử?
+
+**Câu 8.** `@Transactional` trên method `buildRows()` không có hiệu lực khi `generate()` gọi `this.buildRows()`. Điều này liên quan nguyên lý nào và cơ chế Spring nào?
 
 ---
 
-### Phần B — Bài tập viết code
+### Phần B — Bài tập viết code / refactor
 
-**Bài 1 — Refactor vi phạm SRP.**
-Refactor class `ReportGenerator` ở Câu 1 Phần A thành nhiều class tuân thủ SRP: `ReportDataService`, `PdfExporter`, `ExcelExporter`, `ReportEmailNotifier`. Viết thêm `interface ReportExporter` với method `export(String data)`, cho `PdfExporter` và `ExcelExporter` cùng implement (chuẩn bị áp dụng OCP ở bài sau).
+**Bài 1 — Tách trách nhiệm (SRP).**
+Cho `OrderService` gồm: tính tổng tiền (có thuế theo quốc gia), lưu vào DB, xuất hóa đơn PDF, gửi email xác nhận, ghi log audit. Refactor thành: một domain object hoặc calculator cho phần tính tiền, các interface `OrderRepository` / `InvoiceRenderer` / `OrderNotifier` / `AuditLog`, và một `PlaceOrderUseCase` điều phối. Viết `PlaceOrderUseCase` với constructor injection.
 
-**Bài 2 — Áp dụng OCP cho hệ thống tính phí ship.**
-Refactor `ShippingCostCalculator` ở Câu 2 Phần A bằng Strategy Pattern: tạo `interface ShippingStrategy` với method `calculate(double weight)`, cài đặt `StandardShipping`, `ExpressShipping`, `SameDayShipping`. Viết thêm 1 loại vận chuyển mới `InternationalShipping` để **chứng minh** không cần sửa bất kỳ class cũ nào.
+**Bài 2 — Đóng cho sửa đổi (OCP).**
+Cho `DiscountCalculator` dùng chuỗi `if` theo `customerType` (`REGULAR`, `SILVER`, `GOLD`, `STAFF`). Chuyển sang `interface DiscountPolicy` + các implementation + một registry `Map<CustomerType, DiscountPolicy>`. Chứng minh thêm loại `PARTNER` không phải sửa `DiscountCalculator`.
 
-**Bài 3 — Phát hiện & sửa vi phạm LSP.**
-Cho class `Bird` (abstract) có method `fly()`, và subclass `Sparrow` (chim sẻ — bay được), `Ostrich` (đà điểu — KHÔNG bay được, hiện đang override `fly()` bằng cách ném exception). Redesign lại hệ thống bằng cách tách interface `Flyable` riêng — chỉ những loài chim biết bay mới implement — để `Ostrich` không còn vi phạm LSP.
+**Bài 3 — Sửa vi phạm LSP.**
+Cho hệ thống `Bird` với method `fly()`; `Penguin extends Bird` ném `UnsupportedOperationException` trong `fly()`. Thiết kế lại bằng cách tách khả năng (`Bird`, `FlyingBird`) hoặc composition, sao cho không còn method ném exception cho trạng thái hợp lệ. Viết một hàm `void migrate(List<FlyingBird> flock)` chạy đúng với thiết kế mới.
 
-**Bài 4 — Áp dụng ISP cho hệ thống thiết bị văn phòng.**
-Cho `interface MultiFunctionDevice` với các method: `print()`, `scan()`, `fax()`. Có 2 loại thiết bị: `AllInOnePrinter` (làm được cả 3 việc) và `SimplePrinter` (chỉ in được, không scan/fax được). Chia nhỏ interface theo ISP để `SimplePrinter` không bị ép implement những method không dùng đến.
+**Bài 4 — Tách interface (ISP).**
+Cho `interface PaymentProcessor` gồm `charge`, `refund`, `subscribe`, `cancelSubscription`, `generateInvoice`, `handleWebhook`. Tách thành các role interface hợp lý. Viết một class `OneTimeCheckout` chỉ phụ thuộc phần nó cần.
 
-**Bài 5 — Áp dụng DIP hoàn chỉnh (bài tổng hợp quan trọng nhất).**
-Xây dựng hệ thống gửi thông báo đơn hàng gồm:
-- `interface NotificationSender` với method `send(String message)`.
-- 2 implementation: `EmailNotificationSender`, `SmsNotificationSender`.
-- `class OrderService` nhận `NotificationSender` qua **constructor injection** (không dùng `new` trực tiếp bên trong).
-- Viết `main` tạo 2 instance `OrderService` khác nhau — một dùng Email, một dùng SMS — chứng minh cùng 1 class `OrderService` hoạt động với **bất kỳ implementation nào** miễn tuân thủ interface.
-- Viết thêm 1 class `FakeNotificationSender` (chỉ in ra console, giả lập việc gửi) để minh họa lợi ích của DIP khi viết Unit Test — không cần gửi email/SMS thật khi test.
+**Bài 5 — Đảo phụ thuộc (DIP) và contract test.**
+Định nghĩa `interface KeyValueStore { Optional<String> get(String key); void put(String key, String value); }` trong package nghiệp vụ. Viết hai implementation: `InMemoryKeyValueStore` và `FileKeyValueStore`. Viết một bộ test JUnit **dùng chung** (abstract test class hoặc parameterized) kiểm tra contract: `put` rồi `get` trả đúng giá trị; `get` key chưa có trả `Optional.empty()`; `put` cùng key ghi đè.
+
+**Bài 6 — Composition root.**
+Viết `Main` lắp ráp toàn bộ hệ thống ở Bài 1 mà không dùng framework: tạo các class hạ tầng cụ thể, inject vào `PlaceOrderUseCase`, và chỉ ra rằng phần còn lại của code không tham chiếu class cụ thể nào.
 
 ---
 
-### Phần C — Gợi ý đáp án (tự chấm)
+### Phần C — Bài tập nâng cao (thiết kế / phân tích)
+
+**Câu 7.** Cho một codebase có `PaymentService` là interface với **một** implementation duy nhất `PaymentServiceImpl`, không có test nào mock nó, và cổng thanh toán chưa từng đổi trong 3 năm. Interface này có đang tạo giá trị theo OCP/DIP không? Lập luận cho cả hai phía "giữ" và "bỏ".
+
+**Câu 8.** Phân biệt hai tình huống cùng dùng `throw new UnsupportedOperationException()`: (a) `List.of(...)` cho `add()`; (b) `ReadOnlyDocument.save()`. Trường hợp nào vi phạm LSP, trường hợp nào là "đúng contract nhưng contract kém"? Đề xuất cách thiết kế lại cho (b).
+
+**Câu 9.** Một service inject `List<Validator>` và chạy tuần tự. Yêu cầu mới: một số validator phải chạy trước số khác. Thảo luận các cách giữ OCP: `@Order`/`Comparable`, chia thành các pha (`List<PreValidator>`, `List<PostValidator>`), hoặc một `ValidationPipeline` cấu hình được. Đánh đổi của mỗi cách.
+
+**Câu 10.** "SRP nói một class một trách nhiệm" thường bị hiểu thành "một class một method" hoặc "một class càng nhỏ càng tốt". Dùng ví dụ `BankAccount` (mục 2) để phản biện, và phát biểu lại SRP theo hướng "actor / nguồn thay đổi".
+
+**Câu 11.** Trong kiến trúc Hexagonal, port `NotificationPort` do miền định nghĩa. Nếu sau này có 5 kênh (email, SMS, push, Slack, webhook) và mỗi lần gửi cần thử lần lượt tới khi thành công, logic "thử lần lượt + retry" nên nằm ở đâu: trong use case, trong một adapter tổng hợp, hay một decorator? Lập luận theo SRP và OCP.
+
+**Câu 12.** Cho biết vì sao việc lạm dụng interface (mỗi class một interface `XxxImpl`) có thể **làm hại** khả năng đọc và bảo trì, dù nghe có vẻ "đúng SOLID". Nêu tiêu chí quyết định khi nào một class xứng đáng có interface.
+
+---
+
+### Phần D — Gợi ý đáp án (tự chấm)
 
 <details>
-<summary>Bấm để xem gợi ý đáp án Phần A</summary>
+<summary>Phần A</summary>
 
-1. Vi phạm **SRP** — class ôm 4 trách nhiệm: tạo dữ liệu báo cáo, xuất PDF, xuất Excel, gửi email. Sửa: tách thành các class/interface riêng theo từng trách nhiệm (chính là Bài 1 Phần B).
-2. Vi phạm **OCP** — mỗi lần công ty thêm loại vận chuyển mới (ví dụ `INTERNATIONAL`), bắt buộc phải sửa lại method `calculate()` đã hoạt động ổn định, tăng rủi ro gây lỗi cho các loại vận chuyển cũ đang chạy tốt; chuỗi `if/else if` cũng sẽ ngày càng dài và khó đọc.
-3. **Có** — vi phạm **LSP**. `Penguin` là 1 `Bird` nhưng không thể thay thế cho `Bird` nói chung trong ngữ cảnh cần gọi `fly()` — code gọi `bird.fly()` cho mọi `Bird` sẽ bất ngờ gặp exception khi object thực tế là `Penguin`. Đây cũng gián tiếp cho thấy interface `Bird` đang vi phạm ISP (ép mọi loài chim phải có khả năng bay).
-4. **Đoạn B tuân thủ DIP tốt hơn** — `OrderService` phụ thuộc vào abstraction (`NotificationSender` interface) qua constructor injection, không tự tạo (`new`) implementation cụ thể bên trong. Đoạn A vi phạm DIP vì hard-code phụ thuộc trực tiếp vào `EmailSender` — muốn đổi sang SMS phải sửa code `OrderService`.
-5. Ví dụ: một ứng dụng "To-do list" cá nhân đơn giản, chỉ có 1 người dùng, không có kế hoạch mở rộng — nếu tách ra 5-6 interface riêng biệt cho từng thao tác CRUD, thêm Strategy Pattern cho việc sắp xếp task, thêm Factory Pattern để tạo task... sẽ khiến codebase phức tạp không cần thiết so với quy mô thực tế của bài toán, làm chậm tốc độ phát triển ban đầu mà không mang lại lợi ích tương xứng.
+1. Vi phạm **SRP** (và kèm DIP). Bốn trục thay đổi: định dạng/nguồn HTTP, luật validate email, schema/DB, template + nhà cung cấp email. Ngoài ra nối chuỗi SQL trực tiếp là lỗ hổng SQL injection. Refactor: controller chỉ nhận request và gọi use case; validate ở domain; lưu qua `UserRepository`; gửi qua `WelcomeChannel`.
+2. **Không đạt DIP.** Interface nằm trong package `com.app.billing` nhưng (a) trả về `com.stripe.model.Charge` — kiểu của nhà cung cấp rò vào nghiệp vụ; (b) tên và tham số (`stripeToken`) mô phỏng API Stripe; (c) thực chất phía nghiệp vụ vẫn phụ thuộc khái niệm của Stripe, chỉ thêm một lớp bọc. Đúng DIP: `PaymentGateway.charge(long amountCents, String customerRef)` trả `PaymentResult` của miền.
+3. Client kỳ vọng: với `Rectangle`, `setWidth` không đổi `height`. `Square` làm mạnh mối liên hệ (đổi một cạnh đổi cả hai) → hàm `resize` đặt `width=5`, `height=10` rồi assert `area()==50` sẽ nhận `100` với `Square`. Precondition/invariant của `Rectangle` bị phá. Sửa: `Shape` bất biến với `area()`, `Rectangle` và `Square` là record riêng.
+4. **Có.** Trộn CRUD cơ bản với nhập/xuất hàng loạt và reindex — client chỉ đọc theo id vẫn phụ thuộc `bulkImport`, `reindexSearch`. Tách: `ReadRepository<T>` (`findById`, `findAll`), `WriteRepository<T>` (`save`, `delete`), `BulkPort` (`bulkImport`, `exportCsv`), `SearchIndexPort` (`reindexSearch`).
+5. Không luôn tốt hơn. `switch` vẫn đúng khi: tập trường hợp **nhỏ và ổn định** thuộc cùng một module; hoặc là `sealed hierarchy` với `switch` exhaustive để compiler ép cập nhật khi thêm subtype; hoặc chỉ là ánh xạ dữ liệu đơn giản.
+6. Không kết luận chỉ bằng số lượng. Nếu 6 dependency cùng phục vụ **một** ca sử dụng (điều phối "đăng ký user") thì cohesion vẫn cao. Nó thành vấn đề khi các dependency thuộc các nhóm thay đổi khác nhau và method dùng các tập con rời rạc — khi đó tách use case.
+7. Constructor injection cho field `final` (đối tượng bất biến, thay thế an toàn hơn theo tinh thần LSP), nêu phụ thuộc bắt buộc tường minh (thiếu là lỗi khởi tạo chứ không phải NPE runtime), và test dựng bằng `new` với test double không cần container. Field injection giấu phụ thuộc và buộc dùng reflection/framework để test.
+8. Liên quan **LSP** (hành vi "chạy trong transaction" bị phá ngầm) và cơ chế **proxy AOP** của Spring: `@Transactional` chỉ có hiệu lực khi lời gọi đi qua proxy được inject; `this.buildRows()` gọi thẳng object thật, bỏ qua proxy. Sửa: tách `buildRows` sang bean khác, hoặc tự inject, hoặc dùng `TransactionTemplate`.
 
 </details>
 
 <details>
-<summary>Bấm để xem gợi ý đáp án Phần B</summary>
+<summary>Phần B — ý chính</summary>
 
-- **Bài 1:** Đây là bước đệm trực tiếp chuẩn bị cho Bài 2 — sau khi tách theo SRP, việc thêm OCP (qua interface `ReportExporter`) trở nên tự nhiên vì các class đã đủ nhỏ và tập trung.
-- **Bài 3:** Bài này thể hiện rõ **LSP và ISP luôn đi kèm nhau** trong thực tế — sửa vi phạm LSP (Ostrich không nên "là" 1 thứ biết bay) thường dẫn tới việc phải tách nhỏ interface (ISP) để phản ánh đúng khả năng thực tế của từng loại.
-- **Bài 5:** Đây là bài tập quan trọng nhất của cả module — chính là "phiên bản viết tay" của những gì Spring Framework làm tự động phía sau `@Autowired`. Hiểu rõ bài này nghĩa là đã sẵn sàng để học Module 12 (Spring Framework Core — IoC Container & Dependency Injection) một cách có nền tảng, thay vì học thuộc annotation một cách máy móc.
+- **Bài 1:** `PlaceOrderUseCase` giữ `OrderRepository`, `InvoiceRenderer`, `OrderNotifier`, `AuditLog` là field `final` gán trong constructor. `execute(cmd)`: `var total = calculator.totalOf(order, country); repo.save(order); var pdf = renderer.render(order); notifier.confirm(order); audit.record("ORDER_PLACED", order.id());`. Phần tính thuế nằm trong `OrderCalculator` hoặc trong `Order` (domain).
+- **Bài 2:** `interface DiscountPolicy { long apply(long amountCents); }`; `Map<CustomerType, DiscountPolicy> policies`; `calculate` tra map, mặc định `DiscountPolicy.none()` nếu không thấy. Thêm `PARTNER` = thêm một entry, `DiscountCalculator` không đổi.
+- **Bài 3:** `interface Bird { void eat(); }`, `interface FlyingBird extends Bird { void fly(); }`. `Sparrow implements FlyingBird`, `Penguin implements Bird`. `void migrate(List<FlyingBird> flock) { flock.forEach(FlyingBird::fly); }` — `Penguin` không lọt vào danh sách nên không có exception.
+- **Bài 4:** `Charger` (`charge`), `Refunder` (`refund`), `SubscriptionManager` (`subscribe`, `cancelSubscription`), `InvoiceIssuer` (`generateInvoice`), `WebhookHandler` (`handleWebhook`). `OneTimeCheckout` chỉ nhận `Charger` (và có thể `Refunder`).
+- **Bài 5:** `abstract class KeyValueStoreContractTest { abstract KeyValueStore newStore(); @Test void putThenGet(){...} @Test void missingKeyEmpty(){...} @Test void putOverwrites(){...} }`; hai lớp con override `newStore()`. Cả hai implementation phải xanh cùng bộ test — đó là bằng chứng LSP.
+- **Bài 6:** `Main` tạo `DataSource`, `new JdbcOrderRepository(ds)`, `new PdfInvoiceRenderer()`, `new EmailOrderNotifier(mailer)`, `new Slf4jAuditLog()`, rồi `new PlaceOrderUseCase(...)`. Grep toàn bộ package nghiệp vụ không thấy `import` hạ tầng nào.
+
+</details>
+
+<details>
+<summary>Phần C</summary>
+
+- **Câu 7:** Phía "bỏ": chưa có biến thiên thực tế, chưa có test dùng mock → interface hiện chỉ là chi phí gián tiếp (needless complexity). Phía "giữ": nếu interface nằm ở ranh giới hạ tầng (thanh toán) thì gần như chắc chắn sẽ cần test double khi viết test cho tầng nghiệp vụ; giữ để sẵn seam rẻ hơn thêm lại sau. Kết luận hợp lý: giữ nếu là ranh giới I/O ngoài; cân nhắc bỏ nếu chỉ là interface nội bộ không ranh giới.
+- **Câu 8:** (a) `List.of` — `List` khai báo `add` là *optional operation* trong contract của chính JDK, nên về mặt chữ nghĩa không "vi phạm" nhưng là **contract kém** (ISP): gộp đọc + ghi khiến client chỉ đọc vẫn thấy `add`. (b) `ReadOnlyDocument.save()` — nếu `Document.save()` được hứa dùng được thì đây là **vi phạm LSP**. Thiết kế lại: `interface Document { ... }` chỉ đọc; `interface WritableDocument extends Document { void save(); }`; code cần lưu nhận `WritableDocument`.
+- **Câu 9:** `@Order`/`Comparable`: đơn giản, nhưng thứ tự nằm rải rác ở từng class, khó nhìn tổng thể. Chia pha: rõ ràng về giai đoạn, nhưng cứng khi cần chèn pha mới. `ValidationPipeline` cấu hình: linh hoạt nhất, thứ tự tập trung một chỗ, nhưng thêm một khái niệm và một điểm cấu hình. Chọn theo số lượng validator và tần suất thay đổi thứ tự.
+- **Câu 10:** `BankAccount` có nhiều method (`deposit`, `withdraw`, `freeze`) nhưng tất cả bảo vệ **một** invariant tài khoản → một trách nhiệm, cohesion cao; tách mỗi method thành class sẽ phá mô hình miền và giảm cohesion. Phát biểu lại: "một module chịu trách nhiệm trước **một actor / một nhóm yêu cầu thay đổi gắn kết**" — tiêu chí là *nguồn thay đổi*, không phải *số lượng method*.
+- **Câu 11:** Logic "thử lần lượt + retry" là một chính sách gửi tin, không phải quy tắc nghiệp vụ đăng ký/đặt hàng → **không** đặt trong use case (giữ SRP cho use case). Đặt trong một **adapter tổng hợp** `CompositeNotificationAdapter implements NotificationPort` hoặc một **decorator** `RetryingNotification` bọc từng kênh. Thêm kênh thứ 6 chỉ là thêm vào danh sách bên trong adapter → giữ OCP cho use case và cho các adapter đơn lẻ.
+- **Câu 12:** Mỗi interface một-impl thêm một bước gián tiếp khi đọc (phải nhảy tới `Impl`), làm phình số file, và tạo cảm giác linh hoạt không có thật. Tiêu chí một class xứng đáng có interface: (a) là ranh giới với hệ thống ngoài cần test double; (b) đã hoặc sắp có nhiều implementation thật; (c) là điểm mở rộng công khai cho module/plugin khác; (d) cần phá vòng phụ thuộc biên dịch giữa các module. Không có tiêu chí nào đúng thì để class cụ thể.
 
 </details>
 
 ---
 
-*File tiếp theo trong lộ trình: **Module 02.4 — equals(), hashCode(), toString()** (contract giữa equals/hashCode, Comparable vs Comparator).*
+*File tiếp theo trong lộ trình: **Module 01.7 — equals, hashCode, toString** (hợp đồng của `Object`, vì sao ghi đè theo cặp, và ảnh hưởng tới `HashMap`/`HashSet`).*

@@ -3,6 +3,8 @@
 > **Mức ưu tiên: 🔴 Cao**
 > **Vì sao quan trọng:** Đây là 2 kỹ thuật cốt lõi để hệ thống chịu tải cao (high-throughput) và tách rời (decouple) các thành phần — nền tảng trực tiếp cho Module Microservices sắp tới. Caching sai cách (đặc biệt là **Cache Invalidation** — "one of the two hard things in Computer Science") gây ra bug hiển thị dữ liệu cũ khó phát hiện; dùng Message Queue sai (không hiểu Delivery Guarantee, không xử lý message trùng lặp) gây mất dữ liệu hoặc xử lý nghiệp vụ 2 lần (VD: gửi email 2 lần, trừ tiền 2 lần).
 
+> **Phạm vi bài này:** Tập trung vào cơ chế Caching và Message Queue **ở tầng ứng dụng Spring Boot**. Không đi sâu vào vận hành/cấu hình hạ tầng Redis Cluster hay Kafka Broker (Partition Rebalancing, Replication Factor...) — những chủ đề đó thuộc phạm vi DevOps/System Design chuyên sâu hơn, chỉ nhắc tới mức đủ hiểu khi cần thiết kế ứng dụng phía Client.
+
 ---
 
 ## Mục lục
@@ -17,10 +19,11 @@
 8. [RabbitMQ — mô hình Message Queue truyền thống](#8-rabbitmq)
 9. [Kafka — mô hình Event Streaming](#9-kafka)
 10. [Delivery Guarantee & Idempotent Consumer](#10-delivery-guarantee--idempotent-consumer)
-11. [@Async — xử lý bất đồng bộ trong Spring](#11-async)
-12. [⚠️ Các bẫy hay gặp](#12-các-bẫy-hay-gặp)
-13. [Tổng kết — Bảng ghi nhớ nhanh](#13-tổng-kết--bảng-ghi-nhớ-nhanh)
-14. [Bài tập luyện tập](#14-bài-tập-luyện-tập)
+11. [Outbox Pattern — giải quyết Dual-Write Problem](#11-outbox-pattern)
+12. [@Async — xử lý bất đồng bộ trong Spring](#12-async)
+13. [⚠️ Các bẫy hay gặp](#13-các-bẫy-hay-gặp)
+14. [Tổng kết — Bảng ghi nhớ nhanh](#14-tổng-kết--bảng-ghi-nhớ-nhanh)
+15. [Bài tập luyện tập](#15-bài-tập-luyện-tập)
 
 ---
 
@@ -208,6 +211,48 @@ public class ProductCacheService {
 }
 ```
 
+### Multi-level Cache — kết hợp Caffeine (Local) + Redis (Distributed)
+
+Redis vẫn tốn **1 lần round-trip network** cho mỗi lần đọc (dù nhanh hơn DB rất nhiều, vẫn chậm hơn đọc trực tiếp trong bộ nhớ JVM). Với dữ liệu **cực kỳ nóng** (hot data — được đọc hàng nghìn lần/giây, VD: cấu hình hệ thống, danh mục sản phẩm), nhiều hệ thống production dùng thêm **cache local (L1)** ngay trong từng instance, đặt trước Redis (L2):
+
+```
+Request -> [L1: Caffeine - trong JVM, ~0.01ms] -> hit? trả ngay
+                    │ miss
+                    ▼
+           [L2: Redis - qua network, ~1ms] -> hit? trả về + ghi vào L1
+                    │ miss
+                    ▼
+           [DB - ~50ms] -> trả về + ghi vào L2 VÀ L1
+```
+
+```xml
+<dependency>
+    <groupId>com.github.ben-manes.caffeine</groupId>
+    <artifactId>caffeine</artifactId>
+</dependency>
+```
+
+```java
+@Bean
+public CacheManager caffeineCacheManager() {
+    CaffeineCacheManager cacheManager = new CaffeineCacheManager("hotConfig");
+    cacheManager.setCaffeine(Caffeine.newBuilder()
+            .maximumSize(1000)              // Giới hạn số entry - Caffeine tự evict theo LRU khi đầy
+            .expireAfterWrite(Duration.ofMinutes(5)));
+    return cacheManager;
+}
+```
+
+| | Caffeine (Local, L1) | Redis (Distributed, L2) |
+|---|---|---|
+| Vị trí lưu | Trong bộ nhớ JVM của TỪNG instance | Server riêng, chia sẻ giữa mọi instance |
+| Tốc độ | Cực nhanh (không qua network) | Nhanh, nhưng có round-trip network |
+| Nhất quán giữa instance | ❌ Mỗi instance có bản riêng, có thể lệch nhau | ✅ Tất cả instance thấy cùng dữ liệu |
+| Mất khi restart | Có (nằm trong JVM) | Không (Redis là process riêng) |
+| Phù hợp | Dữ liệu cực nóng, hiếm đổi, chấp nhận độ trễ đồng bộ nhỏ giữa các instance | Dữ liệu cần nhất quán giữa các instance |
+
+⚠️ **Đánh đổi của Multi-level Cache:** L1 (Caffeine) làm tăng độ phức tạp invalidation — khi dữ liệu đổi, phải evict CẢ L1 (từng instance) LẪN L2 (Redis), thường cần thêm cơ chế broadcast (VD: Redis Pub/Sub gửi tín hiệu "evict" tới mọi instance). Chỉ nên áp dụng cho dữ liệu thực sự cực nóng, không phải mặc định cho mọi cache.
+
 ---
 
 ## 4. Cache Pattern
@@ -237,6 +282,41 @@ public void updateProduct(Product product) { productRepository.save(product); }
 
 **Ưu điểm:** Đơn giản, chỉ cache dữ liệu THỰC SỰ được đọc (không lãng phí bộ nhớ cache cho dữ liệu ít dùng).
 **Nhược điểm:** Lần đọc đầu tiên sau khi cache miss/evict luôn chậm hơn (phải query DB).
+
+### Race Condition trong Cache-Aside — bẫy nâng cao ít người để ý
+
+Ngay cả khi làm đúng "ghi DB rồi evict cache", vẫn tồn tại 1 khoảng hở **race condition** hiếm gặp nhưng có thật khi 2 request chạy gần như đồng thời — 1 request ghi (write) và 1 request đọc (read):
+
+```
+Thời điểm  Request A (WRITE, đang update giá)     Request B (READ, đang đọc giá)
+   T1      Đọc giá cũ từ DB (100k)
+   T2                                              Cache MISS (vừa bị evict trước đó) -> đọc DB, thấy giá CŨ (100k)
+   T3      Ghi giá MỚI (150k) vào DB
+   T4      Evict cache (nhưng cache ĐANG TRỐNG vì B chưa kịp ghi)
+   T5                                              Ghi giá CŨ (100k) vào cache (dữ liệu B đọc được ở T2)
+
+Kết quả: Cache giờ chứa giá SAI (100k) dù DB đã có giá ĐÚNG (150k) -
+         và vì evict đã xảy ra ở T4, cache "cũ" này có thể tồn tại tới hết TTL!
+```
+
+**Giải pháp thực dụng (không giải quyết được 100% nhưng giảm mạnh xác suất xảy ra):**
+- Đặt **TTL đủ ngắn** làm lưới an toàn cuối cùng (nhắc lại nguyên tắc mục 5) — dù race condition xảy ra, dữ liệu sai chỉ tồn tại tối đa bằng TTL
+- **Delayed Double Delete:** evict cache 1 lần ngay sau khi ghi DB (như bình thường), rồi evict THÊM 1 lần nữa sau vài trăm mili-giây (đủ thời gian cho các request đọc "lỡ nhịp" hoàn tất) để dọn sạch mọi dữ liệu cache sai có thể vừa bị ghi vào
+
+```java
+@CacheEvict(value = "products", key = "#product.id")
+@Async
+public void evictAgainAfterDelay(Long productId) {
+    try {
+        Thread.sleep(500); // Đợi các request đọc "lỡ nhịp" hoàn tất
+        cacheManager.getCache("products").evict(productId); // Evict LẦN 2
+    } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+    }
+}
+```
+
+> **Mức độ ưu tiên:** Race condition này xác suất xảy ra thấp (cần đúng thời điểm 2 request chạy chồng lấn) — hầu hết hệ thống chấp nhận rủi ro nhỏ này và chỉ dựa vào TTL ngắn làm lưới an toàn, thay vì áp dụng Delayed Double Delete cho MỌI cache. Chỉ nên đầu tư giải pháp này cho dữ liệu cực kỳ nhạy cảm với tính chính xác (giá, số dư).
 
 ### 4.2. Write-Through — ghi đồng thời cả Cache và DB trong CÙNG 1 thao tác
 
@@ -527,6 +607,57 @@ public class OrderCreatedConsumer {
 
 **Đặc điểm RabbitMQ:** Message thường được **xóa khỏi Queue sau khi Consumer xác nhận đã xử lý (ACK)** — phù hợp mô hình "task queue" (mỗi message chỉ cần xử lý 1 lần, bởi 1 consumer).
 
+### Dead Letter Queue (DLQ) — xử lý message "độc" (poison message)
+
+**Vấn đề:** Nếu Consumer xử lý 1 message bị lỗi liên tục (VD: dữ liệu message sai định dạng, bug logic không bao giờ thành công), mặc định RabbitMQ sẽ **requeue message đó và thử lại vô hạn** — message này bị "kẹt" mãi mãi, liên tục retry, chiếm tài nguyên và có thể làm nghẽn toàn bộ Queue (các message hợp lệ phía sau phải chờ).
+
+**Giải pháp:** Cấu hình **Dead Letter Exchange (DLX)** — sau N lần retry thất bại, message tự động được chuyển sang 1 Queue riêng ("nghĩa địa message lỗi") để xử lý thủ công/giám sát riêng, thay vì retry vô hạn trên Queue chính:
+
+```java
+@Configuration
+public class RabbitConfig {
+
+    @Bean
+    public Queue orderCreatedQueue() {
+        return QueueBuilder.durable("order.created.queue")
+                .withArgument("x-dead-letter-exchange", "order.dlx")       // Trỏ tới Dead Letter Exchange
+                .withArgument("x-dead-letter-routing-key", "order.failed") // Routing key khi vào DLX
+                .withArgument("x-message-ttl", 30000) // Message tồn tại tối đa 30s trên Queue chính trước khi bị coi là "chết"
+                .build();
+    }
+
+    @Bean
+    public DirectExchange deadLetterExchange() {
+        return new DirectExchange("order.dlx");
+    }
+
+    @Bean
+    public Queue deadLetterQueue() {
+        return QueueBuilder.durable("order.created.dlq").build(); // Queue lưu message lỗi để kiểm tra thủ công
+    }
+
+    @Bean
+    public Binding dlqBinding() {
+        return BindingBuilder.bind(deadLetterQueue()).to(deadLetterExchange()).with("order.failed");
+    }
+}
+```
+
+```java
+@Component
+public class DeadLetterMonitor {
+    @RabbitListener(queues = "order.created.dlq")
+    public void handleFailedMessage(OrderCreatedEvent event) {
+        // Message đã retry hết số lần cho phép nhưng vẫn lỗi
+        // -> log lại, cảnh báo (alert) cho team vận hành, KHÔNG được để "biến mất" trong im lặng
+        log.error("Message xử lý thất bại sau nhiều lần retry: orderId={}", event.orderId());
+        alertService.notifyOpsTeam("DLQ nhận message lỗi: " + event.orderId());
+    }
+}
+```
+
+> **Nguyên tắc thực chiến:** Mọi Queue xử lý nghiệp vụ quan trọng ở production **nên có DLQ đi kèm** — không có DLQ, message lỗi hoặc bị mất âm thầm (nếu Consumer chỉ log lỗi rồi bỏ qua), hoặc kẹt Queue vô hạn (nếu Consumer cứ throw exception cho RabbitMQ tự requeue) — cả 2 đều khó phát hiện và khó debug khi xảy ra ở production.
+
 ---
 
 ## 9. Kafka
@@ -632,7 +763,111 @@ public class OrderEventConsumer {
 
 ---
 
-## 11. @Async
+## 11. Outbox Pattern
+
+### Vấn đề: Dual-Write Problem
+
+Mục 10 giải quyết vấn đề **Consumer nhận trùng message**. Nhưng còn 1 vấn đề gốc rễ hơn ở phía **Producer**: khi 1 nghiệp vụ cần **vừa ghi DB, vừa publish message**, 2 thao tác này chạm tới **2 hệ thống khác nhau** (Database và Message Broker) — không thể đặt cả 2 trong **cùng 1 transaction** theo cách thông thường:
+
+```java
+@Transactional
+public void placeOrder(OrderRequest request) {
+    Order order = orderRepository.save(new Order(request)); // (1) Ghi DB - nằm trong transaction
+    messageProducer.publish("order.created", new OrderCreatedEvent(order.getId())); // (2) Publish message - KHÔNG nằm trong transaction DB!
+
+    // ⚠️ Nếu (1) thành công nhưng (2) thất bại (Broker tạm thời down) -> Order đã lưu nhưng
+    //    KHÔNG CÓ message nào được gửi -> email xác nhận/đồng bộ kho KHÔNG BAO GIỜ xảy ra!
+    // ⚠️ Nếu (2) publish thành công nhưng transaction DB sau đó ROLLBACK (lỗi ở bước khác)
+    //    -> message ĐÃ được gửi cho 1 Order KHÔNG HỀ tồn tại trong DB!
+}
+```
+
+Đây gọi là **Dual-Write Problem** — không có cách nào đảm bảo **cả 2 thao tác cùng thành công hoặc cùng thất bại** khi chúng thuộc 2 hệ thống độc lập.
+
+### Giải pháp: Outbox Pattern
+
+**Ý tưởng cốt lõi:** Thay vì publish message trực tiếp, ghi message vào **1 bảng riêng trong CHÍNH database đó** (bảng `outbox`) — trong **CÙNG 1 transaction** với thao tác nghiệp vụ chính. Sau đó, 1 tiến trình riêng (poller) đọc bảng `outbox` và publish message thật, đảm bảo tính nguyên tử (atomicity) nhờ tận dụng transaction của chính database.
+
+```java
+@Entity
+@Table(name = "outbox_event")
+public class OutboxEvent {
+    @Id @GeneratedValue private Long id;
+    private String aggregateType;   // VD: "Order"
+    private String aggregateId;     // VD: orderId
+    private String eventType;       // VD: "OrderCreated"
+    @Column(columnDefinition = "TEXT")
+    private String payload;         // JSON của event
+    private boolean processed = false;
+    private Instant createdAt = Instant.now();
+}
+
+@Service
+public class OrderService {
+
+    @Transactional
+    public Order placeOrder(OrderRequest request) {
+        Order order = orderRepository.save(new Order(request));
+
+        // Ghi vào bảng outbox - CÙNG transaction với việc lưu Order
+        // -> HOẶC CẢ 2 CÙNG COMMIT, HOẶC CẢ 2 CÙNG ROLLBACK - không còn dual-write problem!
+        OutboxEvent event = new OutboxEvent("Order", order.getId().toString(),
+                "OrderCreated", toJson(new OrderCreatedEvent(order.getId())));
+        outboxRepository.save(event);
+
+        return order;
+        // Chưa hề gọi tới Message Broker ở bước này!
+    }
+}
+```
+
+```java
+@Component
+public class OutboxPoller {
+
+    // Chạy định kỳ, đọc các event CHƯA publish và gửi đi
+    @Scheduled(fixedDelay = 1000) // Mỗi 1 giây quét 1 lần
+    @Transactional
+    public void publishPendingEvents() {
+        List<OutboxEvent> pending = outboxRepository.findTop100ByProcessedFalseOrderByCreatedAt();
+
+        for (OutboxEvent event : pending) {
+            try {
+                rabbitTemplate.convertAndSend("order.exchange", "order.created", event.getPayload());
+                event.setProcessed(true); // Đánh dấu đã publish thành công
+            } catch (Exception e) {
+                log.warn("Publish thất bại, sẽ thử lại ở lần quét sau: {}", event.getId());
+                // Không set processed=true -> lần quét TIẾP THEO sẽ thử lại
+            }
+        }
+    }
+}
+```
+
+### Vì sao giải quyết được vấn đề?
+
+```
+Bước 1 (đồng bộ, trong 1 transaction DB): Lưu Order + Lưu OutboxEvent
+        -> CHỈ có 1 transaction duy nhất, chạm 1 database duy nhất
+        -> Hoặc CẢ 2 cùng thành công, hoặc CẢ 2 cùng rollback - KHÔNG còn tình huống "nửa vời"
+
+Bước 2 (bất đồng bộ, riêng biệt): OutboxPoller đọc bảng outbox, publish message thật
+        -> Nếu publish thất bại -> record outbox vẫn còn "chưa xử lý" -> retry ở lần quét sau
+        -> Đảm bảo message CUỐI CÙNG sẽ được gửi (ít nhất 1 lần - vẫn cần Idempotent Consumer ở mục 10)
+```
+
+| | Publish trực tiếp (có Dual-Write Problem) | Outbox Pattern |
+|---|---|---|
+| Tính nguyên tử DB + Message | ❌ Không đảm bảo | ✅ Đảm bảo (cùng 1 transaction DB) |
+| Độ phức tạp | Đơn giản | Phức tạp hơn (cần thêm bảng, poller/scheduler) |
+| Độ trễ publish message | Ngay lập tức | Trễ 1 khoảng nhỏ (chờ poller quét, VD: 1 giây) |
+| Phù hợp | Hệ thống chấp nhận rủi ro nhỏ mất message | Nghiệp vụ quan trọng (đơn hàng, thanh toán) cần đảm bảo message không bao giờ "biến mất" |
+
+> **Lưu ý:** Outbox Pattern vẫn đảm bảo **At-least-once** (không phải Exactly-once) — message vẫn có thể được publish trùng nếu poller crash giữa lúc publish thành công và lúc set `processed=true`. Vì vậy Outbox Pattern **luôn cần đi kèm Idempotent Consumer** (mục 10) ở phía nhận — 2 pattern này bổ trợ nhau: Outbox đảm bảo message **không bị mất** ở Producer, Idempotent Consumer đảm bảo message trùng lặp **không gây hại** ở Consumer.
+
+---
+
+## 12. @Async
 
 Spring cung cấp cách đơn giản để chạy 1 method **bất đồng bộ** (trong thread riêng) mà **không cần Message Queue** — phù hợp cho tác vụ nền đơn giản, trong cùng 1 ứng dụng (không cần giao tiếp giữa nhiều service khác nhau).
 
@@ -714,7 +949,7 @@ public class NotificationService {
 
 ---
 
-## 12. ⚠️ Các bẫy hay gặp
+## 13. ⚠️ Các bẫy hay gặp
 
 1. **Self-invocation với `@Cacheable`/`@CacheEvict`/`@Async`** — gọi qua `this.method()` bỏ qua hoàn toàn cơ chế (giống hệt bẫy `@Transactional` đã học).
 
@@ -736,27 +971,35 @@ public class NotificationService {
 
 10. **Producer publish message nhưng Consumer không tồn tại/không lắng nghe đúng Queue/Topic** — message "biến mất" trong im lặng, khó debug nếu không có giám sát (monitoring) phù hợp.
 
+11. **Ghi DB và publish message trực tiếp trong 1 method mà không dùng Outbox Pattern** (Dual-Write Problem) — dữ liệu đã lưu nhưng message không bao giờ gửi (hoặc ngược lại), gây mất đồng bộ nghiêm trọng giữa các service.
+
+12. **Không có Dead Letter Queue** — message lỗi bị RabbitMQ requeue vô hạn (nghẽn Queue) hoặc bị Consumer log rồi bỏ qua âm thầm, không ai phát hiện được nghiệp vụ đã thất bại.
+
 ---
 
-## 13. Tổng kết — Bảng ghi nhớ nhanh
+## 14. Tổng kết — Bảng ghi nhớ nhanh
 
 | Khái niệm | Ghi nhớ nhanh |
 |---|---|
 | `@Cacheable` | Cache kết quả, method KHÔNG chạy lại nếu cache hit |
 | `@CachePut` | LUÔN chạy method, cập nhật cache (Write-Through) |
 | `@CacheEvict` | Xóa cache — dùng khi dữ liệu bị xóa/thay đổi |
+| Multi-level Cache | Caffeine (L1, local, cực nhanh) + Redis (L2, chia sẻ) — chỉ cho dữ liệu cực nóng |
 | Cache-Aside | Đọc: check cache → miss thì query DB rồi cache lại; Ghi: ghi DB rồi evict cache |
+| Cache-Aside Race Condition | Read/Write chồng lấn có thể ghi cache SAI — TTL ngắn hoặc Delayed Double Delete |
 | Cache Penetration | Query dữ liệu không tồn tại liên tục — cache cả kết quả rỗng |
 | Cache Avalanche | Nhiều cache cùng hết hạn 1 lúc — thêm jitter vào TTL |
 | Cache Stampede | 1 cache phổ biến hết hạn, nhiều request cùng load — dùng Locking |
 | RabbitMQ | Message Queue truyền thống — message bị xóa sau khi Consumer ACK |
+| Dead Letter Queue | Message lỗi sau N lần retry chuyển sang Queue riêng, tránh nghẽn/mất âm thầm |
 | Kafka | Event Streaming — message được lưu lại, nhiều Consumer Group đọc độc lập |
 | At-least-once | Phổ biến nhất trong thực tế — luôn có khả năng trùng lặp, cần Idempotent Consumer |
+| Outbox Pattern | Ghi DB + event vào CÙNG transaction, poller publish sau — giải quyết Dual-Write Problem |
 | `@Async` | Chạy nền trong CÙNG ứng dụng — không đảm bảo tin cậy cao như Message Queue |
 
 ---
 
-## 14. Bài tập luyện tập
+## 15. Bài tập luyện tập
 
 ### Phần A — Trắc nghiệm nhận định (Đúng/Sai + giải thích)
 
@@ -768,8 +1011,10 @@ public class NotificationService {
 6. `@Async` đảm bảo độ tin cậy tương đương với việc dùng Message Queue thật sự.
 7. Thêm "jitter" (độ lệch ngẫu nhiên) vào TTL giúp giảm nguy cơ Cache Avalanche.
 8. Redis dùng làm Cache tập trung giúp nhiều instance ứng dụng chia sẻ chung 1 bản cache nhất quán.
+9. Outbox Pattern đảm bảo message được publish với đúng "Exactly-once" tuyệt đối, không cần Idempotent Consumer nữa.
+10. Dead Letter Queue giúp tránh trường hợp 1 message lỗi bị RabbitMQ requeue và retry vô hạn, làm nghẽn Queue chính.
 
-### Phần B — Bài tập viết code (5 bài)
+### Phần B — Bài tập viết code (6 bài)
 
 **Bài 1:** Viết `ProductService` dùng `@Cacheable`, `@CachePut`, `@CacheEvict` đầy đủ cho 3 method: `getProduct(id)`, `updateProduct(product)`, `deleteProduct(id)`.
 
@@ -780,6 +1025,8 @@ public class NotificationService {
 **Bài 4:** Viết ví dụ minh họa Cache Stampede và cách khắc phục bằng Double-Checked Locking (dùng `synchronized`), tương tự mục 6.3 nhưng áp dụng cho 1 tình huống khác: cache "danh sách sản phẩm bán chạy nhất trong ngày" (dữ liệu này cực kỳ phổ biến, mọi user đều truy cập).
 
 **Bài 5:** Viết `@Async` method gửi thông báo push notification khi có đơn hàng mới, kèm cấu hình `ThreadPoolTaskExecutor` riêng (core=3, max=10, queue=50). Giải thích vì sao KHÔNG nên dùng `@Async` cho việc trừ tiền trong ví điện tử của user.
+
+**Bài 6:** Viết `OrderService.placeOrder()` áp dụng **Outbox Pattern** đầy đủ — lưu `Order` và `OutboxEvent` trong cùng transaction, cùng với 1 `OutboxPoller` đơn giản dùng `@Scheduled` để publish các event chưa xử lý. Giải thích ngắn gọn Dual-Write Problem mà cách viết này giải quyết được.
 
 ### Phần C — Gợi ý đáp án
 
@@ -794,6 +1041,8 @@ public class NotificationService {
 6. **Sai.** `@Async` chạy trong cùng ứng dụng/process, KHÔNG đảm bảo persist message như Message Queue — nếu ứng dụng crash giữa chừng, tác vụ async có thể bị mất hoàn toàn.
 7. **Đúng.** Jitter giúp các cache entry hết hạn rải rác thay vì đồng loạt cùng lúc.
 8. **Đúng.** Đây là lý do chính Redis được dùng làm Cache tập trung thay vì cache local (in-memory) của từng instance.
+9. **Sai.** Outbox Pattern vẫn chỉ đảm bảo At-least-once — poller có thể publish trùng nếu crash giữa lúc gửi xong và lúc đánh dấu `processed=true`, nên vẫn cần Idempotent Consumer ở phía nhận.
+10. **Đúng.** Đây chính là mục đích thiết kế của DLQ — sau N lần retry thất bại, message được chuyển sang Queue riêng thay vì requeue vô hạn.
 
 </details>
 
@@ -998,6 +1247,77 @@ public class PushNotificationService {
 3. **Không có Delivery Guarantee:** Message Queue (RabbitMQ/Kafka) có cơ chế persist + retry + dead-letter-queue để đảm bảo giao dịch quan trọng **chắc chắn được xử lý** (ít nhất 1 lần), trong khi `@Async` hoàn toàn không có các cơ chế bảo vệ này.
 
 **Kết luận:** Nghiệp vụ tài chính (trừ tiền, thanh toán) **bắt buộc** phải xử lý đồng bộ trong 1 transaction rõ ràng (có thể kết hợp Pessimistic/Optimistic Locking đã học ở Module 15), hoặc nếu cần bất đồng bộ thì phải dùng Message Queue với cơ chế đảm bảo tin cậy đầy đủ (kèm Idempotent Consumer), tuyệt đối không dùng `@Async` đơn thuần.
+
+</details>
+
+<details>
+<summary><b>Đáp án Bài 6</b></summary>
+
+```java
+@Entity
+@Table(name = "outbox_event")
+public class OutboxEvent {
+    @Id @GeneratedValue private Long id;
+    private String aggregateType;
+    private String aggregateId;
+    private String eventType;
+    @Column(columnDefinition = "TEXT")
+    private String payload;
+    private boolean processed = false;
+    private Instant createdAt = Instant.now();
+    // constructor, getters/setters
+}
+
+@Service
+public class OrderService {
+
+    private final OrderRepository orderRepository;
+    private final OutboxEventRepository outboxRepository;
+    private final ObjectMapper objectMapper;
+
+    @Transactional // Cả 2 lệnh save() dưới đây nằm trong CÙNG 1 transaction DB
+    public Order placeOrder(OrderRequest request) {
+        Order order = orderRepository.save(new Order(request));
+
+        try {
+            String payload = objectMapper.writeValueAsString(new OrderCreatedEvent(order.getId()));
+            OutboxEvent event = new OutboxEvent("Order", order.getId().toString(), "OrderCreated", payload);
+            outboxRepository.save(event);
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("Không thể serialize OrderCreatedEvent", e);
+        }
+
+        return order;
+        // Nếu có lỗi xảy ra ở bất kỳ đâu trong method này -> Order VÀ OutboxEvent CÙNG rollback
+        // Nếu method chạy xong -> Order VÀ OutboxEvent CÙNG được commit - không còn tình huống "nửa vời"
+    }
+}
+
+@Component
+public class OutboxPoller {
+
+    private final OutboxEventRepository outboxRepository;
+    private final RabbitTemplate rabbitTemplate;
+
+    @Scheduled(fixedDelay = 1000)
+    @Transactional
+    public void publishPendingEvents() {
+        List<OutboxEvent> pending = outboxRepository.findTop100ByProcessedFalseOrderByCreatedAtAsc();
+
+        for (OutboxEvent event : pending) {
+            try {
+                rabbitTemplate.convertAndSend("order.exchange", "order.created", event.getPayload());
+                event.setProcessed(true);
+            } catch (Exception e) {
+                log.warn("Publish outbox event {} thất bại, sẽ thử lại ở lần quét sau", event.getId(), e);
+                // KHÔNG set processed=true -> event này vẫn còn "pending" cho lần quét kế tiếp
+            }
+        }
+    }
+}
+```
+
+**Giải thích Dual-Write Problem được giải quyết:** Nếu publish message trực tiếp trong `placeOrder()` (không qua Outbox), việc ghi `Order` (vào DB) và publish message (vào RabbitMQ) là **2 thao tác độc lập trên 2 hệ thống khác nhau** — không thể đảm bảo cả 2 cùng thành công hoặc cùng thất bại. Với Outbox Pattern, bước ghi dữ liệu nghiệp vụ (`Order`) và bước "đăng ký ý định gửi message" (`OutboxEvent`) đều nằm trong **cùng 1 transaction của CÙNG 1 database**, nên tận dụng được tính nguyên tử (atomicity) sẵn có của transaction DB. Việc publish message THẬT được tách ra thành bước riêng (`OutboxPoller`), có thể an toàn retry nhiều lần mà không ảnh hưởng tới tính đúng đắn của dữ liệu nghiệp vụ chính.
 
 </details>
 

@@ -56,8 +56,48 @@ public class Main {
 //        double c = 0.8;
 //        System.out.println( a + b);
 
-        int[] arrays = {3, 3, 4, 1, 4, 5, 12, 3};
-//        Arrays.sort(arrays, Comparator.reverseOrder());
-        System.out.println(Arrays.toString(arrays));
+//        String s = "  Java Backend Developer  ";
+//
+//        System.out.println("s.length() = " + s.length()); // tổng số ký tự (bao gồm khoảng trắng)
+//        System.out.println("s.isEmpty() = " + s.isEmpty()); // true nếu chuỗi rỗng: length == 0
+//        System.out.println("s.isBlank() = " + s.isBlank()); // chỉ chứa whitespace? (Java 11+)
+//        System.out.println("s.trim() = [" + s.trim() + "]"); // bỏ ký tự <= U+0020 ở hai đầu
+//        System.out.println("s.strip() = [" + s.strip() + "]"); // như trim nhưng Unicode-aware (Java 11+)
+//        System.out.println("s.stripLeading() = [" + s.stripLeading() + "]");
+//        System.out.println("s.stripTrailing() = [" + s.stripTrailing() + "]");
+//        System.out.println("s.toUpperCase() = " + s.toUpperCase());
+//        System.out.println("s.toLowerCase() = " + s.toLowerCase()); // nên truyền Locale nếu cần
+//        System.out.println("s.substring(2, 6) = " + s.substring(2, 6)); // [2, 6)
+//        System.out.println("s.indexOf(\"Backend\") = " + s.indexOf("Backend")); // -1 nếu không có
+//        System.out.println("s.lastIndexOf('a') = " + s.lastIndexOf('a'));
+//        System.out.println("s.charAt(2) = " + s.charAt(2));
+//        System.out.println("s.replace(\"Java\", \"Kotlin\") = " + s.replace("Java", "Kotlin")); // không regex
+//        System.out.println("s.replaceAll(\"\\\\s+\", \"_\") = " + s.replaceAll("\\s+", "_")); // regex
+//        System.out.println("Arrays.toString(s.split(\"\\\\s+\")) = " + Arrays.toString(s.split("\\s+")));
+//        System.out.println("s.contains(\"Backend\") = " + s.contains("Backend"));
+//        System.out.println("s.startsWith(\"  Java\") = " + s.startsWith("  Java"));
+//        System.out.println("s.endsWith(\"  \") = " + s.endsWith("  "));
+//        System.out.println("s.equals(\"Java\") = " + s.equals("Java")); // so sánh nội dung
+//        System.out.println("s.equalsIgnoreCase(\"java\") = " + s.equalsIgnoreCase("java"));
+//        System.out.println("s.compareTo(\"abc\") = " + s.compareTo("abc")); // <0 / 0 / >0
+//        System.out.println("s.chars() = " + s.chars()); // IntStream các code unit
+//        System.out.println("s.repeat(3) = " + s.repeat(3)); // Java 11+
+//        System.out.println("Arrays.toString(\"a,b,c\".split(\",\")) = " + Arrays.toString("a,b,c".split(",")));
+//        System.out.println("String.join(\", \", \"a\", \"b\") = " + String.join(", ", "a", "b"));
+//        System.out.println("String.format(\"%s là %d tuổi\", \"Pho\", 22) = " + String.format("%s là %d tuổi", "Pho", 22));
+//        System.out.println("\"%s là %d\".formatted(\"Pho\", 22) = " + "%s là %d".formatted("Pho", 22)); // Java 15+
+//        System.out.println("\"line1\\nline2\".lines() = " + "line1\nline2".lines()); // Stream<String> (Java 11+)
+//        System.out.println("String.valueOf(42) = " + String.valueOf(42));
+//        System.out.println("Integer.toString(42) = " + Integer.toString(42));
+//
+//        System.out.println(s);
+//
+//        String json = """
+//                {
+//                "name": "gia pho",
+//                "role": "backend"
+//                }
+//                """;
+//        System.out.println(json); nmnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn
     }
 }

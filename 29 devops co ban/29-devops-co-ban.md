@@ -3,6 +3,8 @@
 > **Mức ưu tiên: 🟡 Trung bình (nhưng gần như bắt buộc trong công việc thực tế)**
 > **Vì sao quan trọng:** Bạn có thể viết code Java Backend hoàn hảo, nhưng nếu không biết đóng gói (Docker) và triển khai (CI/CD) nó, sản phẩm không bao giờ tới được tay người dùng. Đây là kỹ năng "cầu nối" giữa Developer và Operations — hầu hết công ty hiện nay yêu cầu Backend Developer hiểu ít nhất ở mức cơ bản Docker/CI-CD, dù không cần thành thạo như 1 DevOps Engineer chuyên trách. Không biết Docker cũng đồng nghĩa không hiểu được câu nói quen thuộc "chạy được trên máy tôi mà" (works on my machine) — vấn đề Docker sinh ra để giải quyết.
 
+> **Phạm vi bài này:** Tập trung vào Docker (đóng gói) và CI/CD (tự động hóa build/test/deploy) ở mức **Backend Developer cần biết để làm việc hiệu quả** với DevOps Engineer, cùng khái niệm cốt lõi của Kubernetes để đọc hiểu file cấu hình. Không đi sâu Observability (structured logging, metrics, distributed tracing chi tiết — thuộc Module 21 tiếp theo) hay vận hành Kubernetes cấp production (Helm, Operator, Service Mesh).
+
 ---
 
 ## Mục lục
@@ -15,9 +17,10 @@
 6. [CI/CD — khái niệm & luồng hoạt động](#6-cicd--khái-niệm--luồng-hoạt-động)
 7. [GitHub Actions — CI/CD thực hành](#7-github-actions)
 8. [Giới thiệu Kubernetes](#8-giới-thiệu-kubernetes)
-9. [⚠️ Các bẫy hay gặp](#9-các-bẫy-hay-gặp)
-10. [Tổng kết — Bảng ghi nhớ nhanh](#10-tổng-kết--bảng-ghi-nhớ-nhanh)
-11. [Bài tập luyện tập](#11-bài-tập-luyện-tập)
+9. [Deployment Strategy: Rolling Update, Blue-Green, Canary](#9-deployment-strategy)
+10. [⚠️ Các bẫy hay gặp](#10-các-bẫy-hay-gặp)
+11. [Tổng kết — Bảng ghi nhớ nhanh](#11-tổng-kết--bảng-ghi-nhớ-nhanh)
+12. [Bài tập luyện tập](#12-bài-tập-luyện-tập)
 
 ---
 
@@ -175,6 +178,28 @@ target/
 
 ⚠️ **Bẫy hay gặp — quên .dockerignore:** Nếu không có, `COPY . .` sẽ copy cả thư mục `.git/` (có thể rất lớn), file `.env` (chứa secret!) vào Image — vừa làm Image phình to không cần thiết, vừa **rò rỉ secret** vào Image (ai kéo Image về đều xem được).
 
+### Chạy container với user không phải root — thực hành bảo mật quan trọng
+
+Mặc định, nếu Dockerfile không khai báo `USER`, tiến trình bên trong Container chạy với quyền **`root`** — nếu kẻ tấn công khai thác được lỗ hổng trong ứng dụng để "thoát" ra khỏi container (container escape, dù hiếm nhưng có thật), quyền `root` bên trong container có thể bị lợi dụng để leo thang đặc quyền trên Host. Thực hành chuẩn là tạo 1 user riêng, không có quyền quản trị:
+
+```dockerfile
+FROM eclipse-temurin:21-jre-alpine
+WORKDIR /app
+
+# Tạo user/group riêng, KHÔNG dùng root để chạy ứng dụng
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+
+COPY --from=build /build/target/*.jar app.jar
+RUN chown appuser:appgroup app.jar   # Đảm bảo user mới có quyền đọc file JAR
+
+USER appuser   # Từ dòng này trở đi, MỌI lệnh (kể cả ENTRYPOINT) chạy với quyền user thường
+
+EXPOSE 8080
+ENTRYPOINT ["java", "-jar", "app.jar"]
+```
+
+> **Lưu ý:** Nhiều base image chính thức (bao gồm 1 số bản `eclipse-temurin`) đã có sẵn user không-root định nghĩa trước — kiểm tra tài liệu base image trước khi tự tạo user riêng để tránh trùng lặp không cần thiết.
+
 ---
 
 ## 4. Docker Compose
@@ -200,7 +225,7 @@ services:
       - SPRING_REDIS_HOST=redis-cache
     depends_on:
       - mysql-db                       # Đảm bảo mysql-db khởi động TRƯỚC app (không đảm bảo mysql "sẵn sàng" 100%,
-      - redis-cache                     # chỉ đảm bảo container đã START - xem bẫy ở mục 9)
+      - redis-cache                     # chỉ đảm bảo container đã START - xem bẫy ở mục 10)
 
   mysql-db:
     image: mysql:8.0                   # Dùng Image có sẵn từ Docker Hub, KHÔNG cần tự build
@@ -240,6 +265,31 @@ Có Volume:
 docker rm mysql-container -> Dữ liệu VẪN CÒN trong Volume
 docker run ... (tạo container MỚI, gắn LẠI cùng Volume) -> Dữ liệu cũ vẫn còn nguyên
 ```
+
+### Giới hạn tài nguyên Container (CPU/Memory)
+
+**Vấn đề:** Mặc định, 1 Container có thể sử dụng **không giới hạn** CPU/RAM của Host — nếu ứng dụng có bug rò rỉ bộ nhớ (memory leak) hoặc vòng lặp vô hạn ngốn CPU, nó có thể "ngốn" hết tài nguyên của toàn bộ máy chủ, ảnh hưởng tới **các container khác** đang chạy cùng.
+
+```yaml
+services:
+  app:
+    build: .
+    deploy:
+      resources:
+        limits:              # Giới hạn TỐI ĐA container được phép dùng
+          cpus: '1.0'
+          memory: 512M
+        reservations:         # Đảm bảo TỐI THIỂU luôn có sẵn cho container (khi tài nguyên khan hiếm)
+          cpus: '0.5'
+          memory: 256M
+```
+
+```bash
+# Tương đương khi chạy docker run trực tiếp (không qua Compose)
+docker run -d --memory=512m --cpus=1.0 myapp:1.0
+```
+
+⚠️ **Lưu ý riêng cho JVM:** Trước Java 10, JVM **không nhận biết được** giới hạn bộ nhớ của Container — nó nhìn thấy RAM của TOÀN BỘ Host và có thể cấp phát Heap vượt quá giới hạn container, dẫn tới bị `OOMKilled` (Container bị hệ điều hành/Docker giết vì vượt hạn mức). Từ Java 10+ (và mặc định từ Java 11), JVM đã hỗ trợ **Container-aware** — tự động đọc đúng giới hạn CPU/Memory của container để tính `-Xmx` phù hợp; vẫn nên set rõ `-XX:MaxRAMPercentage` hoặc `-Xmx` tường minh trong `ENTRYPOINT` để kiểm soát chắc chắn thay vì phó mặc hoàn toàn cho auto-detect.
 
 ---
 
@@ -404,6 +454,26 @@ jobs:
 
 ⚠️ **Bẫy bảo mật quan trọng:** TUYỆT ĐỐI không hardcode password/API key trực tiếp trong file YAML (dù file này có commit riêng tư) — luôn dùng **GitHub Secrets** (Settings → Secrets and variables → Actions), tương tự nguyên tắc "không hardcode secret trong `application.yml`" đã học ở Module 13.
 
+### Cache Docker Layer trong CI — tăng tốc build đáng kể
+
+Mặc định, mỗi lần chạy CI, máy ảo GitHub Actions là **hoàn toàn mới** (không có Docker Layer Cache từ lần build trước) — mỗi lần `docker build` đều build lại từ đầu, kể cả các layer không đổi (VD: tải dependency Maven), rất lãng phí thời gian. `docker/build-push-action` hỗ trợ cache layer giữa các lần chạy CI:
+
+```yaml
+- name: Set up Docker Buildx
+  uses: docker/setup-buildx-action@v3
+
+- name: Build and push with layer cache
+  uses: docker/build-push-action@v5
+  with:
+    context: .
+    push: true
+    tags: myapp:${{ github.sha }}
+    cache-from: type=gha    # Đọc cache từ lần chạy CI trước (GitHub Actions cache)
+    cache-to: type=gha,mode=max  # Ghi lại cache cho lần chạy SAU sử dụng
+```
+
+> **Hiệu quả thực tế:** Với Dockerfile Multi-stage Build đã tách riêng bước `mvn dependency:go-offline` (mục 3), kết hợp cache layer ở CI, các lần build sau **chỉ cần tải lại dependency khi `pom.xml` thay đổi** — giảm thời gian CI từ vài phút xuống còn vài chục giây cho các lần build không đổi dependency.
+
 ### GitLab CI — tương tự nhưng cú pháp khác (`.gitlab-ci.yml`)
 
 ```yaml
@@ -527,11 +597,123 @@ Kubernetes TỰ ĐỘNG phát hiện (qua livenessProbe) -> tự động TẠO L
 Quay lại đủ 3 Pod như yêu cầu ban đầu - KHÔNG CẦN con người can thiệp
 ```
 
+### livenessProbe vs readinessProbe — 2 loại Probe dễ nhầm lẫn
+
+Ví dụ trên chỉ mới khai báo `livenessProbe` — thực tế, K8s phân biệt rõ **2 loại probe** với mục đích khác nhau, thường phải khai báo **CẢ HAI**:
+
+```yaml
+livenessProbe:              # "Pod này CÒN SỐNG không?"
+  httpGet:
+    path: /actuator/health
+    port: 8080
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  # Nếu FAIL nhiều lần liên tiếp -> K8s KILL Pod và TẠO LẠI Pod mới (self-healing)
+
+readinessProbe:              # "Pod này ĐÃ SẴN SÀNG nhận traffic chưa?"
+  httpGet:
+    path: /actuator/health/readiness
+    port: 8080
+  initialDelaySeconds: 10
+  periodSeconds: 5
+  # Nếu FAIL -> K8s CHỈ tạm ngừng gửi traffic tới Pod này (không kill, không tạo lại),
+  # tự động gửi traffic trở lại NGAY khi probe pass trở lại
+```
+
+| | `livenessProbe` | `readinessProbe` |
+|---|---|---|
+| Câu hỏi trả lời | "Process có còn hoạt động, hay đã bị treo (deadlock/hang)?" | "Đã sẵn sàng phục vụ request thật chưa?" |
+| Khi FAIL | K8s **KILL** Pod, tạo Pod mới thay thế | K8s **tạm ngừng route traffic** vào Pod, KHÔNG kill |
+| Ví dụ tình huống cần | Ứng dụng bị deadlock, process vẫn "chạy" nhưng không phản hồi được nữa | Ứng dụng vừa khởi động, đang warm-up cache/kết nối DB, CHƯA sẵn sàng xử lý request |
+
+⚠️ **Bẫy hay gặp:** Chỉ khai báo `livenessProbe` mà thiếu `readinessProbe` — trong lúc ứng dụng Spring Boot đang khởi động (context loading, kết nối DB...), K8s có thể đã bắt đầu route traffic vào Pod dù ứng dụng **chưa sẵn sàng thực sự**, gây lỗi request trong vài giây đầu sau mỗi lần deploy/scale.
+
 > **Mức độ ưu tiên học ở giai đoạn này:** Kubernetes là chủ đề **rất rộng và sâu**, thường được học chuyên sâu khi đã vững Docker + có kinh nghiệm vận hành thực tế. Ở giai đoạn hiện tại, **hiểu khái niệm cốt lõi** (Pod, Deployment, Service tương ứng với gì đã học ở Docker/Microservices) là đủ — không cần thành thạo vận hành Kubernetes ngay, việc này thường thuộc phạm vi công việc gần với DevOps Engineer hơn.
 
 ---
 
-## 9. ⚠️ Các bẫy hay gặp
+## 9. Deployment Strategy
+
+Khi CD (mục 6) đã đóng gói xong phiên bản mới, câu hỏi tiếp theo là: **đưa phiên bản mới vào production như thế nào** để giảm thiểu rủi ro gián đoạn dịch vụ? Có 3 chiến lược phổ biến, mỗi chiến lược đánh đổi khác nhau giữa **tốc độ**, **rủi ro**, và **chi phí hạ tầng**.
+
+### 9.1. Rolling Update — mặc định của Kubernetes Deployment
+
+Thay thế Pod cũ bằng Pod mới **từng phần một**, không dừng toàn bộ dịch vụ cùng lúc:
+
+```
+Trạng thái ban đầu: [v1] [v1] [v1]  (3 Pod phiên bản cũ)
+
+Bước 1: Tạo 1 Pod v2 mới, chờ readinessProbe pass -> route traffic vào
+        [v1] [v1] [v1] [v2]
+Bước 2: Sau khi v2 ổn định, xóa 1 Pod v1
+        [v1] [v1] [v2]
+Bước 3: Lặp lại tuần tự cho tới khi thay thế hết
+        [v1] [v2] [v2] -> [v2] [v2] [v2]
+
+-> Tại MỌI thời điểm, luôn có ít nhất vài Pod đang phục vụ traffic - KHÔNG downtime
+```
+
+```yaml
+spec:
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1   # Tối đa 1 Pod được phép "thiếu" so với replicas mong muốn trong lúc update
+      maxSurge: 1         # Tối đa được tạo THÊM 1 Pod vượt số replicas mong muốn trong lúc update
+```
+
+**Ưu điểm:** Không cần hạ tầng thêm (mặc định có sẵn trong K8s Deployment), không downtime.
+**Nhược điểm:** Trong lúc rolling, **cả v1 và v2 cùng chạy song song** — nếu v2 có breaking change không tương thích ngược (VD: đổi cấu trúc API response), có thể gây lỗi cho client đang được route tới cả 2 phiên bản khác nhau.
+
+### 9.2. Blue-Green Deployment — chuyển đổi tức thì giữa 2 môi trường song song
+
+Chạy **2 môi trường đầy đủ, độc lập** (Blue = phiên bản đang chạy, Green = phiên bản mới) — sau khi Green được kiểm tra kỹ, **chuyển toàn bộ traffic sang Green ngay lập tức** (thường chỉ cần đổi cấu hình Load Balancer/Ingress):
+
+```
+Trước khi chuyển:
+Traffic 100% ──► [Blue: v1] (đang phục vụ)
+                 [Green: v2] (đã deploy, đang test, CHƯA nhận traffic thật)
+
+Sau khi xác nhận Green ổn định -> đổi Load Balancer trỏ sang Green:
+Traffic 100% ──► [Green: v2] (đang phục vụ)
+                 [Blue: v1] (giữ lại 1 thời gian để ROLLBACK tức thì nếu cần)
+```
+
+**Ưu điểm:** Chuyển đổi gần như **tức thì** (chỉ đổi routing, không có giai đoạn "lẫn lộn" 2 phiên bản như Rolling Update), **rollback cực nhanh** (đổi routing về Blue nếu Green có vấn đề).
+**Nhược điểm:** Tốn **gấp đôi tài nguyên hạ tầng** trong lúc chuyển đổi (phải chạy đủ cả 2 môi trường Blue và Green cùng lúc).
+
+### 9.3. Canary Deployment — thử nghiệm với 1 phần nhỏ traffic thật trước
+
+Route **1 tỷ lệ NHỎ** traffic thật (VD: 5%) sang phiên bản mới trước, theo dõi metrics/lỗi, rồi **tăng dần** tỷ lệ nếu ổn định:
+
+```
+Giai đoạn 1: 95% traffic -> v1,  5% traffic -> v2 (canary)
+             Theo dõi error rate/latency của v2 trong khoảng thời gian ngắn
+
+Giai đoạn 2 (nếu v2 ổn định): 70% traffic -> v1,  30% traffic -> v2
+Giai đoạn 3: 0% traffic -> v1,  100% traffic -> v2 (hoàn tất chuyển đổi)
+
+Nếu v2 phát hiện lỗi ở BẤT KỲ giai đoạn nào -> route traffic NGAY về 100% v1
+-> chỉ ảnh hưởng phần nhỏ user đã "trúng" canary, GIẢM THIỂU tối đa mức độ ảnh hưởng
+```
+
+**Ưu điểm:** Rủi ro thấp nhất trong 3 chiến lược — nếu phiên bản mới có bug, chỉ 1 phần nhỏ user bị ảnh hưởng, phát hiện sớm trước khi rollout toàn bộ.
+**Nhược điểm:** Phức tạp nhất để triển khai — cần công cụ hỗ trợ định tuyến theo tỷ lệ phần trăm (Ingress nâng cao, Service Mesh như Istio) và hệ thống giám sát (Observability — Module 21) đủ tốt để tự động phát hiện canary có vấn đề hay không.
+
+### So sánh tổng quan
+
+| | Rolling Update | Blue-Green | Canary |
+|---|---|---|---|
+| Downtime | Không | Không (nếu chuyển đúng cách) | Không |
+| Tài nguyên cần thêm | Không (hoặc rất ít, `maxSurge`) | Gấp đôi (tạm thời) | Ít (chỉ % nhỏ Pod mới) |
+| Tốc độ rollback | Chậm hơn (phải rolling ngược lại) | **Tức thì** (đổi routing) | Nhanh (route traffic về lại 100% cũ) |
+| Rủi ro khi có bug | Ảnh hưởng dần khi rolling | Ảnh hưởng 100% user NGAY khi chuyển (nếu không test kỹ trước) | Ảnh hưởng ít nhất — chỉ % nhỏ user |
+| Độ phức tạp triển khai | Thấp (mặc định K8s) | Trung bình (cần 2 môi trường song song) | Cao (cần công cụ định tuyến % + giám sát tốt) |
+| Phù hợp | Đa số ứng dụng, thay đổi tương thích ngược | Cần rollback cực nhanh, chấp nhận tốn tài nguyên | Hệ thống lớn, thay đổi rủi ro cao, cần kiểm chứng với traffic thật trước |
+
+---
+
+## 10. ⚠️ Các bẫy hay gặp
 
 1. **Không dùng Multi-stage Build** — Image production chứa cả Maven, source code, công cụ build không cần thiết, kích thước phình to, tăng bề mặt tấn công bảo mật.
 
@@ -558,9 +740,9 @@ app:
       condition: service_healthy   # Chờ MySQL THỰC SỰ sẵn sàng, không chỉ "đã start"
 ```
 
-6. **Chạy container với quyền `root` không cần thiết** — tăng rủi ro bảo mật nếu container bị chiếm quyền kiểm soát (nên tạo user riêng trong Dockerfile với quyền hạn chế).
+6. **Chạy container với quyền `root` không cần thiết** — tăng rủi ro bảo mật nếu container bị chiếm quyền kiểm soát (nên tạo user riêng trong Dockerfile với quyền hạn chế, xem mục 3).
 
-7. **Không giới hạn tài nguyên (CPU/Memory) cho Container** — 1 container "ngốn" hết tài nguyên có thể ảnh hưởng các container khác trên cùng máy chủ.
+7. **Không giới hạn tài nguyên (CPU/Memory) cho Container** — 1 container "ngốn" hết tài nguyên có thể ảnh hưởng các container khác trên cùng máy chủ (xem mục 4).
 
 8. **CI Pipeline không chạy test trước khi deploy** — hoặc bỏ qua bước test để "deploy nhanh hơn" — mất đi toàn bộ ý nghĩa của CI (phát hiện lỗi sớm).
 
@@ -568,27 +750,35 @@ app:
 
 10. **Không có `livenessProbe`/`readinessProbe`** khi deploy lên Kubernetes — K8s không biết Pod nào thực sự "khỏe mạnh" để định tuyến traffic vào, hoặc không tự động restart Pod bị treo (hang) dù process vẫn "chạy" nhưng không phản hồi được nữa.
 
+11. **Chỉ khai báo `livenessProbe` mà thiếu `readinessProbe`** — Pod nhận traffic ngay cả khi ứng dụng chưa khởi động xong (chưa kết nối DB/cache), gây lỗi request trong vài giây đầu sau mỗi lần deploy.
+
+12. **Chọn sai Deployment Strategy cho mức độ rủi ro của thay đổi** — dùng Rolling Update mặc định cho 1 thay đổi lớn/rủi ro cao (VD: đổi schema DB không tương thích ngược) thay vì Canary/Blue-Green, khiến toàn bộ user bị ảnh hưởng cùng lúc nếu có bug.
+
 ---
 
-## 10. Tổng kết — Bảng ghi nhớ nhanh
+## 11. Tổng kết — Bảng ghi nhớ nhanh
 
 | Khái niệm | Ghi nhớ nhanh |
 |---|---|
 | Docker Image vs Container | Image = "class" tĩnh; Container = "instance" đang chạy |
 | Multi-stage Build | Tách Stage build (Maven+JDK) và Stage runtime (chỉ JRE+JAR) — Image nhẹ hơn nhiều |
+| Non-root user | Tạo user riêng trong Dockerfile (`USER`) — giảm rủi ro nếu container bị chiếm quyền |
 | Volume | Lưu dữ liệu NGOÀI vòng đời Container — bắt buộc cho Database |
+| Resource Limits | Giới hạn CPU/Memory container — tránh 1 container ngốn hết tài nguyên Host |
 | Docker Compose | Định nghĩa nhiều container phối hợp trong 1 file YAML, chạy bằng 1 lệnh |
 | `depends_on` | Chỉ đảm bảo container ĐÃ START, không đảm bảo service ĐÃ SẴN SÀNG — cần `healthcheck` |
 | CI | Tự động build+test mỗi lần push — phát hiện lỗi sớm |
 | CD Delivery vs Deployment | Delivery cần người xác nhận deploy; Deployment tự động 100% |
-| GitHub Actions/GitLab CI | Định nghĩa pipeline bằng YAML — dùng Secrets, không hardcode credential |
+| GitHub Actions/GitLab CI | Định nghĩa pipeline bằng YAML — dùng Secrets, không hardcode credential; cache layer (`type=gha`) tăng tốc build |
 | Kubernetes Pod | Đơn vị triển khai nhỏ nhất, chứa 1(vài) container |
 | Kubernetes Deployment | Đảm bảo LUÔN đủ số lượng replica Pod mong muốn (self-healing) |
 | Kubernetes Service | Điểm truy cập ổn định tới nhóm Pod — tương tự Service Discovery |
+| liveness vs readiness | liveness = còn sống hay không (fail → kill Pod); readiness = sẵn sàng nhận traffic hay không (fail → tạm ngừng route) |
+| Deployment Strategy | Rolling Update (mặc định, đơn giản) / Blue-Green (rollback tức thì, tốn tài nguyên) / Canary (rủi ro thấp nhất, phức tạp nhất) |
 
 ---
 
-## 11. Bài tập luyện tập
+## 12. Bài tập luyện tập
 
 ### Phần A — Trắc nghiệm nhận định (Đúng/Sai + giải thích)
 
@@ -600,14 +790,16 @@ app:
 6. GitHub Secrets nên được dùng để lưu password/API key thay vì hardcode trực tiếp trong file YAML của CI/CD.
 7. Kubernetes Pod và Docker Container là 2 khái niệm hoàn toàn giống hệt nhau, không có khác biệt.
 8. Dùng tag `latest` cho Docker Image trong production là thực hành tốt vì luôn lấy được phiên bản mới nhất.
+9. Khi `readinessProbe` fail, Kubernetes sẽ KILL Pod đó và tạo Pod mới thay thế, giống hệt cơ chế của `livenessProbe`.
+10. Trong Canary Deployment, nếu phiên bản mới có bug, chỉ 1 phần nhỏ user (những người được route tới canary) bị ảnh hưởng, thay vì toàn bộ user.
 
-### Phần B — Bài tập viết code (5 bài)
+### Phần B — Bài tập viết code (6 bài)
 
-**Bài 1:** Viết 1 Dockerfile dùng Multi-stage Build đầy đủ cho ứng dụng Spring Boot (Maven), Stage 1 build bằng `maven:3.9-eclipse-temurin-21`, Stage 2 chạy bằng `eclipse-temurin:21-jre-alpine`.
+**Bài 1:** Viết 1 Dockerfile dùng Multi-stage Build đầy đủ cho ứng dụng Spring Boot (Maven), Stage 1 build bằng `maven:3.9-eclipse-temurin-21`, Stage 2 chạy bằng `eclipse-temurin:21-jre-alpine`, kèm cấu hình chạy bằng user không phải root.
 
-**Bài 2:** Viết `docker-compose.yml` cho hệ thống gồm: Spring Boot app (build từ Dockerfile hiện tại), PostgreSQL (có Volume lưu dữ liệu + healthcheck), Redis. Đảm bảo `app` chỉ khởi động SAU KHI PostgreSQL thực sự sẵn sàng.
+**Bài 2:** Viết `docker-compose.yml` cho hệ thống gồm: Spring Boot app (build từ Dockerfile hiện tại, có giới hạn tài nguyên 1 CPU/512MB), PostgreSQL (có Volume lưu dữ liệu + healthcheck), Redis. Đảm bảo `app` chỉ khởi động SAU KHI PostgreSQL thực sự sẵn sàng.
 
-**Bài 3:** Viết file `.github/workflows/ci.yml` cho pipeline: checkout code → setup JDK 21 → chạy `mvn test` → CHỈ build và push Docker Image lên Docker Hub khi ở nhánh `main` (dùng GitHub Secrets cho credential).
+**Bài 3:** Viết file `.github/workflows/ci.yml` cho pipeline: checkout code → setup JDK 21 → chạy `mvn test` → CHỈ build và push Docker Image lên Docker Hub khi ở nhánh `main` (dùng GitHub Secrets cho credential), có áp dụng cache Docker layer.
 
 **Bài 4:** Viết 5 lệnh Linux command line hữu ích để: (a) xem log real-time của file `app.log`, (b) tìm tiến trình Java đang chạy, (c) kiểm tra port 8080 đang bị chiếm bởi process nào, (d) cấp quyền thực thi cho file `deploy.sh`, (e) dọn dẹp toàn bộ Docker Image/Container không dùng.
 
@@ -619,6 +811,8 @@ RUN mvn clean package
 ENV DB_PASSWORD=mySecretPassword123
 CMD ["java", "-jar", "target/app.jar"]
 ```
+
+**Bài 6:** Viết file `deployment.yaml` cho Kubernetes với đầy đủ CẢ `livenessProbe` LẪN `readinessProbe` cho 1 ứng dụng Spring Boot (dùng endpoint Actuator `/actuator/health/liveness` và `/actuator/health/readiness`), kèm cấu hình `RollingUpdate` với `maxUnavailable: 0` và `maxSurge: 1` (đảm bảo không giảm số Pod đang phục vụ trong lúc update).
 
 ### Phần C — Gợi ý đáp án
 
@@ -633,6 +827,8 @@ CMD ["java", "-jar", "target/app.jar"]
 6. **Đúng.** Đây là thực hành bảo mật cơ bản, tránh rò rỉ credential trong source code/file cấu hình.
 7. **Sai.** Pod là khái niệm của Kubernetes (có thể chứa NHIỀU container liên quan), Container là khái niệm của Docker — Pod là lớp trừu tượng cao hơn, không đồng nhất hoàn toàn.
 8. **Sai.** Ngược lại — dùng tag `latest` trong production là thực hành XẤU vì không kiểm soát được chính xác phiên bản đang chạy, khó rollback khi có sự cố. Nên dùng tag cụ thể (version/commit SHA).
+9. **Sai.** Khi `readinessProbe` fail, K8s chỉ TẠM NGỪNG route traffic vào Pod (không kill, không tạo lại) — hành vi KILL Pod là của `livenessProbe`.
+10. **Đúng.** Đây chính là lợi ích cốt lõi của Canary Deployment — giới hạn mức độ ảnh hưởng khi phiên bản mới có bug.
 
 </details>
 
@@ -651,7 +847,12 @@ RUN mvn clean package -DskipTests
 # ===== STAGE 2: Runtime =====
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
+
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 COPY --from=build /build/target/*.jar app.jar
+RUN chown appuser:appgroup app.jar
+USER appuser
+
 EXPOSE 8080
 ENTRYPOINT ["java", "-jar", "app.jar"]
 ```
@@ -679,6 +880,11 @@ services:
         condition: service_healthy
       redis-cache:
         condition: service_started
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
 
   postgres-db:
     image: postgres:16
@@ -744,22 +950,20 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up JDK 21
-        uses: actions/setup-java@v4
-        with:
-          java-version: '21'
-          distribution: 'temurin'
-
-      - name: Build Docker Image
-        run: docker build -t myapp:${{ github.sha }} -t myapp:latest .
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
       - name: Login to Docker Hub
         run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
 
-      - name: Push Docker Image
-        run: |
-          docker push myapp:${{ github.sha }}
-          docker push myapp:latest
+      - name: Build and push with layer cache
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: myapp:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 ```
 
 </details>
@@ -826,6 +1030,58 @@ target/
 .env
 *.md
 ```
+
+</details>
+
+<details>
+<summary><b>Đáp án Bài 6</b></summary>
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: order-service
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0   # KHÔNG cho phép giảm số Pod đang phục vụ trong lúc update
+      maxSurge: 1         # Cho phép tạo thêm 1 Pod mới trước khi xóa Pod cũ
+  selector:
+    matchLabels:
+      app: order-service
+  template:
+    metadata:
+      labels:
+        app: order-service
+    spec:
+      containers:
+        - name: order-service
+          image: myregistry/order-service:1.0
+          ports:
+            - containerPort: 8080
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          env:
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-secret
+                  key: password
+```
+
+**Giải thích `maxUnavailable: 0` + `maxSurge: 1`:** Trong lúc rolling update, K8s LUÔN tạo thêm Pod mới TRƯỚC (surge) rồi mới xóa Pod cũ, thay vì xóa Pod cũ trước — đảm bảo tại MỌI thời điểm số lượng Pod sẵn sàng phục vụ traffic KHÔNG BAO GIỜ giảm xuống dưới `replicas` mong muốn, đánh đổi bằng việc tạm thời có `replicas + maxSurge` Pod chạy song song trong lúc chuyển đổi.
 
 </details>
 

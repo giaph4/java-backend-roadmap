@@ -3,6 +3,8 @@
 > **Mức ưu tiên: 🔴 Cao**
 > **Vì sao quan trọng:** Đây là module **tổng hợp toàn bộ lộ trình** — Load Balancing, Scaling, Replication/Sharding, CDN, Rate Limiting đều là những khái niệm bạn đã chạm tới rải rác (Module 10, 18, 19) nhưng giờ được ghép lại thành **tư duy thiết kế hệ thống end-to-end**. System Design Interview là vòng phỏng vấn **quyết định** cho vị trí Mid/Senior Backend — không đánh giá "bạn code giỏi không" mà đánh giá "bạn có hiểu đánh đổi (trade-off) khi xây hệ thống chịu được hàng triệu user không". Đây cũng là kỹ năng trực tiếp áp dụng khi bạn thiết kế kiến trúc cho đồ án/dự án thực tế.
 
+> **Phạm vi bài này:** Tập trung vào các khái niệm/pattern nền tảng của System Design và 2 case study kinh điển để luyện tư duy. Không đi sâu vào các bài toán System Design chuyên biệt khác (Chat system, Ride-sharing, Search Engine...) — cấu trúc tư duy ở mục 7 áp dụng được cho mọi bài toán tương tự, phần thực hành thêm nên tự luyện dựa trên khung đó.
+
 ---
 
 ## Mục lục
@@ -13,12 +15,13 @@
 4. [Database Sharding](#4-database-sharding)
 5. [CDN (Content Delivery Network)](#5-cdn)
 6. [Rate Limiting](#6-rate-limiting)
-7. [Quy trình tiếp cận 1 câu hỏi System Design](#7-quy-trình-tiếp-cận-1-câu-hỏi-system-design)
-8. [Case Study 1: Thiết kế URL Shortener (bit.ly)](#8-case-study-1-url-shortener)
-9. [Case Study 2: Thiết kế News Feed (Facebook/Twitter)](#9-case-study-2-news-feed)
-10. [⚠️ Các bẫy hay gặp](#10-các-bẫy-hay-gặp)
-11. [Tổng kết — Bảng ghi nhớ nhanh](#11-tổng-kết--bảng-ghi-nhớ-nhanh)
-12. [Bài tập luyện tập](#12-bài-tập-luyện-tập)
+7. [CAP Theorem & PACELC — áp dụng vào lựa chọn kiến trúc](#7-cap-theorem--pacelc)
+8. [Quy trình tiếp cận 1 câu hỏi System Design](#8-quy-trình-tiếp-cận-1-câu-hỏi-system-design)
+9. [Case Study 1: Thiết kế URL Shortener (bit.ly)](#9-case-study-1-url-shortener)
+10. [Case Study 2: Thiết kế News Feed (Facebook/Twitter)](#10-case-study-2-news-feed)
+11. [⚠️ Các bẫy hay gặp](#11-các-bẫy-hay-gặp)
+12. [Tổng kết — Bảng ghi nhớ nhanh](#12-tổng-kết--bảng-ghi-nhớ-nhanh)
+13. [Bài tập luyện tập](#13-bài-tập-luyện-tập)
 
 ---
 
@@ -206,6 +209,42 @@ Nhược điểm: Khó query range (VD: "lấy tất cả user có ID từ 100-2
 Nhược điểm: Cần bảng lookup/routing riêng, phức tạp hơn khi user "di chuyển" giữa các vùng
 ```
 
+### Consistent Hashing — giải quyết vấn đề "khó thêm/bớt Shard" của Hash-based
+
+Nhược điểm lớn nhất của Hash-based Sharding thông thường (`hash(key) % N`) là khi **thay đổi số lượng shard N** (thêm shard mới để scale, hoặc 1 shard gặp sự cố phải loại bỏ) — phép chia dư `% N` đổi kết quả cho **HẦU HẾT** các key, buộc phải **di chuyển lại gần như toàn bộ dữ liệu** giữa các shard:
+
+```
+N = 3 shard: hash(user_id) % 3
+Thêm 1 shard -> N = 4: hash(user_id) % 4
+-> Với hầu hết user_id, kết quả % 4 KHÁC hoàn toàn kết quả % 3 trước đó
+-> gần như TOÀN BỘ dữ liệu phải di chuyển lại giữa các shard - cực kỳ tốn kém!
+```
+
+**Consistent Hashing** giải quyết bằng cách sắp xếp cả **shard** lẫn **key** lên cùng 1 "vòng tròn hash" (hash ring) — mỗi key thuộc về shard **gần nhất theo chiều kim đồng hồ** trên vòng tròn đó:
+
+```
+        Shard A (vị trí hash: 10)
+       ╱                        ╲
+Shard D (340)                Shard B (100)
+       ╲                        ╱
+        Shard C (220)
+
+key "user_123" hash ra vị trí 150 trên vòng tròn
+-> đi theo chiều kim đồng hồ, gặp Shard C (220) đầu tiên -> key này thuộc Shard C
+
+Khi THÊM 1 shard mới (VD: Shard E ở vị trí 180):
+-> CHỈ những key nằm giữa Shard B (100) và Shard E (180) mới cần di chuyển
+   (từ Shard C sang Shard E) - các key khác trên vòng tròn HOÀN TOÀN KHÔNG bị ảnh hưởng!
+```
+
+| | Hash thông thường (`% N`) | Consistent Hashing |
+|---|---|---|
+| Khi thêm/bớt shard | Phải re-shard GẦN NHƯ TOÀN BỘ dữ liệu | Chỉ di chuyển phần dữ liệu **LIỀN KỀ** shard thay đổi |
+| Độ phức tạp implement | Đơn giản | Phức tạp hơn (cần thêm kỹ thuật "virtual node" để phân phối đều) |
+| Dùng trong thực tế | Hệ thống nhỏ, ít khi đổi số lượng shard | Redis Cluster, Cassandra, DynamoDB, CDN routing |
+
+> **Mức độ ưu tiên học:** Hiểu **vấn đề nó giải quyết** (giảm thiểu dữ liệu cần di chuyển khi cụm shard thay đổi kích thước) là đủ ở giai đoạn phỏng vấn/thiết kế — đây là câu trả lời "điểm cộng" khi bàn về Hash-based Sharding trong System Design Interview, không cần tự cài đặt thuật toán consistent hashing từ đầu (thường dùng qua thư viện/hệ thống đã hỗ trợ sẵn như Redis Cluster).
+
 ### Vấn đề lớn nhất của Sharding: Cross-shard Query & Cross-shard Transaction
 
 ```sql
@@ -335,7 +374,58 @@ public class RateLimitingFilter extends OncePerRequestFilter {
 
 ---
 
-## 7. Quy trình tiếp cận 1 câu hỏi System Design
+## 7. CAP Theorem & PACELC
+
+Mọi quyết định kiến trúc ở các mục trước (Replication, Sharding) đều ẩn chứa 1 đánh đổi nền tảng mà **CAP Theorem** mô tả chính xác — đáng để nhìn lại và áp dụng tường minh trước khi bước vào quy trình thiết kế đầy đủ.
+
+### Nhắc lại CAP Theorem (đã giới thiệu ở Module 10 — RDBMS & NoSQL)
+
+Trong hệ thống phân tán, khi xảy ra **Network Partition** (lỗi mạng giữa các node), hệ thống chỉ có thể chọn **TỐI ĐA 2 trong 3** tính chất:
+
+| | Ý nghĩa |
+|---|---|
+| **C**onsistency | Mọi node trả về dữ liệu **GIỐNG NHAU** tại cùng thời điểm |
+| **A**vailability | Hệ thống **LUÔN phản hồi** (dù có thể trả dữ liệu cũ), không bao giờ "treo" |
+| **P**artition Tolerance | Hệ thống vẫn hoạt động dù mạng giữa các node bị **CHIA CẮT (partition)** |
+
+> **Lưu ý quan trọng:** Trong thực tế, **Partition Tolerance gần như BẮT BUỘC** phải có (mạng luôn có khả năng lỗi ở hệ thống phân tán thật) — nên lựa chọn thực tế thường là **CP** (ưu tiên đúng dữ liệu, chấp nhận tạm ngừng phục vụ khi có sự cố mạng) hay **AP** (ưu tiên luôn phản hồi, chấp nhận dữ liệu có thể cũ/không đồng nhất tạm thời).
+
+### Áp dụng CAP vào các quyết định đã học trong module này
+
+```
+Master-Slave Replication (mục 3) với Replication Lag -> đây CHÍNH LÀ lựa chọn thiên về AVAILABILITY (AP):
+   Replica vẫn trả lời NGAY (Available) dù dữ liệu có thể CHƯA đồng bộ kịp (không Strong Consistency)
+
+Nếu đổi sang Synchronous Replication (Master CHỜ Replica xác nhận đã ghi xong mới trả response):
+   -> Thiên về CONSISTENCY (CP): dữ liệu LUÔN đồng nhất, nhưng Master phải CHỜ
+      (nếu Replica chậm/mất kết nối -> Master cũng "treo" theo -> giảm Availability)
+```
+
+### PACELC — mở rộng CAP cho cả trường hợp KHÔNG có sự cố mạng
+
+CAP Theorem chỉ mô tả đánh đổi **KHI CÓ Network Partition** — nhưng đa số thời gian hệ thống vận hành **BÌNH THƯỜNG** (không có sự cố mạng), vậy lúc đó đánh đổi gì? **PACELC** trả lời tiếp:
+
+```
+P (Partition xảy ra) -> chọn A (Availability) hay C (Consistency)? (= CAP Theorem)
+Else (hoạt động bình thường, không partition) -> chọn L (Latency) hay C (Consistency)?
+
+VD: Muốn Consistency cao (mọi Replica đồng bộ NGAY trước khi trả response)
+    -> phải CHỜ xác nhận từ nhiều Replica -> Latency CAO HƠN
+    Muốn Latency THẤP (trả response ngay, không chờ đồng bộ)
+    -> chấp nhận Replica có thể "cũ" trong 1 khoảng ngắn -> giảm Consistency
+```
+
+| Hệ thống ví dụ | Lựa chọn CAP (khi có Partition) | Lựa chọn ELC (bình thường) |
+|---|---|---|
+| MySQL Master-Slave (Async Replication) | AP (ưu tiên phản hồi) | EL (ưu tiên Latency thấp) |
+| MongoDB (Write Concern majority) | CP (ưu tiên đúng dữ liệu) | EC (ưu tiên Consistency, chấp nhận chờ) |
+| DynamoDB/Cassandra | AP | EL (tunable — có thể chỉnh mức Consistency cần thiết theo từng query) |
+
+> **Giá trị của PACELC trong phỏng vấn:** Đây là câu trả lời "nâng cấp" khi được hỏi về CAP Theorem — thể hiện hiểu rằng đánh đổi Consistency/Availability **không chỉ xảy ra khi có sự cố**, mà là quyết định kiến trúc **thường trực** ngay cả lúc hệ thống hoạt động bình thường. Khi thiết kế case study ở mục 9-10, luôn tự hỏi "phần dữ liệu này cần Strong Consistency hay Eventual Consistency là đủ?" — đây chính là câu hỏi CAP/PACELC áp dụng vào thực tế.
+
+---
+
+## 8. Quy trình tiếp cận 1 câu hỏi System Design
 
 Đây là **khung tư duy** (không phải công thức cứng nhắc) để tiếp cận bất kỳ câu hỏi System Design nào (phỏng vấn hoặc thực tế):
 
@@ -343,7 +433,7 @@ public class RateLimitingFilter extends OncePerRequestFilter {
 Bước 1: LÀM RÕ YÊU CẦU (Clarify Requirements)
    - Functional: Hệ thống cần làm gì? (VD: rút gọn URL, redirect khi truy cập)
    - Non-functional: Bao nhiêu user? Bao nhiêu request/giây? Đọc nhiều hay ghi nhiều?
-     Cần Strong Consistency hay Eventual Consistency chấp nhận được?
+     Cần Strong Consistency hay Eventual Consistency chấp nhận được? (liên hệ mục 7 - CAP/PACELC)
 
 Bước 2: ƯỚC LƯỢNG QUY MÔ (Capacity Estimation)
    - Số lượng user, request/giây (QPS - Queries Per Second)
@@ -369,9 +459,41 @@ Bước 6: THẢO LUẬN ĐÁNH ĐỔI (Trade-offs)
 
 > **Điều quan trọng nhất của System Design Interview:** Không có "đáp án đúng duy nhất" — người phỏng vấn đánh giá **quá trình tư duy, khả năng đặt câu hỏi làm rõ yêu cầu, và hiểu đánh đổi** — chứ không phải việc thuộc lòng 1 kiến trúc cụ thể.
 
+### Back-of-the-envelope Estimation — ước lượng nhanh bằng con số tròn
+
+Bước 2 (Ước lượng quy mô) thường bị làm hời hợt — nhưng đây là bước thể hiện rõ tư duy "kỹ sư thực chiến" thay vì chỉ vẽ sơ đồ suông. Một vài con số/công thức tròn nên nhớ để ước lượng nhanh ngay trong đầu:
+
+```
+Công thức QPS trung bình:
+QPS = Tổng số request/ngày / 86,400 giây (số giây trong 1 ngày)
+
+VD: 100 triệu request/ngày -> QPS trung bình ≈ 100,000,000 / 86,400 ≈ 1,160 request/giây
+Peak QPS thường gấp 2-3 lần Average QPS (giờ cao điểm) -> nên thiết kế chịu được ~3,000-3,500 QPS
+
+Công thức ước lượng lưu trữ:
+Dung lượng/năm = Số bản ghi/ngày × Kích thước trung bình 1 bản ghi × 365
+
+VD: 10 triệu bài post/ngày, mỗi post ~1KB (text) -> 10M × 1KB × 365 ≈ 3.65 TB/năm
+    (chưa tính ảnh/video - thường LỚN HƠN NHIỀU so với text, cần ước lượng riêng)
+```
+
+**"Latency Numbers Every Programmer Should Know"** — thứ tự độ lớn (order of magnitude) giúp nhận ra ngay bottleneck khi phác thảo kiến trúc:
+
+| Thao tác | Độ trễ xấp xỉ |
+|---|---|
+| Đọc từ CPU Cache/RAM | ~1 nano-micro giây (cực nhanh) |
+| Đọc từ Redis (in-memory, cùng datacenter) | ~1ms |
+| Đọc từ SSD | ~0.1-1ms |
+| Query Database (có Index, cùng datacenter) | ~1-10ms |
+| Round-trip network trong CÙNG datacenter | ~0.5ms |
+| Round-trip network KHÁC datacenter/khu vực | ~50-150ms |
+| Đọc từ Disk quay (HDD) | ~5-10ms (chậm hơn SSD hàng chục lần) |
+
+> **Cách dùng thực tế:** Không cần nhớ chính xác từng con số, chỉ cần nhớ **thứ tự chênh lệch** — Cache nhanh hơn DB khoảng 10-100 lần, network khác khu vực địa lý chậm hơn cùng datacenter khoảng 100 lần. Đây chính là lý do trực tiếp giải thích "vì sao cần Cache" (Module 18) và "vì sao cần CDN" (mục 5) — không phải vì lý thuyết suông, mà vì con số chênh lệch cụ thể quá lớn để bỏ qua.
+
 ---
 
-## 8. Case Study 1: URL Shortener
+## 9. Case Study 1: URL Shortener
 
 **Yêu cầu:** Xây dựng dịch vụ giống bit.ly — nhận URL dài, trả về URL ngắn; khi truy cập URL ngắn, redirect tới URL gốc.
 
@@ -451,7 +573,7 @@ public ResponseEntity<Void> redirect(@PathVariable String shortCode) {
 
 ---
 
-## 9. Case Study 2: News Feed
+## 10. Case Study 2: News Feed
 
 **Yêu cầu:** Xây dựng News Feed giống Facebook/Twitter — user đăng bài (post), follow người khác, xem feed tổng hợp bài viết từ những người mình follow, sắp xếp theo thời gian.
 
@@ -534,7 +656,7 @@ Khi user B xem feed:
 
 ---
 
-## 10. ⚠️ Các bẫy hay gặp
+## 11. ⚠️ Các bẫy hay gặp
 
 1. **Đi thẳng vào thiết kế chi tiết mà KHÔNG làm rõ yêu cầu trước** (bỏ qua Bước 1) — trong phỏng vấn, đây là lỗi bị đánh giá thấp nhất, vì thể hiện thiếu tư duy hệ thống.
 
@@ -544,21 +666,23 @@ Khi user B xem feed:
 
 4. **Chọn Sharding key sai** (VD: sharding theo `created_at` thay vì `user_id`) — gây Hotspot nghiêm trọng (mọi ghi mới đều dồn vào 1 shard duy nhất, các shard khác "chết" theo thời gian).
 
-5. **Dùng Fixed Window Counter cho Rate Limiting** mà không nhận ra vấn đề "ranh giới khung giờ" — cho phép traffic gấp đôi giới hạn trong khoảng bắc cầu.
+5. **Dùng Hash-based Sharding thông thường (`% N`) mà không cân nhắc Consistent Hashing** cho hệ thống dự kiến sẽ thêm/bớt shard thường xuyên — mỗi lần thay đổi số lượng shard gây re-shard gần như toàn bộ dữ liệu.
 
-6. **Không cân nhắc "Celebrity Problem"** khi thiết kế hệ thống Social Network — dùng THUẦN Fan-out on Write sẽ sập hệ thống khi user nổi tiếng đăng bài.
+6. **Dùng Fixed Window Counter cho Rate Limiting** mà không nhận ra vấn đề "ranh giới khung giờ" — cho phép traffic gấp đôi giới hạn trong khoảng bắc cầu.
 
-7. **Thiết kế hệ thống đòi hỏi Strong Consistency tuyệt đối cho MỌI thứ** — không phải mọi dữ liệu đều cần vậy (VD: số lượt like có thể chấp nhận hiển thị trễ vài giây — Eventual Consistency), gây tốn kém tài nguyên không cần thiết.
+7. **Không cân nhắc "Celebrity Problem"** khi thiết kế hệ thống Social Network — dùng THUẦN Fan-out on Write sẽ sập hệ thống khi user nổi tiếng đăng bài.
 
-8. **Bỏ qua CDN cho nội dung tĩnh** — để mọi request (kể cả ảnh, CSS, JS) đều đánh thẳng vào Origin Server, lãng phí tài nguyên và tăng độ trễ không cần thiết cho user ở xa.
+8. **Thiết kế hệ thống đòi hỏi Strong Consistency tuyệt đối cho MỌI thứ** — không phải mọi dữ liệu đều cần vậy (VD: số lượt like có thể chấp nhận hiển thị trễ vài giây — Eventual Consistency), gây tốn kém tài nguyên không cần thiết. Liên hệ CAP/PACELC (mục 7) — luôn tự hỏi phần dữ liệu này thực sự cần Consistency hay Latency thấp hơn.
 
-9. **Không ước lượng quy mô (Capacity Estimation)** trước khi thiết kế — dẫn tới thiết kế "quá tay" (over-engineering cho quy mô nhỏ) hoặc "thiếu tay" (không đủ sức chịu tải thực tế).
+9. **Bỏ qua CDN cho nội dung tĩnh** — để mọi request (kể cả ảnh, CSS, JS) đều đánh thẳng vào Origin Server, lãng phí tài nguyên và tăng độ trễ không cần thiết cho user ở xa.
 
-10. **Chỉ đưa ra 1 giải pháp mà không thảo luận đánh đổi (Trade-off)** — trong phỏng vấn, thể hiện khả năng phân tích NHIỀU phương án và đánh đổi giữa chúng quan trọng hơn nhiều so với việc đưa ra "câu trả lời đúng" duy nhất.
+10. **Không ước lượng quy mô (Capacity Estimation)** trước khi thiết kế — dẫn tới thiết kế "quá tay" (over-engineering cho quy mô nhỏ) hoặc "thiếu tay" (không đủ sức chịu tải thực tế). Dùng công thức QPS/Latency Numbers ở mục 8 để ước lượng nhanh thay vì đoán mò.
+
+11. **Chỉ đưa ra 1 giải pháp mà không thảo luận đánh đổi (Trade-off)** — trong phỏng vấn, thể hiện khả năng phân tích NHIỀU phương án và đánh đổi giữa chúng quan trọng hơn nhiều so với việc đưa ra "câu trả lời đúng" duy nhất.
 
 ---
 
-## 11. Tổng kết — Bảng ghi nhớ nhanh
+## 12. Tổng kết — Bảng ghi nhớ nhanh
 
 | Khái niệm | Ghi nhớ nhanh |
 |---|---|
@@ -566,16 +690,20 @@ Khi user B xem feed:
 | Load Balancer | Phân phối traffic — Round Robin/Least Connections/IP Hash; Layer 4 (nhanh) vs Layer 7 (thông minh) |
 | Master-Slave Replication | 1 Master ghi, nhiều Replica đọc — cẩn thận Replication Lag |
 | Sharding | Chia dữ liệu ra nhiều DB độc lập — Range/Hash-based; khó Cross-shard Query |
+| Consistent Hashing | Giảm thiểu dữ liệu cần di chuyển khi thêm/bớt shard, so với hash `% N` thông thường |
 | CDN | Cache nội dung tĩnh gần user về mặt địa lý — giảm latency, giảm tải Origin Server |
 | Rate Limiting | Token Bucket (phổ biến) / Sliding Window / Fixed Window (có bug ranh giới) |
+| CAP Theorem | Khi có Partition: chọn tối đa 2/3 (C, A, P) — thực tế thường là CP hoặc AP |
+| PACELC | Mở rộng CAP cho lúc KHÔNG có sự cố — đánh đổi Latency vs Consistency thường trực |
 | Quy trình System Design | Làm rõ yêu cầu → Ước lượng quy mô → Data Model → Kiến trúc tổng thể → Deep Dive → Trade-off |
+| Back-of-envelope | QPS = request/ngày ÷ 86,400; Cache nhanh hơn DB ~10-100x, cùng-khác datacenter chênh ~100x |
 | URL Shortener | Base62 encode ID, Cache-Aside cho redirect, cân nhắc 301 vs 302 |
 | News Feed Fan-out | Push (ghi trước, đọc nhanh) vs Pull (đọc real-time) — Hybrid cho Celebrity Problem |
 | Nguyên tắc cốt lõi | Không có giải pháp hoàn hảo — LUÔN có đánh đổi (trade-off) |
 
 ---
 
-## 12. Bài tập luyện tập
+## 13. Bài tập luyện tập
 
 ### Phần A — Trắc nghiệm nhận định (Đúng/Sai + giải thích)
 
@@ -587,8 +715,10 @@ Khi user B xem feed:
 6. Trong System Design Interview, việc làm rõ yêu cầu (Functional/Non-functional) trước khi thiết kế chi tiết là bước quan trọng, không nên bỏ qua.
 7. Sharding theo Hash-based giúp phân phối dữ liệu đều hơn Range-based, nhưng khó thực hiện query theo khoảng giá trị (range query).
 8. Replication Lag có thể gây ra tình huống user vừa tạo dữ liệu xong nhưng đọc lại ngay không thấy dữ liệu đó.
+9. Consistent Hashing giúp giảm lượng dữ liệu cần di chuyển khi thêm hoặc bớt shard, so với Hash-based Sharding thông thường (`% N`).
+10. Theo CAP Theorem, Partition Tolerance là tính chất có thể tùy ý bỏ qua trong hầu hết hệ thống phân tán thực tế.
 
-### Phần B — Bài tập viết code (5 bài)
+### Phần B — Bài tập viết code (6 bài)
 
 **Bài 1:** Viết thuật toán Base62 Encode/Decode đầy đủ (cả 2 chiều: từ ID số sang chuỗi ngắn, và ngược lại từ chuỗi ngắn về ID số) cho hệ thống URL Shortener.
 
@@ -598,7 +728,9 @@ Khi user B xem feed:
 
 **Bài 4:** Viết pseudo-code (Java) cho luồng Hybrid Fan-out: khi user đăng bài, kiểm tra nếu số follower > ngưỡng (VD: 100,000) thì KHÔNG fan-out ngay (để dành cho Fan-out on Read), ngược lại thì fan-out bình thường vào feed cache của từng follower.
 
-**Bài 5:** Cho yêu cầu: "Thiết kế hệ thống đếm lượt xem video (View Count) cho 1 nền tảng video lớn, mỗi video có thể có hàng triệu lượt xem/ngày". Áp dụng quy trình 6 bước ở mục 7 để phác thảo (ngắn gọn) giải pháp — đặc biệt chú ý: có cần Strong Consistency cho số View Count hiển thị không, hay có thể chấp nhận Eventual Consistency để tối ưu hiệu năng?
+**Bài 5:** Cho yêu cầu: "Thiết kế hệ thống đếm lượt xem video (View Count) cho 1 nền tảng video lớn, mỗi video có thể có hàng triệu lượt xem/ngày". Áp dụng quy trình 6 bước ở mục 8 để phác thảo (ngắn gọn) giải pháp — đặc biệt chú ý: có cần Strong Consistency cho số View Count hiển thị không, hay có thể chấp nhận Eventual Consistency để tối ưu hiệu năng?
+
+**Bài 6:** Cho hệ thống dự kiến có 500 triệu request/ngày, mỗi request trung bình cần đọc 1 bản ghi dung lượng ~2KB. (a) Tính QPS trung bình và ước lượng Peak QPS (gấp 3 lần trung bình). (b) Tính dung lượng lưu trữ cần thiết sau 1 năm. (c) Dựa trên "Latency Numbers", giải thích ngắn gọn vì sao nên thêm tầng Cache (Redis) thay vì để mọi request đọc thẳng từ Database.
 
 ### Phần C — Gợi ý đáp án
 
@@ -613,6 +745,8 @@ Khi user B xem feed:
 6. **Đúng.** Đây là bước đầu tiên và quan trọng nhất trong quy trình tiếp cận System Design Interview.
 7. **Đúng.** Đây chính là đánh đổi cốt lõi giữa 2 chiến lược Sharding.
 8. **Đúng.** Đây là hệ quả trực tiếp của Replication Lag (đồng bộ bất đồng bộ giữa Master và Replica) khi đọc dữ liệu ngay sau khi ghi.
+9. **Đúng.** Đây chính là mục đích thiết kế của Consistent Hashing — chỉ di chuyển phần dữ liệu liền kề shard thay đổi, thay vì toàn bộ.
+10. **Sai.** Ngược lại — Partition Tolerance gần như BẮT BUỘC trong hệ thống phân tán thực tế (mạng luôn có khả năng lỗi), nên lựa chọn thực tế thường nằm giữa CP và AP, không phải bỏ qua P.
 
 </details>
 
@@ -840,6 +974,40 @@ Có thể cache View Count trong Redis (Counter — liên hệ Module 18) để 
 
 **Bước 6 - Trade-off:**
 Đánh đổi: chấp nhận View Count hiển thị có độ trễ nhỏ (vài giây tới vài chục giây) để đổi lấy khả năng chịu tải cực cao — đây là lựa chọn ĐÚNG ĐẮN cho bài toán này, vì tính chính xác tuyệt đối theo thời gian thực **không mang lại giá trị nghiệp vụ tương xứng** với chi phí kỹ thuật phải trả (khác hẳn với bài toán như số dư tài khoản ngân hàng — nơi Strong Consistency là BẮT BUỘC).
+
+</details>
+
+<details>
+<summary><b>Đáp án Bài 6</b></summary>
+
+**(a) QPS:**
+```
+QPS trung bình = 500,000,000 / 86,400 ≈ 5,787 request/giây
+Peak QPS (gấp 3 lần) ≈ 17,361 request/giây
+```
+
+**(b) Dung lượng lưu trữ sau 1 năm:**
+```
+Giả định 500 triệu request/ngày TƯƠNG ỨNG với việc đọc dữ liệu đã có sẵn (không phải mỗi request tạo bản ghi mới)
+-> Câu hỏi (b) áp dụng cho trường hợp GHI mới 500 triệu bản ghi/ngày (giả định để minh họa công thức):
+
+Dung lượng/năm = 500,000,000 × 2KB × 365
+              = 500,000,000 × 2 × 365 KB
+              = 365,000,000,000 KB ≈ 365 TB/năm
+
+(Đây là con số RẤT LỚN — trong thực tế cần làm rõ ở Bước 1 xem 500 triệu request/ngày
+ là request ĐỌC hay GHI, vì 2 trường hợp dẫn tới ước lượng dung lượng hoàn toàn khác nhau -
+ đây cũng là bài học: câu hỏi làm rõ yêu cầu ở Bước 1 ảnh hưởng trực tiếp tới độ chính xác
+ của Bước 2, không thể tách rời.)
+```
+
+**(c) Vì sao cần thêm tầng Cache:**
+
+Theo bảng Latency Numbers, đọc từ Redis (in-memory) mất khoảng ~1ms, trong khi query Database (dù có Index) mất khoảng 1-10ms — chênh lệch **10 lần trở lên**. Với Peak QPS ~17,000 request/giây, nếu để MỌI request đọc thẳng từ Database:
+- Database phải xử lý 17,000 query/giây liên tục — dễ gây quá tải Connection Pool (liên hệ Module 15 - HikariCP) và tăng độ trễ response cho user
+- Với Cache-Aside pattern (Module 18), phần lớn request (đặc biệt dữ liệu được đọc lặp lại nhiều - "hot data") được phục vụ từ Redis chỉ trong ~1ms, giảm tải Database xuống chỉ còn các request cache-miss
+
+Kết luận: Với khối lượng QPS lớn như vậy, thêm tầng Cache không phải "tùy chọn" mà gần như là **yêu cầu bắt buộc** để hệ thống vận hành ổn định trong ngân sách hạ tầng hợp lý.
 
 </details>
 

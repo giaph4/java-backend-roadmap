@@ -3,6 +3,8 @@
 > **Mức ưu tiên: 🔴 Cao**
 > **Vì sao quan trọng:** Code không có test là code không ai dám sửa — mỗi lần thay đổi đều lo sợ "phá vỡ cái gì đó". Testing không chỉ là "viết thêm vài file cho có" — nó là kỹ năng thiết kế code dễ test (liên hệ trực tiếp Constructor Injection ở Module 12), là "lưới an toàn" khi refactor, và là tiêu chuẩn bắt buộc trong quy trình CI/CD chuyên nghiệp. Đây cũng là phần **code review soi kỹ nhất** — 1 PR không có test đi kèm thường bị từ chối ngay ở các công ty có văn hóa engineering tốt.
 
+> **Phạm vi bài này:** Tập trung vào kỹ thuật viết và tổ chức test trong 1 ứng dụng Spring Boot (Unit/Integration/Slice Test, Mockito, Testcontainers). Không đi sâu vào CI/CD pipeline configuration (Jenkins/GitHub Actions cụ thể — thuộc phạm vi DevOps), hay Performance/Load Testing (JMeter/Gatling — công cụ khác, mục tiêu khác với Functional Testing ở đây).
+
 ---
 
 ## Mục lục
@@ -14,12 +16,14 @@
 5. [Unit Test cho Service Layer](#5-unit-test-cho-service-layer)
 6. [@SpringBootTest — Integration Test](#6-springboottest)
 7. [MockMvc — test Controller layer](#7-mockmvc)
-8. [@DataJpaTest — test Repository layer](#8-datajputest)
-9. [Testcontainers — test với DB thật trong Docker](#9-testcontainers)
-10. [Test Coverage & các chỉ số liên quan](#10-test-coverage)
-11. [⚠️ Các bẫy hay gặp](#11-các-bẫy-hay-gặp)
-12. [Tổng kết — Bảng ghi nhớ nhanh](#12-tổng-kết--bảng-ghi-nhớ-nhanh)
-13. [Bài tập luyện tập](#13-bài-tập-luyện-tập)
+8. [Testing Spring Security — @WithMockUser](#8-testing-spring-security)
+9. [@DataJpaTest — test Repository layer](#9-datajputest)
+10. [Testcontainers — test với DB thật trong Docker](#10-testcontainers)
+11. [Test Coverage & các chỉ số liên quan](#11-test-coverage)
+12. [Mutation Testing — đo lường THẬT chất lượng test](#12-mutation-testing)
+13. [⚠️ Các bẫy hay gặp](#13-các-bẫy-hay-gặp)
+14. [Tổng kết — Bảng ghi nhớ nhanh](#14-tổng-kết--bảng-ghi-nhớ-nhanh)
+15. [Bài tập luyện tập](#15-bài-tập-luyện-tập)
 
 ---
 
@@ -51,6 +55,20 @@
 - **Dễ định vị lỗi:** Test fail chỉ ra chính xác class/method nào có vấn đề, không cần đoán mò qua nhiều tầng
 
 ⚠️ **Anti-pattern "Ice Cream Cone"** (ngược Test Pyramid — nhiều E2E, ít Unit Test) là dấu hiệu dự án đang gặp vấn đề: test chạy chậm, hay fail ngẫu nhiên (flaky), khó xác định nguyên nhân lỗi, làm chậm cả team.
+
+### TDD (Test-Driven Development) — viết test TRƯỚC khi viết code
+
+Chu trình **Red-Green-Refactor**: viết test trước (fail vì chưa có code — Red), viết code tối thiểu để test pass (Green), rồi dọn dẹp code mà không phá test (Refactor):
+
+```
+1. RED     - Viết test cho hành vi CHƯA TỒN TẠI -> chạy test -> FAIL (vì method chưa có/logic sai)
+2. GREEN   - Viết code TỐI THIỂU để test pass -> chạy lại -> PASS
+3. REFACTOR - Cải thiện code (đặt tên rõ hơn, tách method, xóa trùng lặp)
+              trong khi test vẫn PASS -> đảm bảo không phá vỡ hành vi đã đúng
+4. Lặp lại cho hành vi tiếp theo
+```
+
+> **Thực tế:** TDD không bắt buộc áp dụng cho mọi dòng code, nhưng là kỹ thuật hiệu quả cho logic nghiệp vụ phức tạp (tính toán, validation nhiều rule) — buộc bạn nghĩ rõ **input/output mong đợi** trước khi viết implementation, thường dẫn tới thiết kế code dễ test hơn (ít coupling, single responsibility) một cách tự nhiên.
 
 ---
 
@@ -130,6 +148,46 @@ void add_VariousInputs_ReturnsCorrectSum(int a, int b, int expected) {
 
 **Lợi ích:** Tránh viết N test method gần giống hệt nhau chỉ khác input/expected — 1 method duy nhất chạy được nhiều bộ dữ liệu, dễ maintain, dễ đọc.
 
+### @MethodSource & @EnumSource — khi dữ liệu test phức tạp hơn giá trị đơn giản
+
+`@ValueSource`/`@CsvSource` chỉ phù hợp với kiểu dữ liệu cơ bản (số, chuỗi). Khi cần truyền **object phức tạp** làm tham số test, dùng `@MethodSource` để trỏ tới 1 method cung cấp dữ liệu:
+
+```java
+@ParameterizedTest
+@MethodSource("provideOrdersForDiscountTest")
+void calculateDiscount_VariousOrderTotals_ReturnsCorrectDiscount(Order order, BigDecimal expectedDiscount) {
+    BigDecimal discount = discountService.calculate(order);
+    assertThat(discount).isEqualByComparingTo(expectedDiscount);
+}
+
+// Method PHẢI static, trả về Stream/Collection của Arguments
+private static Stream<Arguments> provideOrdersForDiscountTest() {
+    return Stream.of(
+        Arguments.of(new Order(BigDecimal.valueOf(100_000)), BigDecimal.ZERO),          // Dưới ngưỡng - không giảm giá
+        Arguments.of(new Order(BigDecimal.valueOf(500_000)), BigDecimal.valueOf(25_000)), // Đạt ngưỡng 5%
+        Arguments.of(new Order(BigDecimal.valueOf(1_000_000)), BigDecimal.valueOf(100_000)) // Đạt ngưỡng 10%
+    );
+}
+```
+
+`@EnumSource` tiện lợi khi cần chạy test cho **tất cả (hoặc 1 phần) giá trị của 1 enum** — hữu ích để đảm bảo logic xử lý đúng cho mọi trạng thái, tránh bỏ sót case khi enum có thêm giá trị mới sau này:
+
+```java
+@ParameterizedTest
+@EnumSource(OrderStatus.class) // Tự động chạy test cho TẤT CẢ giá trị enum OrderStatus
+void getStatusLabel_AllStatuses_ReturnsNonEmptyLabel(OrderStatus status) {
+    assertThat(orderService.getStatusLabel(status)).isNotBlank();
+    // Nếu sau này thêm 1 giá trị OrderStatus mới mà quên xử lý trong getStatusLabel(),
+    // test này TỰ ĐỘNG chạy thêm case đó và có thể phát hiện lỗi ngay
+}
+
+@ParameterizedTest
+@EnumSource(value = OrderStatus.class, names = {"PENDING", "CONFIRMED"}) // Chỉ chạy với 2 giá trị được chọn
+void canCancel_PendingOrConfirmedStatus_ReturnsTrue(OrderStatus status) {
+    assertThat(orderService.canCancel(status)).isTrue();
+}
+```
+
 ### Test Lifecycle & thứ tự chạy
 
 ```
@@ -208,6 +266,20 @@ void divide_ByZero_ThrowsException() {
 ## 4. Mockito
 
 **Mockito** là thư viện tạo **Mock Object** (đối tượng giả lập) — thay thế dependency thật bằng 1 "diễn viên đóng thế" có hành vi được lập trình sẵn, giúp Unit Test **cô lập hoàn toàn** class đang test khỏi các dependency bên ngoài (database, API bên thứ 3, service khác...).
+
+### Test Doubles — 5 loại "diễn viên đóng thế", không chỉ có Mock
+
+"Mock" trong lời nói hàng ngày thường dùng để chỉ chung mọi loại đối tượng giả lập, nhưng thuật ngữ kiểm thử chuẩn (theo Martin Fowler) phân biệt **5 loại Test Double** riêng biệt — hiểu đúng giúp chọn công cụ phù hợp và trả lời chính xác trong phỏng vấn:
+
+| Loại | Đặc điểm | Ví dụ trong Mockito |
+|---|---|---|
+| **Dummy** | Object chỉ để "lấp đầy" tham số bắt buộc, KHÔNG BAO GIỜ thực sự được dùng tới trong test | `new User()` truyền vào tham số không liên quan tới logic đang test |
+| **Stub** | Trả về giá trị **cố định, được lập trình sẵn** khi gọi method, không quan tâm có được gọi hay không | `when(repo.findById(1L)).thenReturn(user)` |
+| **Fake** | Có **implementation thật, đơn giản hóa** — hoạt động thực sự nhưng không phù hợp production | `InMemoryUserRepository` tự viết dùng `HashMap` thay vì DB thật |
+| **Spy** | Bọc quanh object THẬT, cho phép **theo dõi** lời gọi trong khi vẫn chạy logic gốc | `@Spy` của Mockito (mục dưới) |
+| **Mock** | Đối tượng giả lập có thể **verify được** lời gọi (số lần, tham số) — kết hợp cả Stub lẫn khả năng verify | `@Mock` của Mockito |
+
+> **Mockito thực chất tạo ra cả Stub lẫn Mock** tùy cách dùng: chỉ `when().thenReturn()` mà không `verify()` → đang dùng nó như Stub; có `verify()` → đang dùng như Mock đúng nghĩa. Phân biệt rạch ròi 5 loại này không quá quan trọng trong code hàng ngày, nhưng là kiến thức nền giúp hiểu sâu tài liệu/bài viết kiểm thử chuyên sâu, và hay được hỏi ở vòng phỏng vấn kỹ thuật.
 
 ### Tạo Mock & định nghĩa hành vi
 
@@ -474,7 +546,85 @@ class OrderControllerTest {
 
 ---
 
-## 8. @DataJpaTest
+## 8. Testing Spring Security
+
+Khi Controller có `@PreAuthorize`/được bảo vệ bởi `SecurityFilterChain` (Module 16), test `MockMvc` thông thường (mục 7) sẽ **luôn nhận `401/403`** vì request test không có Authentication nào cả. Module `spring-security-test` cung cấp annotation để giả lập user đã đăng nhập, không cần verify JWT thật.
+
+```xml
+<dependency>
+    <groupId>org.springframework.security</groupId>
+    <artifactId>spring-security-test</artifactId>
+    <scope>test</scope>
+</dependency>
+```
+
+### @WithMockUser — cách đơn giản nhất
+
+```java
+@WebMvcTest(OrderController.class)
+class OrderControllerSecurityTest {
+
+    @Autowired private MockMvc mockMvc;
+    @MockBean private OrderService orderService;
+
+    @Test
+    @WithMockUser(username = "pho@example.com", roles = "USER") // Giả lập user đã đăng nhập với role USER
+    void getMyOrders_AuthenticatedUser_Returns200() throws Exception {
+        when(orderService.findByUserEmail("pho@example.com")).thenReturn(List.of());
+
+        mockMvc.perform(get("/api/v1/orders/me"))
+                .andExpect(status().isOk()); // Không còn bị 401 vì đã "đăng nhập" giả lập
+    }
+
+    @Test
+    @WithMockUser(roles = "USER") // Role USER, KHÔNG phải ADMIN
+    void deleteAllOrders_NonAdminUser_Returns403() throws Exception {
+        mockMvc.perform(delete("/api/v1/admin/orders"))
+                .andExpect(status().isForbidden()); // @PreAuthorize("hasRole('ADMIN')") từ chối đúng như kỳ vọng
+    }
+
+    @Test
+    // KHÔNG có @WithMockUser -> mô phỏng request chưa đăng nhập
+    void getMyOrders_Unauthenticated_Returns401() throws Exception {
+        mockMvc.perform(get("/api/v1/orders/me"))
+                .andExpect(status().isUnauthorized());
+    }
+}
+```
+
+⚠️ **Lưu ý quan trọng:** `roles = "USER"` trong `@WithMockUser` tự động thêm tiền tố `ROLE_` giống hệt cơ chế `hasRole()` đã học ở Module 16 — tương đương `authorities = "ROLE_USER"`. Nếu ứng dụng dùng authority không theo chuẩn `ROLE_*` (permission-based), phải dùng `authorities = "..."` trực tiếp thay vì `roles`.
+
+### @WithUserDetails — khi cần test đúng với UserDetailsService thật
+
+`@WithMockUser` tạo ra 1 `UserDetails` **giả đơn giản**, không đi qua `CustomUserDetailsService` thật của ứng dụng — phù hợp đa số trường hợp chỉ cần test phân quyền theo role. Khi cần principal là chính Entity `User` thật (để test logic dùng `@AuthenticationPrincipal User currentUser`), dùng `@WithUserDetails`:
+
+```java
+@SpringBootTest
+@AutoConfigureMockMvc
+class OrderControllerIntegrationSecurityTest {
+
+    @Autowired private MockMvc mockMvc;
+
+    @Test
+    @WithUserDetails(value = "pho@example.com", userDetailsServiceBeanName = "customUserDetailsService")
+    // Gọi THẬT CustomUserDetailsService.loadUserByUsername("pho@example.com")
+    // -> principal trong SecurityContext là chính Entity User thật, load từ DB test
+    void getMyOrders_RealUserDetails_ReturnsCorrectData() throws Exception {
+        mockMvc.perform(get("/api/v1/orders/me"))
+                .andExpect(status().isOk());
+    }
+}
+```
+
+| | `@WithMockUser` | `@WithUserDetails` |
+|---|---|---|
+| Nguồn `UserDetails` | Giả lập đơn giản, không qua `UserDetailsService` | Gọi THẬT `UserDetailsService`, cần user tồn tại trong DB test |
+| Tốc độ setup | Nhanh, không cần chuẩn bị dữ liệu | Cần tạo sẵn user trong DB test trước |
+| Phù hợp | Test `@WebMvcTest` (Controller layer cô lập), test phân quyền theo role | Test `@SpringBootTest` cần principal thật (VD: `@AuthenticationPrincipal`) |
+
+---
+
+## 9. @DataJpaTest
 
 Test tầng **Repository** với **database trong bộ nhớ (in-memory)** như H2 — nhanh hơn kết nối DB thật, nhưng vẫn kiểm tra được query JPQL/Specification có đúng không.
 
@@ -507,11 +657,11 @@ class OrderRepositoryTest {
 }
 ```
 
-⚠️ **Bẫy quan trọng: H2 (in-memory) không phải lúc nào cũng giống hệt MySQL/PostgreSQL thật (production)!** Một số hành vi SQL đặc thù (dialect riêng, function riêng của MySQL/PostgreSQL, cách xử lý Index/JSON column...) có thể **PASS trên H2 nhưng FAIL trên MySQL thật** — đây chính là động lực ra đời của **Testcontainers** (mục 9).
+⚠️ **Bẫy quan trọng: H2 (in-memory) không phải lúc nào cũng giống hệt MySQL/PostgreSQL thật (production)!** Một số hành vi SQL đặc thù (dialect riêng, function riêng của MySQL/PostgreSQL, cách xử lý Index/JSON column...) có thể **PASS trên H2 nhưng FAIL trên MySQL thật** — đây chính là động lực ra đời của **Testcontainers** (mục 10).
 
 ---
 
-## 9. Testcontainers
+## 10. Testcontainers
 
 **Testcontainers** là thư viện cho phép test chạy với **database thật** (MySQL, PostgreSQL, Redis, MongoDB...) trong **Docker container tạm thời** — tự động khởi động trước khi test chạy, tự động dọn dẹp sau khi xong.
 
@@ -567,7 +717,7 @@ class OrderIntegrationTest {
 
 ---
 
-## 10. Test Coverage
+## 11. Test Coverage
 
 **Test Coverage** đo lường **% code được thực thi** khi chạy toàn bộ test suite — công cụ phổ biến: **JaCoCo** (Java Code Coverage).
 
@@ -604,7 +754,66 @@ void testCalculate() {
 
 ---
 
-## 11. ⚠️ Các bẫy hay gặp
+## 12. Mutation Testing
+
+**Vấn đề:** Ví dụ "Coverage 100% nhưng test vô nghĩa" ở mục 11 cho thấy Coverage không đo được **chất lượng thật** của assertion. **Mutation Testing** giải quyết đúng vấn đề này bằng cách **tự động sửa nhỏ (mutate) code nguồn** rồi kiểm tra xem test suite có **phát hiện được** sự thay đổi đó hay không.
+
+### Nguyên lý hoạt động
+
+Công cụ (phổ biến nhất cho Java: **PIT — pitest**) tự động sinh ra nhiều **"con đột biến" (mutant)** — bản sao code với 1 thay đổi nhỏ có chủ đích:
+
+```java
+// Code gốc
+public boolean isEligibleForDiscount(int quantity) {
+    return quantity > 10;
+}
+
+// PIT tự động sinh các "mutant" như:
+return quantity >= 10;   // Đổi > thành >=
+return quantity < 10;    // Đổi > thành <
+return true;             // Loại bỏ hoàn toàn điều kiện
+```
+
+Với mỗi mutant, PIT chạy lại **toàn bộ test suite**:
+- Nếu **có ít nhất 1 test FAIL** → mutant bị "giết" (killed) → tốt, chứng tỏ test thực sự phát hiện được thay đổi hành vi
+- Nếu **toàn bộ test vẫn PASS** → mutant "sống sót" (survived) → **dấu hiệu xấu**: test suite có coverage nhưng không thực sự kiểm tra đúng logic này
+
+```xml
+<plugin>
+    <groupId>org.pitest</groupId>
+    <artifactId>pitest-maven</artifactId>
+    <configuration>
+        <targetClasses>
+            <param>com.example.service.*</param>
+        </targetClasses>
+    </configuration>
+</plugin>
+```
+
+### Liên hệ trực tiếp với bẫy "Coverage giả" ở mục 11
+
+```java
+// Test có Coverage 100% cho isEligibleForDiscount(), nhưng KHÔNG assertion đúng
+@Test
+void testEligibility() {
+    inventoryService.isEligibleForDiscount(15); // Chạy qua dòng code -> Coverage tính 100%
+    // Không có assertThat(...)... -> Mutation Testing sẽ phát hiện:
+    // TẤT CẢ mutant (>=, <, true, false) đều "sống sót" vì test không hề kiểm tra kết quả trả về!
+}
+```
+
+> **Đánh đổi:** Mutation Testing chạy **rất chậm** (chạy lại toàn bộ test suite cho MỖI mutant sinh ra, có thể hàng trăm/nghìn mutant) — không phù hợp chạy trong mọi lần build CI, thường chỉ chạy định kỳ (VD: nightly build) hoặc khi cần đánh giá sâu chất lượng test của 1 module quan trọng, không phải công cụ dùng hàng ngày như JaCoCo Coverage.
+
+| | Test Coverage (JaCoCo) | Mutation Testing (PIT) |
+|---|---|---|
+| Đo cái gì | Dòng code có được chạy qua hay không | Test có thực sự PHÁT HIỆN được thay đổi logic hay không |
+| Tốc độ | Nhanh (chạy 1 lần) | Rất chậm (chạy lại test suite cho mỗi mutant) |
+| Độ tin cậy | Dễ bị "đánh lừa" bởi test không có assertion | Đáng tin cậy hơn nhiều — phản ánh chất lượng thật |
+| Tần suất chạy khuyến nghị | Mỗi lần CI build | Định kỳ (nightly/weekly), hoặc trước khi merge code quan trọng |
+
+---
+
+## 13. ⚠️ Các bẫy hay gặp
 
 1. **Viết test không có assertion** (hoặc assertion vô nghĩa như `assertTrue(true)`) — chỉ để "tăng coverage" mà không thực sự kiểm tra logic.
 
@@ -620,32 +829,41 @@ void testCalculate() {
 
 7. **Test H2 pass nhưng production (MySQL/PostgreSQL) fail** — do khác biệt dialect SQL, không phát hiện được nếu chỉ dùng `@DataJpaTest` với H2 mà không có Integration Test với Testcontainers cho các query phức tạp/đặc thù.
 
-8. **Coi Test Coverage 100% là "an toàn tuyệt đối"** — coverage cao không đảm bảo logic đúng, chỉ đảm bảo dòng code được chạy qua.
+8. **Coi Test Coverage 100% là "an toàn tuyệt đối"** — coverage cao không đảm bảo logic đúng, chỉ đảm bảo dòng code được chạy qua (xem mục 12 — Mutation Testing để đo chất lượng thật).
 
 9. **Mock quá nhiều tới mức test không còn ý nghĩa** — mock cả những class đơn giản (VD: DTO, Value Object) không cần thiết, khiến test trở nên rối rắm và không phản ánh đúng hành vi thật.
 
 10. **Không test edge case/exception path** — chỉ test "happy path" (trường hợp thành công), bỏ qua trường hợp lỗi/giá trị biên (null, empty list, số âm, hết hạn token...) — đây thường là nơi bug thật sự ẩn náu.
 
+11. **Test endpoint có bảo mật mà không set Authentication** — quên `@WithMockUser`/`@WithUserDetails` khiến `MockMvc` test luôn nhận `401` dù logic Controller hoàn toàn đúng, dễ nhầm tưởng code có bug.
+
+12. **Dùng `roles` thay vì `authorities` trong `@WithMockUser` khi hệ thống không theo chuẩn `ROLE_*`** — `roles = "ADMIN"` tự thêm tiền tố `ROLE_`, không khớp nếu ứng dụng lưu authority permission-based không có tiền tố này.
+
 ---
 
-## 12. Tổng kết — Bảng ghi nhớ nhanh
+## 14. Tổng kết — Bảng ghi nhớ nhanh
 
 | Khái niệm | Ghi nhớ nhanh |
 |---|---|
 | Test Pyramid | Unit nhiều nhất (nhanh, rẻ) → Integration vừa → E2E ít nhất (chậm, đắt) |
+| TDD | Red (viết test fail) → Green (code tối thiểu để pass) → Refactor |
 | Given-When-Then | Cấu trúc chuẩn: chuẩn bị → thực thi → kiểm tra |
+| Test Doubles | Dummy/Stub/Fake/Spy/Mock — 5 loại "đóng thế" khác nhau, không chỉ có "Mock" |
 | Mockito `@Mock`/`@InjectMocks` | Cô lập class đang test khỏi dependency thật, chạy cực nhanh |
 | AssertJ | Cú pháp fluent `assertThat(x).isEqualTo(y)` — khuyến nghị hơn Assertions thuần |
+| `@MethodSource`/`@EnumSource` | Cung cấp dữ liệu test phức tạp/enum cho `@ParameterizedTest` |
 | `@SpringBootTest` | Khởi động toàn bộ Spring Context — chậm, dùng cho Integration Test |
 | `@WebMvcTest` + MockMvc | Chỉ load Controller layer, mock Service — test HTTP layer nhanh |
+| `@WithMockUser`/`@WithUserDetails` | Giả lập user đăng nhập để test endpoint có bảo mật, không cần JWT thật |
 | `@DataJpaTest` | Test Repository với H2 in-memory — nhanh nhưng có thể lệch dialect thật |
 | Testcontainers | Test với DB thật (Docker) — chính xác nhất, chậm hơn H2 |
 | `@Mock` vs `@MockBean` | `@Mock` (Mockito thuần, không vào Spring Context) vs `@MockBean` (đăng ký vào Spring Context) |
 | Test Coverage | Chỉ đo dòng code được chạy qua — không đảm bảo test có ý nghĩa |
+| Mutation Testing (PIT) | Đo test có THỰC SỰ phát hiện thay đổi logic hay không — chậm, chạy định kỳ |
 
 ---
 
-## 13. Bài tập luyện tập
+## 15. Bài tập luyện tập
 
 ### Phần A — Trắc nghiệm nhận định (Đúng/Sai + giải thích)
 
@@ -657,8 +875,10 @@ void testCalculate() {
 6. `@WebMvcTest` khởi động toàn bộ Spring Context giống `@SpringBootTest`.
 7. Testcontainers cho phép test chạy với database thật trong Docker container, tự động dọn dẹp sau khi test xong.
 8. `verify(mock, never()).someMethod()` dùng để xác nhận 1 method KHÔNG được gọi trong quá trình test.
+9. Trong Mutation Testing, 1 mutant "sống sót" (survived) là dấu hiệu TỐT, chứng tỏ code ổn định.
+10. `@WithMockUser(roles = "ADMIN")` tương đương với việc set authority là `"ROLE_ADMIN"` trong SecurityContext.
 
-### Phần B — Bài tập viết code (5 bài)
+### Phần B — Bài tập viết code (6 bài)
 
 **Bài 1:** Viết Unit Test (dùng Mockito) cho `AuthService.login(email, password)` — 3 trường hợp: đăng nhập thành công, sai password (throw `BadCredentialsException`), user không tồn tại (throw `UserNotFoundException`).
 
@@ -669,6 +889,8 @@ void testCalculate() {
 **Bài 4:** Viết `@DataJpaTest` cho `ProductRepository` với 1 Specification/Query method tùy chọn (VD: `findByCategoryAndPriceLessThan`), dùng `TestEntityManager` để chuẩn bị dữ liệu.
 
 **Bài 5:** Giải thích (bằng comment code minh họa, không cần chạy thật) tình huống cụ thể mà `@DataJpaTest` (H2) sẽ **PASS** nhưng Testcontainers (PostgreSQL thật) sẽ **FAIL** — gợi ý: liên hệ tới kiểu dữ liệu JSONB hoặc hàm SQL đặc thù đã học ở Module 10 phần RDBMS & NoSQL.
+
+**Bài 6:** Viết `MockMvc` test dùng `@WithMockUser` cho endpoint `DELETE /api/v1/admin/orders/{id}` (được bảo vệ bởi `@PreAuthorize("hasRole('ADMIN')")` ở Module 16) — 3 trường hợp: role ADMIN trả `204`, role USER trả `403`, không đăng nhập trả `401`.
 
 ### Phần C — Gợi ý đáp án
 
@@ -683,6 +905,8 @@ void testCalculate() {
 6. **Sai.** `@WebMvcTest` chỉ load tầng Web (Controller), KHÔNG load Service/Repository thật — nhanh hơn `@SpringBootTest` nhiều.
 7. **Đúng.** Đây chính là mục đích thiết kế của Testcontainers.
 8. **Đúng.** `never()` là 1 dạng `VerificationMode` xác nhận số lần gọi = 0.
+9. **Sai.** Mutant "sống sót" là dấu hiệu XẤU — nghĩa là test suite KHÔNG phát hiện được sự thay đổi logic đó, chứng tỏ vùng code này thiếu assertion đủ mạnh, không phải code ổn định.
+10. **Đúng.** `@WithMockUser` tự động thêm tiền tố `ROLE_` cho `roles`, giống hệt cơ chế `hasRole()` của Spring Security đã học ở Module 16.
 
 </details>
 
@@ -888,6 +1112,49 @@ void saveProductWithJsonbMetadata_RealPostgres_RevealsRealBehavior() {
 ```
 
 **Kết luận:** Đây chính là lý do các dự án production nghiêm túc **luôn có ít nhất 1 tầng Integration Test dùng Testcontainers** cho các tính năng liên quan tới đặc thù dialect DB (JSONB, Full-text search, Array type...), thay vì chỉ tin tưởng hoàn toàn vào `@DataJpaTest` với H2.
+
+</details>
+
+<details>
+<summary><b>Đáp án Bài 6</b></summary>
+
+```java
+@WebMvcTest(AdminOrderController.class)
+class AdminOrderControllerSecurityTest {
+
+    @Autowired private MockMvc mockMvc;
+    @MockBean private OrderService orderService;
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void deleteOrder_AdminRole_Returns204() throws Exception {
+        doNothing().when(orderService).deleteById(1L);
+
+        mockMvc.perform(delete("/api/v1/admin/orders/1").with(csrf()))
+                .andExpect(status().isNoContent());
+
+        verify(orderService).deleteById(1L);
+    }
+
+    @Test
+    @WithMockUser(roles = "USER") // Đã đăng nhập nhưng KHÔNG đủ quyền
+    void deleteOrder_UserRole_Returns403() throws Exception {
+        mockMvc.perform(delete("/api/v1/admin/orders/1").with(csrf()))
+                .andExpect(status().isForbidden());
+
+        verify(orderService, never()).deleteById(any()); // Không được gọi vì bị chặn ở tầng phân quyền
+    }
+
+    @Test
+    // KHÔNG có @WithMockUser -> mô phỏng request hoàn toàn chưa xác thực
+    void deleteOrder_Unauthenticated_Returns401() throws Exception {
+        mockMvc.perform(delete("/api/v1/admin/orders/1").with(csrf()))
+                .andExpect(status().isUnauthorized());
+    }
+}
+```
+
+*(Lưu ý: `.with(csrf())` chỉ cần thiết nếu ứng dụng vẫn bật CSRF protection — với JWT thuần Stateless đã tắt CSRF như Module 16, có thể bỏ qua phần này.)*
 
 </details>
 

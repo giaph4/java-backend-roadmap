@@ -3,6 +3,8 @@
 > **Mức ưu tiên: 🟡 Trung bình (nhưng thiết yếu khi hệ thống chạy Microservices thật)**
 > **Vì sao quan trọng:** Khi hệ thống chỉ là 1 Monolith chạy trên 1 server, `System.out.println` và đọc log thủ công còn khả thi. Nhưng khi đã học tới Microservices (Module 19) — 1 request đi qua 5-10 service khác nhau — câu hỏi "request này bị lỗi/chậm ở đâu?" **không thể trả lời được** nếu không có Observability. Đây là "con mắt" của hệ thống production: không có nó, mọi sự cố đều là "mò kim đáy bể".
 
+> **Phạm vi bài này:** Tập trung vào 3 trụ cột Observability (Logs, Metrics, Traces) và công cụ triển khai ở tầng ứng dụng Spring Boot. Không đi sâu vận hành hạ tầng Elasticsearch/Prometheus Cluster ở quy mô lớn, hay thiết kế hệ thống chịu tải (Load Balancing, Scaling, CDN — thuộc Module 22 System Design tiếp theo).
+
 ---
 
 ## Mục lục
@@ -15,9 +17,10 @@
 6. [Grafana Dashboard](#6-grafana-dashboard)
 7. [ELK Stack — tập trung Log](#7-elk-stack)
 8. [Alerting — cảnh báo chủ động](#8-alerting)
-9. [⚠️ Các bẫy hay gặp](#9-các-bẫy-hay-gặp)
-10. [Tổng kết — Bảng ghi nhớ nhanh](#10-tổng-kết--bảng-ghi-nhớ-nhanh)
-11. [Bài tập luyện tập](#11-bài-tập-luyện-tập)
+9. [SLI/SLO/SLA & Error Budget](#9-slislosla--error-budget)
+10. [⚠️ Các bẫy hay gặp](#10-các-bẫy-hay-gặp)
+11. [Tổng kết — Bảng ghi nhớ nhanh](#11-tổng-kết--bảng-ghi-nhớ-nhanh)
+12. [Bài tập luyện tập](#12-bài-tập-luyện-tập)
 
 ---
 
@@ -51,6 +54,18 @@
 | Cách tiếp cận | Theo dõi các chỉ số **ĐÃ BIẾT TRƯỚC** cần quan tâm (CPU, RAM, uptime) | Thu thập đủ dữ liệu để trả lời **CÂU HỎI CHƯA BIẾT TRƯỚC** khi sự cố xảy ra |
 | Ví dụ | Dashboard hiển thị CPU usage | Truy vấn "tại sao request của user X lúc 14:32 bị lỗi 500?" dựa trên trace/log chi tiết |
 | Quan hệ | Là 1 PHẦN của Observability | Bao hàm cả Monitoring lẫn khả năng "đào sâu" (drill-down) khi có vấn đề mới phát sinh |
+
+### RED Method — khung chọn Metric nên theo dõi cho mỗi Service
+
+Với hàng trăm metric có thể thu thập, câu hỏi thực tế là: **nên bắt đầu theo dõi cái gì trước?** **RED Method** (phổ biến trong giới SRE — Site Reliability Engineering) đề xuất 3 chỉ số tối thiểu cho **mọi service hướng request** (API, microservice):
+
+| Chữ cái | Đo gì | Ví dụ Metric |
+|---|---|---|
+| **R**ate | Số request/giây service đang xử lý | `rate(http_server_requests_seconds_count[1m])` |
+| **E**rrors | Số/tỷ lệ request bị lỗi trên tổng số request | `rate(http_server_requests_seconds_count{status=~"5.."}[1m])` |
+| **D**uration | Thời gian xử lý mỗi request (nên xem theo percentile, không chỉ average) | `histogram_quantile(0.95, ...)` — đã học ở mục 6 |
+
+> **Liên hệ:** 3 chỉ số RED chính là bộ dashboard **tối thiểu** nên có cho mọi Microservice trước khi nghĩ tới việc thêm metric nghiệp vụ tùy chỉnh (Counter/Gauge riêng ở mục 5) — trả lời ngay câu hỏi "service này đang khỏe không" chỉ trong vài giây nhìn Dashboard, mà không cần biết trước sự cố cụ thể là gì. (Framework song song **USE Method** — Utilization/Saturation/Errors — dùng để theo dõi *tài nguyên hạ tầng* như CPU/Disk/Network thay vì service, không đi sâu ở đây vì thuộc phạm vi hạ tầng hơn là code ứng dụng.)
 
 ---
 
@@ -263,6 +278,35 @@ public class OrderService {
 | Độ phổ biến thực tế | Cao trong hệ sinh thái Spring | Cao trong hệ sinh thái CNCF (Cloud Native Computing Foundation) |
 
 > **Cả 2 công cụ hoạt động theo cùng nguyên lý** (thu thập Span, hiển thị Trace) — khác biệt chủ yếu ở giao diện và hệ sinh thái tích hợp. Chọn 1 trong 2 tùy theo công nghệ hạ tầng công ty đang dùng.
+
+### OpenTelemetry — chuẩn hóa Observability, không phụ thuộc 1 vendor cụ thể
+
+Micrometer Tracing (Brave) và Zipkin là 1 cặp công cụ cụ thể — nhưng ngành công nghiệp đang hội tụ về **OpenTelemetry (OTel)**, 1 dự án của **CNCF** định nghĩa **chuẩn chung** (API, SDK, giao thức) để thu thập cả 3 trụ cột Logs/Metrics/Traces, **không ràng buộc vào 1 backend cụ thể** (có thể xuất dữ liệu tới Zipkin, Jaeger, Prometheus, hay các nền tảng thương mại như Datadog/New Relic — chỉ cần đổi cấu hình exporter, không đổi code):
+
+```xml
+<!-- Micrometer Tracing cũng hỗ trợ OpenTelemetry làm bridge thay thế Brave -->
+<dependency>
+    <groupId>io.micrometer</groupId>
+    <artifactId>micrometer-tracing-bridge-otel</artifactId>
+</dependency>
+<dependency>
+    <groupId>io.opentelemetry</groupId>
+    <artifactId>opentelemetry-exporter-zipkin</artifactId>
+</dependency>
+```
+
+```
+Ứng dụng Spring Boot -> instrument bằng OpenTelemetry API (chuẩn, vendor-neutral)
+     │
+     ▼
+OpenTelemetry Collector (tùy chọn - gom dữ liệu, xử lý trước khi gửi đi)
+     │
+     ├──► Exporter tới Zipkin/Jaeger (traces)
+     ├──► Exporter tới Prometheus (metrics)
+     └──► Exporter tới hệ thống log tập trung (logs)
+```
+
+> **Vì sao quan trọng:** Trước đây mỗi loại dữ liệu (log/metric/trace) thường cần thư viện/giao thức riêng biệt của từng vendor, gây khóa chặt (vendor lock-in) và khó đổi công cụ giám sát sau này. OpenTelemetry cho phép **instrument code 1 lần** theo chuẩn chung, rồi tùy ý đổi backend hiển thị (Zipkin → Jaeger → nền tảng thương mại...) chỉ bằng cách đổi cấu hình exporter, không phải sửa lại code ứng dụng. Đây là xu hướng công nghiệp hiện tại — nên biết khái niệm và vì sao nó ra đời, dù ở mức học tập, dùng trực tiếp Zipkin qua Micrometer Tracing (Brave) như mục trên vẫn hoàn toàn đủ dùng và đơn giản hơn để bắt đầu.
 
 ---
 
@@ -484,7 +528,49 @@ groups:
 
 ---
 
-## 9. ⚠️ Các bẫy hay gặp
+## 9. SLI/SLO/SLA & Error Budget
+
+Alerting (mục 8) trả lời "khi nào báo động" — nhưng **ngưỡng nào là hợp lý để báo động?** SLI/SLO/SLA là khung khái niệm chuẩn (từ Google SRE) để trả lời câu hỏi đó **dựa trên mục tiêu độ tin cậy đã thống nhất trước**, thay vì chọn ngưỡng tùy hứng.
+
+### 3 khái niệm, dễ nhầm lẫn tên gọi
+
+| Khái niệm | Ý nghĩa | Ví dụ |
+|---|---|---|
+| **SLI** (Service Level *Indicator*) | Chỉ số ĐO ĐƯỢC THỰC TẾ, phản ánh chất lượng dịch vụ | "Tỷ lệ request thành công trong 5 phút qua là 99.95%" |
+| **SLO** (Service Level *Objective*) | MỤC TIÊU nội bộ team đặt ra cho SLI | "Tỷ lệ request thành công phải ≥ 99.9% mỗi tháng" |
+| **SLA** (Service Level *Agreement*) | CAM KẾT chính thức với khách hàng/bên ngoài, thường có ràng buộc pháp lý/bồi thường nếu không đạt | "Cam kết uptime 99.5%, nếu không đạt sẽ hoàn phí theo hợp đồng" |
+
+```
+SLI (đo được) --------> SLO (mục tiêu nội bộ, thường KHẮT KHE HƠN SLA) --------> SLA (cam kết ra bên ngoài)
+
+VD cụ thể:
+SLI: 99.95% request trả về < 200ms trong tháng này (con số đo thực tế)
+SLO: Team đặt mục tiêu SLI phải ≥ 99.9% (mục tiêu nội bộ, có margin an toàn)
+SLA: Cam kết với khách hàng SLI ≥ 99.5% (thường lỏng hơn SLO để có "đệm" an toàn)
+```
+
+> **Nguyên tắc:** SLO luôn nên **khắt khe hơn** SLA đã cam kết ra bên ngoài — để team có "khoảng đệm" phát hiện và xử lý vấn đề TRƯỚC KHI vi phạm SLA thực sự (gây hậu quả hợp đồng/tài chính).
+
+### Error Budget — "ngân sách lỗi" được phép tiêu
+
+Nếu SLO là 99.9% (cho phép tối đa 0.1% request lỗi/downtime), phần **0.1% còn lại** chính là **Error Budget** — "ngân sách" lỗi được phép "tiêu" trong 1 chu kỳ (thường 1 tháng) mà KHÔNG bị coi là vi phạm mục tiêu:
+
+```
+SLO 99.9% uptime/tháng -> Error Budget = 0.1% × 30 ngày ≈ 43 phút downtime được PHÉP mỗi tháng
+
+Nếu team đã "tiêu" hết 43 phút Error Budget trong 10 ngày đầu tháng:
+-> Chính sách phổ biến: TẠM DỪNG release tính năng mới, ưu tiên TUYỆT ĐỐI cho việc ổn định hệ thống
+   cho tới khi qua chu kỳ mới hoặc Error Budget được "làm mới"
+
+Nếu Error Budget còn dư nhiều:
+-> Team có thể tự tin release nhanh hơn, chấp nhận rủi ro thử nghiệm tính năng mới
+```
+
+> **Giá trị thực tế của Error Budget:** Nó biến cuộc tranh luận trừu tượng "nên ưu tiên tốc độ ra tính năng mới hay ổn định hệ thống?" thành **1 con số cụ thể, đo được** — dùng chung làm cơ sở ra quyết định giữa Product/Engineering, thay vì tranh cãi cảm tính. Đây cũng là câu hỏi khá thường gặp ở vòng phỏng vấn về tư duy vận hành hệ thống (SRE mindset) cho vị trí Backend/Senior.
+
+---
+
+## 10. ⚠️ Các bẫy hay gặp
 
 1. **Log dạng text tự do (unstructured)** ở hệ thống production quy mô lớn — không thể tìm kiếm/phân tích hiệu quả khi có hàng triệu dòng log.
 
@@ -506,28 +592,36 @@ groups:
 
 10. **Chỉ có Metrics mà không có Logs/Traces (hoặc ngược lại)** — 3 trụ cột bổ trợ lẫn nhau: Metrics cho biết "CÓ vấn đề", Traces cho biết "vấn đề Ở ĐÂU", Logs cho biết "CHI TIẾT điều gì đã xảy ra" — thiếu 1 trong 3 khiến quá trình debug sự cố production chậm và khó khăn hơn nhiều.
 
+11. **Đặt SLO cao hơn cả những gì hệ thống THỰC SỰ cần** (VD: SLO 99.99% cho 1 API nội bộ ít quan trọng) — buộc team tốn công sức/chi phí vận hành không tương xứng với giá trị nghiệp vụ thực tế; SLO nên phản ánh đúng mức độ quan trọng của service, không phải "càng cao càng tốt".
+
+12. **Không có quy trình rõ ràng khi Error Budget cạn kiệt** — đặt ra SLO/Error Budget nhưng không có chính sách hành động cụ thể (VD: tạm dừng release) khi vi phạm, khiến khái niệm này chỉ tồn tại trên giấy mà không ảnh hưởng thực tế tới cách team ra quyết định.
+
 ---
 
-## 10. Tổng kết — Bảng ghi nhớ nhanh
+## 11. Tổng kết — Bảng ghi nhớ nhanh
 
 | Khái niệm | Ghi nhớ nhanh |
 |---|---|
 | 3 trụ cột Observability | Logs (chuyện gì xảy ra) + Metrics (hệ thống khỏe không) + Traces (đi qua đâu, mất bao lâu) |
+| RED Method | Rate, Errors, Duration — bộ metric tối thiểu cho mọi service hướng request |
 | Structured Logging | Log dạng JSON — dễ tìm kiếm/phân tích tự động hơn text tự do |
 | Correlation ID | ID duy nhất theo 1 request xuyên suốt mọi service — ghép nối log lại thành 1 câu chuyện |
 | MDC | Cơ chế Logback gắn Correlation ID vào mọi log — cẩn thận với Thread Pool/@Async |
 | Distributed Tracing | Span + Trace — biết chính xác bước nào chậm trong chuỗi gọi Microservices |
 | Zipkin/Jaeger | Công cụ hiển thị Trace trực quan |
+| OpenTelemetry | Chuẩn vendor-neutral thu thập Logs/Metrics/Traces, không khóa chặt vào 1 backend |
 | Micrometer | Lớp trừu tượng đo Metrics — Counter/Gauge/Timer/Distribution Summary |
 | Prometheus | Thu thập Metrics theo mô hình Pull, lưu Time-Series, query bằng PromQL |
 | Grafana | Trực quan hóa Metrics thành Dashboard |
 | P95/P99 | Quan trọng hơn Average — phản ánh trải nghiệm của nhóm user chịu độ trễ cao nhất |
 | ELK Stack | Elasticsearch (lưu trữ+tìm kiếm) + Logstash/Filebeat (thu thập) + Kibana (giao diện) |
 | Alerting | Chủ động cảnh báo — cần `for` duration để tránh Alert Fatigue |
+| SLI/SLO/SLA | Chỉ số đo được → mục tiêu nội bộ (khắt khe hơn) → cam kết bên ngoài |
+| Error Budget | "Ngân sách" lỗi được phép tiêu — cạn thì ưu tiên ổn định thay vì release mới |
 
 ---
 
-## 11. Bài tập luyện tập
+## 12. Bài tập luyện tập
 
 ### Phần A — Trắc nghiệm nhận định (Đúng/Sai + giải thích)
 
@@ -539,8 +633,10 @@ groups:
 6. Distributed Tracing giúp xác định CHÍNH XÁC bước nào trong chuỗi gọi Microservices đang gây ra độ trễ cao.
 7. Alert không có điều kiện "for duration" có nguy cơ gây Alert Fatigue do cảnh báo dao động ngắn hạn không thực sự nghiêm trọng.
 8. Kibana là công cụ LƯU TRỮ log, còn Elasticsearch là công cụ TÌM KIẾM/TRỰC QUAN HÓA.
+9. SLO (Service Level Objective) thường nên khắt khe hơn SLA đã cam kết với khách hàng, để có khoảng đệm an toàn.
+10. Khi Error Budget đã cạn kiệt trong chu kỳ hiện tại, thực hành phổ biến là team tiếp tục release tính năng mới bình thường vì Error Budget không ảnh hưởng tới quyết định kỹ thuật.
 
-### Phần B — Bài tập viết code (5 bài)
+### Phần B — Bài tập viết code (6 bài)
 
 **Bài 1:** Viết 1 `CorrelationIdFilter` đầy đủ (dùng MDC) cho ứng dụng Spring Boot, đảm bảo sinh mới Correlation ID nếu request từ client chưa có, và luôn dọn dẹp MDC sau khi xử lý xong (kể cả khi có exception).
 
@@ -551,6 +647,8 @@ groups:
 **Bài 4:** Viết 1 PromQL query tính tỷ lệ lỗi (status 4xx và 5xx) trên tổng số request của service `payment-service` trong 5 phút gần nhất.
 
 **Bài 5:** Giải thích bằng ví dụ cụ thể (không cần code) tình huống mà chỉ có Metrics KHÔNG ĐỦ để debug sự cố — cần kết hợp thêm Distributed Tracing và Logs mới tìm ra nguyên nhân gốc rễ.
+
+**Bài 6:** Cho 1 API thanh toán có SLO "99.95% request thành công mỗi tháng". Tính Error Budget (số phút downtime/lỗi được phép) trong 1 tháng 30 ngày, và đề xuất 1 chính sách hành động cụ thể khi Error Budget đã tiêu hết 80% trước ngày 20 của tháng.
 
 ### Phần C — Gợi ý đáp án
 
@@ -565,6 +663,8 @@ groups:
 6. **Đúng.** Đây chính là mục đích thiết kế của Distributed Tracing — nhìn thấy rõ Span nào (bước nào) mất nhiều thời gian nhất trong toàn bộ Trace.
 7. **Đúng.** Không có `for` duration, alert có thể kích hoạt do 1 spike ngắn hạn bình thường, gây báo động giả liên tục, khiến người nhận dần bỏ qua cả cảnh báo thật.
 8. **Sai.** Ngược lại — Elasticsearch là nơi LƯU TRỮ + ĐÁNH INDEX (tìm kiếm), còn Kibana là GIAO DIỆN để tìm kiếm/trực quan hóa dữ liệu đó.
+9. **Đúng.** SLO khắt khe hơn SLA giúp team có "khoảng đệm" phát hiện và xử lý vấn đề trước khi thực sự vi phạm cam kết với khách hàng.
+10. **Sai.** Ngược lại — thực hành phổ biến khi Error Budget cạn kiệt là TẠM DỪNG release tính năng mới, ưu tiên ổn định hệ thống cho tới khi Error Budget được làm mới ở chu kỳ tiếp theo.
 
 </details>
 
@@ -685,6 +785,42 @@ sum(rate(http_server_requests_seconds_count{application="payment-service"}[5m]))
 **Bước cuối cùng cần Logs:** Bây giờ đã biết "thủ phạm" là Inventory Service, vào xem **log chi tiết** của chính Inventory Service tại đúng khung thời gian đó (lọc theo `correlationId` của 1 trace cụ thể vừa tìm được) — phát hiện dòng log: `"Đang chờ Connection Pool - pool đã đạt maximum 10 connections"` — từ đó xác định NGUYÊN NHÂN GỐC RỄ: **HikariCP Connection Pool của Inventory Service bị cạn kiệt** (có thể do 1 query nào đó đang giữ connection quá lâu, hoặc traffic tăng đột biến vượt quá pool size đã cấu hình — liên hệ Module 10/15).
 
 **Kết luận:** Chỉ với Metrics, ta biết "có vấn đề và mức độ nghiêm trọng". Chỉ với Tracing, ta thu hẹp được "vấn đề nằm ở service/bước nào". Chỉ với Logs chi tiết của đúng service/thời điểm đó (nhờ Correlation ID liên kết từ Trace), ta mới tìm ra được **nguyên nhân kỹ thuật cụ thể** để khắc phục (tăng pool size, tối ưu query đang giữ connection lâu...). Đây chính là lý do 3 trụ cột Observability phải đi CÙNG NHAU, không thể chỉ dựa vào 1 trụ cột duy nhất khi debug sự cố production phức tạp.
+
+</details>
+
+<details>
+<summary><b>Đáp án Bài 6</b></summary>
+
+**Tính Error Budget:**
+
+```
+SLO: 99.95% request thành công/tháng
+-> Tỷ lệ lỗi cho phép: 100% - 99.95% = 0.05%
+
+1 tháng 30 ngày = 30 × 24 × 60 = 43,200 phút
+
+Error Budget = 0.05% × 43,200 phút = 21.6 phút downtime/lỗi được PHÉP trong tháng
+```
+
+**Chính sách hành động khi đã tiêu 80% Error Budget trước ngày 20/30:**
+
+```
+Đã dùng: 80% × 21.6 phút ≈ 17.3 phút (trong 20/30 ngày, tức 2/3 chu kỳ)
+Còn lại: ~4.3 phút cho 10 ngày còn lại của tháng -> RẤT MỎNG, rủi ro cao
+
+Đề xuất chính sách cụ thể:
+1. TẠM DỪNG mọi release tính năng mới không khẩn cấp cho tới hết tháng
+   (giảm thiểu rủi ro gây thêm downtime/lỗi từ thay đổi mới)
+2. Ưu tiên TUYỆT ĐỐI cho việc điều tra nguyên nhân đã gây tiêu tốn 80% Error Budget
+   (dùng Distributed Tracing + Logs như đã học ở Bài 5 để xác định nguyên nhân gốc rễ)
+3. Chỉ cho phép deploy các bản vá lỗi (hotfix) liên quan trực tiếp tới việc cải thiện độ ổn định
+4. Thông báo cho các bên liên quan (Product Owner, khách hàng nếu cần theo SLA)
+   về tình trạng Error Budget để họ hiểu vì sao tốc độ ra tính năng mới bị chậm lại tạm thời
+5. Sau khi qua chu kỳ mới (đầu tháng sau), Error Budget được "làm mới" (reset) hoàn toàn,
+   quay lại nhịp độ phát triển bình thường
+```
+
+**Ý nghĩa:** Đây là cách Error Budget biến 1 quyết định thường mang tính cảm tính ("có nên release tính năng mới lúc này không?") thành quyết định dựa trên **dữ liệu cụ thể, đã thống nhất từ trước** — giảm tranh cãi, tăng tính minh bạch giữa Engineering và Product.
 
 </details>
 

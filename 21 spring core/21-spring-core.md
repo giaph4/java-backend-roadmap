@@ -2,6 +2,8 @@
 
 > **Mức ưu tiên: 🔴 Cao**
 > **Vì sao quan trọng:** Đây là "trái tim" của toàn bộ hệ sinh thái Spring — Spring Boot, Spring MVC, Spring Data, Spring Security... tất cả đều xây dựng trên nền tảng IoC Container và Dependency Injection. Không hiểu bản chất Bean Lifecycle, `ApplicationContext`, và cách Spring AOP hoạt động thì việc dùng `@Autowired`, `@Transactional`, `@Cacheable`... chỉ là "học vẹt annotation" — sẽ rất khó debug khi gặp lỗi `NoSuchBeanDefinitionException`, circular dependency, hay khi annotation "không có tác dụng" (thường do self-invocation với AOP proxy).
+>
+> **Phạm vi bài này:** cơ chế IoC Container, DI, Bean Lifecycle và AOP của Spring Framework thuần túy. Bài **không** đi sâu cấu hình Spring Boot (auto-configuration, `application.yml`, Profiles, Actuator — đó là Module 13) hay Spring Security/Spring MVC — chỉ dùng chúng làm ví dụ minh họa cơ chế nền tảng.
 
 ---
 
@@ -15,10 +17,12 @@
 6. [Bean Lifecycle chi tiết](#6-bean-lifecycle-chi-tiết)
 7. [@Autowired — cơ chế wiring & giải quyết xung đột](#7-autowired--cơ-chế-wiring)
 8. [Circular Dependency](#8-circular-dependency)
-9. [Spring AOP — Aspect-Oriented Programming](#9-spring-aop)
-10. [⚠️ Các bẫy hay gặp](#10-các-bẫy-hay-gặp)
-11. [Tổng kết — Bảng ghi nhớ nhanh](#11-tổng-kết--bảng-ghi-nhớ-nhanh)
-12. [Bài tập luyện tập](#12-bài-tập-luyện-tập)
+9. [@Value & SpEL — Inject giá trị cấu hình](#9-value--spel--inject-giá-trị-cấu-hình)
+10. [Spring AOP — Aspect-Oriented Programming](#10-spring-aop)
+11. [ApplicationEvent — Lập trình hướng sự kiện trong Spring](#11-applicationevent--lập-trình-hướng-sự-kiện-trong-spring)
+12. [⚠️ Các bẫy hay gặp](#12-các-bẫy-hay-gặp)
+13. [Tổng kết — Bảng ghi nhớ nhanh](#13-tổng-kết--bảng-ghi-nhớ-nhanh)
+14. [Bài tập luyện tập](#14-bài-tập-luyện-tập)
 
 ---
 
@@ -255,6 +259,26 @@ public class AppConfig {
 | Cách khai báo | Annotation trên class | Method trong `@Configuration` class, method trả về object |
 | Kiểm soát khởi tạo | Spring tự gọi constructor | Bạn viết logic khởi tạo tùy ý trong method |
 
+### 4.4. Bean phụ thuộc Bean khác trong cùng @Configuration
+
+```java
+@Configuration
+public class AppConfig {
+
+    @Bean
+    public DataSource dataSource() {
+        return new HikariDataSource(); // Connection Pool đã học nguyên lý ở Module 10
+    }
+
+    @Bean
+    public JdbcTemplate jdbcTemplate(DataSource dataSource) {
+        // Spring tự inject Bean "dataSource" ở trên vào tham số method này
+        return new JdbcTemplate(dataSource);
+    }
+}
+```
+> Trong `@Configuration` class, tham số của 1 `@Bean` method được Spring **tự động resolve** từ các Bean khác đã đăng ký — không cần gọi trực tiếp `dataSource()` (gọi trực tiếp vẫn đúng nhờ CGLIB proxy hóa class `@Configuration`, nhưng truyền qua tham số method là cách viết rõ ràng và được khuyến nghị hơn).
+
 ---
 
 ## 5. Bean Scope
@@ -310,6 +334,32 @@ public class OrderService {
     }
 }
 ```
+
+### Scoped Proxy — cùng 1 vấn đề, nhưng cho `request`/`session` scope
+
+Vấn đề "inject bean ngắn hạn vào bean dài hạn" ở trên **lặp lại y hệt** khi inject Bean scope `request`/`session` vào 1 Singleton — Singleton chỉ được tạo **1 lần lúc ứng dụng khởi động**, trong khi lúc đó **chưa hề có HTTP request/session nào tồn tại**. Giải pháp riêng cho web scope là **Scoped Proxy**:
+
+```java
+@Component
+@Scope(value = WebApplicationContext.SCOPE_REQUEST, proxyMode = ScopedProxyMode.TARGET_CLASS)
+public class RequestContext {
+    private String requestId = UUID.randomUUID().toString();
+    public String getRequestId() { return requestId; }
+}
+
+@Service
+public class AuditService { // Singleton
+    @Autowired
+    private RequestContext requestContext; // Spring inject 1 PROXY, không phải instance thật
+
+    public void log(String action) {
+        // Mỗi lần gọi log(), proxy tự động "route" tới đúng RequestContext
+        // của HTTP request ĐANG XỬ LÝ tại thời điểm gọi — không phải request lúc khởi động
+        System.out.println("[" + requestContext.getRequestId() + "] " + action);
+    }
+}
+```
+> **Cơ chế:** `proxyMode = ScopedProxyMode.TARGET_CLASS` khiến Spring inject vào `AuditService` một **Proxy** (dùng đúng kỹ thuật CGLIB sẽ giải thích ở mục 10) thay vì instance thật — mỗi lần method trên proxy được gọi, nó tra cứu đúng instance `request`-scope của request HTTP hiện tại rồi ủy quyền (delegate) cuộc gọi tới đó. Đây chính là ví dụ thực tế thứ 2 (sau AOP) cho thấy **Proxy Pattern** là kỹ thuật lõi mà Spring dùng lặp đi lặp lại để giải quyết nhiều bài toán khác nhau.
 
 ---
 
@@ -383,7 +433,7 @@ public class LoggingBeanPostProcessor implements BeanPostProcessor {
 }
 ```
 
-> **Đây chính là cơ chế nền tảng mà Spring AOP, `@Transactional`, `@Async`, `@Cacheable`... dùng để "bọc" Bean gốc bằng Proxy** — sẽ giải thích rõ ở mục 9.
+> **Đây chính là cơ chế nền tảng mà Spring AOP, `@Transactional`, `@Async`, `@Cacheable`... dùng để "bọc" Bean gốc bằng Proxy** — sẽ giải thích rõ ở mục 10. Cụ thể, `postProcessAfterInitialization` là nơi Spring **thay thế Bean gốc bằng Proxy** trước khi trả về cho Container — đây là câu trả lời kỹ thuật chính xác cho câu hỏi "Proxy được tạo ra ở đâu trong vòng đời Bean".
 
 ---
 
@@ -544,7 +594,81 @@ public class ServiceB {
 
 ---
 
-## 9. Spring AOP
+## 9. @Value & SpEL — Inject giá trị cấu hình
+
+Bên cạnh inject Bean, Spring còn cho phép inject **giá trị cấu hình đơn giản** (String, số, boolean) trực tiếp từ file cấu hình (`application.properties`/`.yml` — cấu hình chi tiết sẽ học ở Module 13) vào field/tham số constructor bằng `@Value`.
+
+### Cú pháp cơ bản
+
+```java
+@Service
+public class EmailService {
+
+    @Value("${mail.smtp.host}")           // Đọc property "mail.smtp.host" từ application.properties
+    private String smtpHost;
+
+    @Value("${mail.smtp.port:587}")       // ":587" -> giá trị MẶC ĐỊNH nếu property không tồn tại
+    private int smtpPort;
+
+    @Value("${mail.enabled:true}")
+    private boolean mailEnabled;
+}
+```
+> **Best practice:** giống nguyên tắc ở mục 2, nên ưu tiên **inject qua constructor** thay vì field, kể cả với `@Value` — giúp class dễ test hơn (truyền giá trị mock trực tiếp qua constructor, không cần Spring Context):
+```java
+@Service
+public class EmailService {
+    private final String smtpHost;
+
+    public EmailService(@Value("${mail.smtp.host}") String smtpHost) {
+        this.smtpHost = smtpHost;
+    }
+}
+```
+
+### SpEL (Spring Expression Language) — biểu thức mạnh hơn String tĩnh
+
+`@Value` không chỉ đọc property — có thể chứa **biểu thức SpEL** trong cặp `#{...}`, cho phép tham chiếu tới **Bean khác** hoặc tính toán:
+
+```java
+@Value("#{systemProperties['user.region']}")   // Đọc system property của JVM
+private String region;
+
+@Value("#{paymentConfig.maxRetryCount}")        // Gọi getter maxRetryCount() của Bean tên "paymentConfig"
+private int maxRetry;
+
+@Value("#{ 2 * 10 }")                            // Biểu thức toán học đơn giản -> 20
+private int computedValue;
+
+@Value("#{'${allowed.roles}'.split(',')}")       // Kết hợp property + SpEL: tách chuỗi CSV thành List
+private List<String> allowedRoles;
+```
+> **Phân biệt `${...}` và `#{...}`:** `${...}` chỉ đơn thuần đọc **property tĩnh** (giống lấy giá trị từ file config); `#{...}` là **SpEL** — mạnh hơn, có thể gọi method, tham chiếu Bean khác, tính biểu thức. Với đa số trường hợp thực tế (đọc 1 giá trị cấu hình đơn giản), `${...}` là đủ và nên ưu tiên vì dễ đọc hơn.
+
+### `Environment` — đọc property bằng code, không cần annotation
+
+```java
+@Service
+public class ConfigInspector {
+
+    private final Environment environment;
+
+    public ConfigInspector(Environment environment) {
+        this.environment = environment;
+    }
+
+    public void printConfig() {
+        String host = environment.getProperty("mail.smtp.host");
+        int port = environment.getProperty("mail.smtp.port", Integer.class, 587); // có default + ép kiểu
+        boolean isProd = environment.acceptsProfiles(Profiles.of("production")); // liên hệ Profile ở Module 13
+    }
+}
+```
+> `Environment` là 1 phần của `ApplicationContext` (đã nhắc ở mục 3) — dùng khi cần đọc property **động** trong code (VD: tên property được tính toán lúc runtime), thay vì cố định như `@Value`.
+
+---
+
+## 10. Spring AOP
 
 **AOP (Aspect-Oriented Programming)** cho phép tách các **cross-cutting concerns** (logic lặp lại ở nhiều nơi, không thuộc business logic chính — logging, transaction, security, caching) ra khỏi code nghiệp vụ.
 
@@ -602,6 +726,67 @@ public class OrderService {
 | `@AfterThrowing` | Sau khi method gốc **ném exception** |
 | `@Around` | Bao trọn method gốc — mạnh nhất, có thể sửa cả input/output/không cho method chạy |
 
+### Pointcut Expression — chọn CHÍNH XÁC method nào bị "chặn"
+
+`execution(...)` chỉ là 1 trong nhiều kiểu pointcut expression — biết thêm vài kiểu giúp viết Aspect chính xác hơn thay vì chỉ chặn theo package:
+
+```java
+// execution — khớp theo CHỮ KÝ method (phổ biến nhất)
+@Around("execution(public * com.example.service.*.*(..))")     // mọi method public trong package service
+@Around("execution(* com.example.service.OrderService.place*(..))") // method bắt đầu bằng "place" trong đúng 1 class
+
+// within — khớp theo class/package (không quan tâm chữ ký method)
+@Around("within(com.example.service..*)")   // ".." = package đó VÀ mọi package con
+
+// @annotation — khớp theo METHOD có gắn 1 annotation cụ thể — rất mạnh, tự định nghĩa annotation riêng
+@Around("@annotation(com.example.annotation.LogExecutionTime)")
+
+// bean — khớp theo TÊN BEAN
+@Around("bean(orderService)")
+```
+
+**Ví dụ dùng `@annotation` — tạo annotation riêng để đánh dấu method cần áp dụng Aspect:**
+
+```java
+@Retention(RetentionPolicy.RUNTIME)
+@Target(ElementType.METHOD)
+public @interface LogExecutionTime { } // Annotation tự định nghĩa, không có logic gì bên trong
+
+@Aspect
+@Component
+public class LoggingAspect {
+    @Around("@annotation(com.example.annotation.LogExecutionTime)")
+    public Object log(ProceedingJoinPoint joinPoint) throws Throwable {
+        long start = System.currentTimeMillis();
+        Object result = joinPoint.proceed();
+        System.out.println(joinPoint.getSignature() + " mất " + (System.currentTimeMillis() - start) + "ms");
+        return result;
+    }
+}
+
+@Service
+public class OrderService {
+    @LogExecutionTime // Chỉ method NÀY bị áp Aspect — rõ ràng, tường minh hơn nhiều so với pointcut theo package
+    public void placeOrder(Order order) { ... }
+}
+```
+> **Đây chính xác là cách `@Transactional`, `@Cacheable`, `@Async`, `@Retryable` của Spring hoạt động phía sau hậu trường** — chúng đều là các annotation tự định nghĩa, được 1 Aspect (do Spring viết sẵn) "lắng nghe" qua pointcut `@annotation(...)`.
+
+### `@Order` — thứ tự chạy khi có nhiều Aspect trên cùng 1 method
+
+```java
+@Aspect
+@Component
+@Order(1) // Số NHỎ HƠN chạy TRƯỚC (ưu tiên cao hơn)
+public class SecurityAspect { ... }
+
+@Aspect
+@Component
+@Order(2)
+public class LoggingAspect { ... } // Chạy sau SecurityAspect
+```
+> Khi nhiều Aspect cùng áp dụng cho 1 method (VD: vừa `@Transactional` vừa `@Cacheable` vừa Aspect logging tự viết), thứ tự lồng Proxy quan trọng — ví dụ nên kiểm tra bảo mật (`SecurityAspect`) **trước khi** mở transaction, tránh mở transaction cho request không hợp lệ rồi mới phát hiện và phải rollback.
+
 ### Cơ chế Proxy đằng sau AOP — GIẢI THÍCH self-invocation
 
 Spring AOP hoạt động bằng cách tạo **Proxy object** bọc quanh Bean gốc:
@@ -630,6 +815,13 @@ Có 2 loại Proxy Spring dùng:
 | Cơ chế | Tạo class implement cùng interface | Tạo class con **kế thừa** Bean gốc |
 | Giới hạn | — | Không proxy được method `final`/`private`/`static` |
 
+**Ép Spring luôn dùng CGLIB dù Bean có implement interface — `proxyTargetClass`:**
+
+```java
+@EnableAspectJAutoProxy(proxyTargetClass = true) // Mặc định false -> ưu tiên JDK Dynamic Proxy nếu có interface
+```
+> Spring Boot mặc định **đã bật `proxyTargetClass = true`** từ Spring Boot 2.x trở đi — nghĩa là mặc định dùng CGLIB cho mọi trường hợp, kể cả Bean có interface, để tránh những khác biệt hành vi tinh vi giữa 2 loại proxy (VD: khi 1 field/biến khai báo kiểu chính là class thay vì interface, chỉ Proxy dạng CGLIB mới gán được).
+
 ⚠️ **Đây chính là lý do giải thích bẫy self-invocation đã nói ở Module 11 (`@Transactional`):**
 
 ```java
@@ -650,11 +842,114 @@ Vì `@Autowired`/Spring Container chỉ inject **Proxy** vào các nơi khác �
 
 ---
 
-## 10. ⚠️ Các bẫy hay gặp
+## 11. ApplicationEvent — Lập trình hướng sự kiện trong Spring
+
+Đây là 1 trong những tính năng của `ApplicationContext` được nhắc ở mục 3 ("+ Event publishing") nhưng chưa minh họa — **Event-driven** là cách khác để giảm coupling giữa các module, thay thế cho việc gọi trực tiếp (và đôi khi thay thế cả nhu cầu inject nhiều Service vào 1 class).
+
+### Vấn đề: gọi trực tiếp nhiều Service tạo coupling chặt
+
+```java
+@Service
+public class OrderService {
+    private final EmailService emailService;
+    private final InventoryService inventoryService;
+    private final LoyaltyPointService loyaltyPointService;
+    // Mỗi khi có nghiệp vụ MỚI cần chạy khi đặt hàng xong (VD: thêm gửi SMS),
+    // lại phải SỬA OrderService để inject thêm Service và gọi thêm dòng code
+    // -> vi phạm Open/Closed Principle (SOLID, Module 02.3)
+
+    public void placeOrder(Order order) {
+        orderRepository.save(order);
+        emailService.sendConfirmation(order);
+        inventoryService.reduceStock(order);
+        loyaltyPointService.addPoints(order);
+    }
+}
+```
+
+### Giải pháp: publish 1 Event, để các phần khác tự "lắng nghe"
+
+```java
+// 1. Định nghĩa Event — 1 class POJO đơn giản mang dữ liệu cần thiết
+public class OrderPlacedEvent {
+    private final Order order;
+    public OrderPlacedEvent(Order order) { this.order = order; }
+    public Order getOrder() { return order; }
+}
+
+// 2. OrderService chỉ cần PUBLISH event, KHÔNG cần biết ai sẽ xử lý nó
+@Service
+public class OrderService {
+    private final ApplicationEventPublisher eventPublisher;
+    private final OrderRepository orderRepository;
+
+    public OrderService(ApplicationEventPublisher eventPublisher, OrderRepository orderRepository) {
+        this.eventPublisher = eventPublisher;
+        this.orderRepository = orderRepository;
+    }
+
+    public void placeOrder(Order order) {
+        orderRepository.save(order);
+        eventPublisher.publishEvent(new OrderPlacedEvent(order)); // Chỉ 1 dòng, không cần biết chi tiết ai xử lý
+    }
+}
+
+// 3. Các Service khác TỰ ĐĂNG KÝ lắng nghe, hoàn toàn độc lập với OrderService
+@Component
+public class EmailNotificationListener {
+    @EventListener
+    public void onOrderPlaced(OrderPlacedEvent event) {
+        System.out.println("Gửi email xác nhận cho đơn hàng #" + event.getOrder().getId());
+    }
+}
+
+@Component
+public class InventoryListener {
+    @EventListener
+    public void onOrderPlaced(OrderPlacedEvent event) {
+        System.out.println("Trừ tồn kho cho đơn hàng #" + event.getOrder().getId());
+    }
+}
+```
+> **Muốn thêm nghiệp vụ mới (VD: gửi SMS) khi đặt hàng xong:** chỉ cần tạo thêm 1 `@Component` mới có `@EventListener` lắng nghe `OrderPlacedEvent` — **hoàn toàn không sửa** `OrderService`. Đây là ví dụ cụ thể, thực chiến của **Open/Closed Principle**.
+
+### Đồng bộ hay bất đồng bộ?
+
+Mặc định, `@EventListener` chạy **đồng bộ (synchronous)** — nghĩa là `placeOrder()` sẽ **chờ** cho tới khi TẤT CẢ listener chạy xong mới return (và nếu 1 listener ném exception, toàn bộ luồng gốc cũng bị ảnh hưởng, thậm chí có thể khiến transaction của `placeOrder()` rollback theo). Để chạy bất đồng bộ (không chặn luồng chính), kết hợp với `@Async` (cũng là 1 dạng AOP Proxy như đã học ở mục 10):
+
+```java
+@Component
+public class EmailNotificationListener {
+    @Async // Chạy trên THREAD KHÁC — placeOrder() không phải chờ email gửi xong mới return
+    @EventListener
+    public void onOrderPlaced(OrderPlacedEvent event) {
+        // Gửi email tốn thời gian (network I/O) -> không nên chặn luồng chính
+    }
+}
+```
+⚠️ **Lưu ý:** `@Async` cần `@EnableAsync` được bật ở 1 `@Configuration` class, và — đúng như đã học ở mục 10 — cũng bị chi phối bởi **cùng những giới hạn của AOP Proxy** (self-invocation, không hoạt động trên method `private`).
+
+### `@TransactionalEventListener` — chỉ xử lý SAU KHI transaction gốc commit thành công
+
+```java
+@Component
+public class InventoryListener {
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onOrderPlaced(OrderPlacedEvent event) {
+        // Chỉ chạy nếu transaction placeOrder() COMMIT THÀNH CÔNG
+        // Nếu transaction rollback (VD: hết tồn kho ở bước nào đó sau), listener này SẼ KHÔNG chạy
+    }
+}
+```
+> **Liên hệ Module 11 (`@Transactional`):** đây là cách kết hợp Event-driven với Transaction Management — tránh tình huống trừ tồn kho/gửi email cho 1 đơn hàng mà cuối cùng transaction chính lại rollback.
+
+---
+
+## 12. ⚠️ Các bẫy hay gặp
 
 1. **Field Injection** khiến class khó test, không immutable — nên chuyển sang Constructor Injection.
 
-2. **Inject Prototype Bean vào Singleton Bean** mà không dùng `ObjectFactory`/`@Lookup` → chỉ tạo 1 instance duy nhất dù khai báo prototype.
+2. **Inject Prototype Bean vào Singleton Bean** mà không dùng `ObjectFactory`/`@Lookup` → chỉ tạo 1 instance duy nhất dù khai báo prototype. Cùng bản chất với việc inject Bean `request`/`session` scope vào Singleton mà quên `proxyMode`.
 
 3. **Circular Dependency** — dấu hiệu vi phạm Single Responsibility Principle, nên refactor thay vì "vá" bằng `@Lazy`.
 
@@ -672,9 +967,13 @@ Vì `@Autowired`/Spring Container chỉ inject **Proxy** vào các nơi khác �
 
 10. **Nhầm lẫn `@Component` và `@Bean` khi nào dùng cái nào** — `@Bean` dùng cho object bên thứ 3 không sửa được source code; `@Component` cho class tự viết.
 
+11. **Coi `@EventListener` mặc định là bất đồng bộ** — mặc định chạy ĐỒNG BỘ trên cùng luồng và cùng transaction với nơi publish event; nếu listener ném exception, luồng gốc (và transaction gốc, nếu có) bị ảnh hưởng theo. Muốn bất đồng bộ phải tường minh thêm `@Async`.
+
+12. **Publish Event nghiệp vụ quan trọng (trừ tồn kho, gửi thông báo thanh toán) mà không dùng `@TransactionalEventListener(AFTER_COMMIT)`** — có thể khiến listener chạy dựa trên dữ liệu của 1 transaction sau đó bị rollback, gây sai lệch nghiêm trọng (VD: đã trừ tồn kho cho 1 đơn hàng thực ra chưa từng được lưu thành công).
+
 ---
 
-## 11. Tổng kết — Bảng ghi nhớ nhanh
+## 13. Tổng kết — Bảng ghi nhớ nhanh
 
 | Khái niệm | Ghi nhớ nhanh |
 |---|---|
@@ -685,15 +984,20 @@ Vì `@Autowired`/Spring Container chỉ inject **Proxy** vào các nơi khác �
 | @Bean | Dùng trong `@Configuration` để khai báo Bean thủ công (thư viện ngoài) |
 | Singleton scope | Mặc định — 1 instance/toàn app, tạo eager |
 | Prototype scope | Instance mới mỗi lần inject — cẩn thận khi inject vào Singleton |
+| Scoped Proxy | Giải quyết vấn đề tương tự Prototype-vào-Singleton nhưng cho `request`/`session` scope |
 | Bean Lifecycle | Constructor → DI → @PostConstruct → Ready → @PreDestroy |
+| BeanPostProcessor | Nơi Proxy AOP thực sự được tạo ra, "bọc" quanh Bean gốc |
 | @Autowired xung đột | Dùng `@Primary` (ưu tiên mặc định) hoặc `@Qualifier` (chỉ định rõ) |
 | Circular Dependency | Constructor Injection phát hiện ngay lúc khởi động — nên refactor, không nên "vá" |
+| `@Value("${...}")` | Inject property tĩnh; `#{...}` (SpEL) mạnh hơn — gọi được method/Bean khác |
 | Spring AOP | Tách cross-cutting concerns (logging, transaction...) bằng Proxy |
+| Pointcut expression | `execution`/`within`/`@annotation`/`bean` — `@annotation` là cách chính Spring tự cài `@Transactional`/`@Cacheable` |
 | Self-invocation | `this.method()` bỏ qua Proxy → AOP annotation mất tác dụng |
+| ApplicationEvent | Publish/Subscribe giảm coupling giữa Service — mặc định ĐỒNG BỘ, cần `@Async` để chạy nền |
 
 ---
 
-## 12. Bài tập luyện tập
+## 14. Bài tập luyện tập
 
 ### Phần A — Trắc nghiệm nhận định (Đúng/Sai + giải thích)
 
@@ -705,18 +1009,22 @@ Vì `@Autowired`/Spring Container chỉ inject **Proxy** vào các nơi khác �
 6. `@PostConstruct` đảm bảo chạy sau khi mọi dependency injection đã hoàn tất.
 7. Inject 1 Bean có scope `prototype` vào 1 Bean có scope `singleton` (không dùng `ObjectFactory`) sẽ tạo instance mới mỗi lần dùng.
 8. `@Transactional` đặt trên method `private` sẽ hoạt động bình thường vì CGLIB có thể proxy mọi loại method.
+9. `@Value("#{...}")` và `@Value("${...}")` hoàn toàn tương đương nhau về khả năng.
+10. `@EventListener` mặc định chạy trên 1 thread riêng, không chặn luồng của nơi publish event.
 
-### Phần B — Bài tập viết code (5 bài)
+### Phần B — Bài tập viết code (6 bài)
 
 **Bài 1:** Viết 1 interface `NotificationService` với 2 implementation `EmailNotificationService` và `SmsNotificationService`. Dùng `@Qualifier` để 1 class `OrderService` chỉ dùng `EmailNotificationService`.
 
-**Bài 2:** Viết 1 `@Aspect` đo thời gian thực thi (giống ví dụ `LoggingAspect` ở mục 9) áp dụng cho toàn bộ package `com.example.repository`, in ra cảnh báo nếu method chạy quá 100ms.
+**Bài 2:** Viết 1 `@Aspect` đo thời gian thực thi (giống ví dụ `LoggingAspect` ở mục 10) áp dụng cho toàn bộ package `com.example.repository`, in ra cảnh báo nếu method chạy quá 100ms.
 
 **Bài 3:** Cho 2 class `InventoryService` và `NotificationService` phụ thuộc vòng lặp lẫn nhau (Circular Dependency). Hãy refactor lại thiết kế để loại bỏ vòng lặp này (tách class thứ 3 nếu cần).
 
 **Bài 4:** Viết 1 Bean implement `InitializingBean` và `DisposableBean` để mô phỏng việc mở/đóng kết nối tới 1 external service khi ứng dụng khởi động/tắt. Giải thích khác biệt so với dùng `@PostConstruct`/`@PreDestroy`.
 
 **Bài 5:** Viết 1 `PaymentService` dùng kỹ thuật inject `Map<String, PaymentGateway>` (như ví dụ mục 7, cách 3) để chọn động gateway thanh toán dựa theo tham số truyền vào runtime, không dùng `if/else`.
+
+**Bài 6 — Event-driven cho nghiệp vụ đặt hàng.** Refactor `OrderService.placeOrder()` (đang gọi trực tiếp `emailService`, `inventoryService`, `loyaltyPointService`) sang publish 1 `OrderPlacedEvent` duy nhất, với 3 `@Component` listener riêng biệt xử lý từng việc. Sau đó, đổi `InventoryListener` để chỉ chạy khi transaction gốc COMMIT thành công (không chạy nếu rollback). Giải thích annotation cần dùng.
 
 ### Phần C — Gợi ý đáp án
 
@@ -731,6 +1039,8 @@ Vì `@Autowired`/Spring Container chỉ inject **Proxy** vào các nơi khác �
 6. **Đúng.** Đây chính là mục đích thiết kế của `@PostConstruct` — đảm bảo an toàn để dùng mọi dependency đã inject.
 7. **Sai.** Chỉ tạo 1 instance duy nhất (lúc Singleton khởi tạo) — phải dùng `ObjectFactory`/`@Lookup` mới tạo mới mỗi lần.
 8. **Sai.** CGLIB Proxy tạo class con kế thừa Bean gốc — không thể override được method `private` (Java không cho override private method), nên `@Transactional` trên method `private` hoàn toàn bị bỏ qua.
+9. **Sai.** `${...}` chỉ đọc property tĩnh từ file cấu hình; `#{...}` (SpEL) mạnh hơn nhiều — có thể tham chiếu Bean khác, gọi method, tính biểu thức toán học.
+10. **Sai.** Mặc định `@EventListener` chạy ĐỒNG BỘ trên cùng thread với nơi publish — phải thêm `@Async` tường minh mới chạy trên thread riêng.
 
 </details>
 
@@ -951,6 +1261,73 @@ paymentService.pay("paypal", BigDecimal.valueOf(200));  // -> gọi PaypalGatewa
 ```
 
 **Giải thích:** Cách này tuân thủ **Open/Closed Principle** (SOLID) — muốn thêm gateway mới (VD: MoMo), chỉ cần tạo thêm 1 `@Component` implement `PaymentGateway`, **không cần sửa** `PaymentService`.
+
+</details>
+
+<details>
+<summary><b>Đáp án Bài 6</b></summary>
+
+```java
+// 1. Event
+public class OrderPlacedEvent {
+    private final Order order;
+    public OrderPlacedEvent(Order order) { this.order = order; }
+    public Order getOrder() { return order; }
+}
+
+// 2. OrderService — chỉ publish, không biết ai xử lý
+@Service
+public class OrderService {
+    private final OrderRepository orderRepository;
+    private final ApplicationEventPublisher eventPublisher;
+
+    public OrderService(OrderRepository orderRepository, ApplicationEventPublisher eventPublisher) {
+        this.orderRepository = orderRepository;
+        this.eventPublisher = eventPublisher;
+    }
+
+    @Transactional
+    public void placeOrder(Order order) {
+        orderRepository.save(order);
+        eventPublisher.publishEvent(new OrderPlacedEvent(order));
+        // Nếu method này rollback (exception xảy ra sau dòng publishEvent),
+        // các @TransactionalEventListener(AFTER_COMMIT) sẽ KHÔNG chạy
+    }
+}
+
+// 3. Các listener độc lập
+@Component
+public class EmailNotificationListener {
+    @Async
+    @EventListener
+    public void onOrderPlaced(OrderPlacedEvent event) {
+        System.out.println("Gửi email xác nhận đơn #" + event.getOrder().getId());
+    }
+}
+
+@Component
+public class LoyaltyPointListener {
+    @Async
+    @EventListener
+    public void onOrderPlaced(OrderPlacedEvent event) {
+        System.out.println("Cộng điểm tích lũy cho đơn #" + event.getOrder().getId());
+    }
+}
+
+// InventoryListener CHỈ chạy khi transaction gốc COMMIT thành công
+@Component
+public class InventoryListener {
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onOrderPlaced(OrderPlacedEvent event) {
+        System.out.println("Trừ tồn kho cho đơn #" + event.getOrder().getId());
+    }
+}
+```
+
+**Giải thích:**
+- `@EventListener` (Email, LoyaltyPoint): chạy mặc định đồng bộ, thêm `@Async` để không chặn luồng `placeOrder()` — phù hợp vì gửi email/cộng điểm không bắt buộc phải "đúng ngay lập tức" với việc lưu đơn hàng.
+- `@TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)` (Inventory): **bắt buộc** dùng cho nghiệp vụ nhạy cảm như trừ tồn kho — đảm bảo chỉ trừ tồn kho khi đơn hàng đã **chắc chắn được lưu thành công** xuống DB, tránh trường hợp trừ tồn kho "ma" cho 1 đơn hàng mà transaction sau đó rollback.
+- `OrderService` sau khi refactor **không hề biết** có bao nhiêu listener, hay chúng làm gì — thêm nghiệp vụ mới chỉ cần thêm 1 `@Component` mới, không đụng vào `OrderService`.
 
 </details>
 

@@ -3,6 +3,8 @@
 > **Mức ưu tiên: 🔴 Cao**
 > **Vì sao quan trọng:** Module 16 (Spring Security) đã cho bạn nền tảng Authentication/Authorization/JWT — module này mở rộng sang **toàn bộ các lớp lỗ hổng phổ biến nhất** mà OWASP (Open Web Application Security Project) tổng hợp từ hàng nghìn vụ tấn công thực tế trên toàn thế giới. Đây không phải kiến thức "để biết cho vui" — 1 lỗ hổng SQL Injection hay Broken Access Control có thể khiến toàn bộ dữ liệu người dùng bị đánh cắp, và là chủ đề bị soi kỹ trong mọi cuộc security audit/code review nghiêm túc.
 
+> **Phạm vi bài này:** Bao quát các lớp lỗ hổng OWASP Top 10 liên quan trực tiếp tới code Backend Spring Boot. A04 (Insecure Design) và A07 (Identification & Authentication Failures) không có mục riêng — A07 đã học kỹ ở Module 16, còn A04 là nguyên tắc thiết kế tổng quát thấm xuyên suốt mọi mục dưới đây hơn là 1 lỗ hổng kỹ thuật cụ thể có thể demo bằng code.
+
 ---
 
 ## Mục lục
@@ -17,10 +19,11 @@
 8. [A02: Cryptographic Failures](#8-a02-cryptographic-failures)
 9. [A06: Vulnerable and Outdated Components](#9-a06-vulnerable-and-outdated-components)
 10. [A09: Security Logging & Monitoring Failures](#10-a09-security-logging--monitoring-failures)
-11. [Checklist bảo mật cho Backend Developer](#11-checklist-bảo-mật-cho-backend-developer)
-12. [⚠️ Các bẫy hay gặp](#12-các-bẫy-hay-gặp)
-13. [Tổng kết — Bảng ghi nhớ nhanh](#13-tổng-kết--bảng-ghi-nhớ-nhanh)
-14. [Bài tập luyện tập](#14-bài-tập-luyện-tập)
+11. [A10: Server-Side Request Forgery (SSRF)](#11-a10-server-side-request-forgery-ssrf)
+12. [Checklist bảo mật cho Backend Developer](#12-checklist-bảo-mật-cho-backend-developer)
+13. [⚠️ Các bẫy hay gặp](#13-các-bẫy-hay-gặp)
+14. [Tổng kết — Bảng ghi nhớ nhanh](#14-tổng-kết--bảng-ghi-nhớ-nhanh)
+15. [Bài tập luyện tập](#15-bài-tập-luyện-tập)
 
 ---
 
@@ -38,7 +41,7 @@ A06: Vulnerable and Outdated Components (mục 9)
 A07: Identification & Authentication Failures  <- Đã học ở Module 16
 A08: Software and Data Integrity Failures (Insecure Deserialization - mục 7)
 A09: Security Logging & Monitoring Failures (mục 10)
-A10: Server-Side Request Forgery (SSRF)
+A10: Server-Side Request Forgery (SSRF)  (mục 11)
 ```
 
 > **Đây KHÔNG phải danh sách "học thuộc để thi"** — mỗi mục là 1 **lớp lỗ hổng** với nguyên nhân gốc rễ và cách phòng chống cụ thể. Hiểu bản chất quan trọng hơn nhớ tên gọi.
@@ -130,7 +133,36 @@ ProcessBuilder pb = new ProcessBuilder("ping", userInput); // userInput được
                                                               // không bị shell "diễn giải" thành nhiều lệnh
 ```
 
-> **Nguyên tắc chung của MỌI loại Injection:** KHÔNG BAO GIỜ nối input user trực tiếp vào bất kỳ ngôn ngữ "lệnh" nào (SQL, Shell command, LDAP query, XPath...) — luôn dùng cơ chế tham số hóa (parameterization) mà ngôn ngữ/thư viện đó cung cấp sẵn.
+### XXE (XML External Entity) — Injection ẩn trong việc parse XML
+
+**Nguyên nhân gốc rễ:** Chuẩn XML cho phép khai báo **Entity bên ngoài (External Entity)** — nếu Backend parse XML từ nguồn không tin cậy mà **không tắt tính năng này**, kẻ tấn công có thể khiến parser đọc **file bất kỳ trên server** hoặc gọi request tới hệ thống nội bộ:
+
+```xml
+<?xml version="1.0"?>
+<!DOCTYPE foo [
+  <!ENTITY xxe SYSTEM "file:///etc/passwd">  <!-- Khai báo Entity trỏ tới file nhạy cảm trên server -->
+]>
+<user><name>&xxe;</name></user>
+<!-- Nếu server parse và "diễn giải" &xxe;, nội dung file /etc/passwd sẽ bị NHÚNG vào response trả về -->
+```
+
+```java
+// ❌ NGUY HIỂM - cấu hình mặc định của nhiều XML Parser CHO PHÉP External Entity
+DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+DocumentBuilder builder = factory.newDocumentBuilder(); // Dễ bị khai thác XXE nếu input XML không tin cậy
+
+// ✅ AN TOÀN - tắt tường minh External Entity và DOCTYPE
+DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
+factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+factory.setXIncludeAware(false);
+factory.setExpandEntityReferences(false);
+```
+
+> **Liên hệ thực tế Spring Boot:** Ứng dụng REST API thuần JSON (không nhận XML từ client) gần như **miễn nhiễm tự nhiên** với XXE — lỗ hổng này chủ yếu xuất hiện ở API nhận XML (SOAP Web Service cũ, tích hợp hệ thống doanh nghiệp legacy, xử lý file upload dạng XML/SVG/DOCX). Nếu ứng dụng không có nhu cầu parse XML từ nguồn ngoài, không cần lo lắng nhiều — nhưng nếu có, đây là 1 trong những lỗ hổng bị bỏ sót nhiều nhất vì cấu hình mặc định của hầu hết XML Parser đều **KHÔNG an toàn**.
+
+> **Nguyên tắc chung của MỌI loại Injection:** KHÔNG BAO GIỜ nối input user trực tiếp vào bất kỳ ngôn ngữ "lệnh" nào (SQL, Shell command, LDAP query, XPath...), và luôn tắt các tính năng "mở rộng nguy hiểm theo mặc định" (như External Entity của XML) — luôn dùng cơ chế tham số hóa (parameterization) hoặc cấu hình an toàn mà ngôn ngữ/thư viện đó cung cấp sẵn.
 
 ---
 
@@ -518,7 +550,78 @@ public class SecurityAuditLogger {
 
 ---
 
-## 11. Checklist bảo mật cho Backend Developer
+## 11. A10: Server-Side Request Forgery (SSRF)
+
+**SSRF** xảy ra khi ứng dụng Backend **thực hiện request HTTP tới 1 URL do CHÍNH USER cung cấp** — kẻ tấn công lợi dụng để buộc **server** (không phải trình duyệt của nạn nhân) gửi request tới nơi mà bình thường họ **không thể truy cập trực tiếp** (mạng nội bộ, Cloud Metadata Service...).
+
+### Kịch bản điển hình — tính năng "Preview link" / "Tải ảnh từ URL"
+
+```java
+// ❌ NGUY HIỂM - Server tự động fetch BẤT KỲ URL nào user cung cấp, không kiểm soát
+@PostMapping("/import-image")
+public ImageResponse importFromUrl(@RequestParam String imageUrl) {
+    byte[] imageBytes = restTemplate.getForObject(imageUrl, byte[].class); // Server gọi TỚI URL bất kỳ!
+    return imageService.save(imageBytes);
+}
+```
+
+**Kịch bản tấn công:** Thay vì gửi 1 URL ảnh hợp lệ, kẻ tấn công gửi:
+
+```
+POST /import-image?imageUrl=http://169.254.169.254/latest/meta-data/iam/security-credentials/
+```
+
+→ `169.254.169.254` là địa chỉ **Cloud Metadata Service** nội bộ (AWS/GCP/Azure) — chỉ server (không phải người dùng bên ngoài) mới gọi được — trả về **credential/IAM Role** của chính server đó. Server (đóng vai trò "con rối") vô tình fetch và trả nội dung nhạy cảm này về cho kẻ tấn công, dù chính kẻ tấn công **không bao giờ truy cập trực tiếp** được địa chỉ nội bộ đó.
+
+```
+Các mục tiêu SSRF phổ biến khác:
+- http://localhost:8080/actuator/env  -> Đọc cấu hình nội bộ của CHÍNH server (liên hệ mục 6)
+- http://internal-admin-service:9000/  -> Truy cập service nội bộ không expose ra Internet
+- file:///etc/passwd                   -> Đọc file hệ thống (nếu thư viện HTTP client hỗ trợ scheme file://)
+```
+
+### Giải pháp — Whitelist domain/IP được phép, chặn dải IP nội bộ
+
+```java
+@Component
+public class SsrfProtectionValidator {
+
+    private static final List<String> ALLOWED_HOSTS = List.of("cdn.trusted-partner.com", "images.example.com");
+
+    public void validateUrl(String urlString) {
+        URI uri = URI.create(urlString);
+        String host = uri.getHost();
+
+        // 1. Whitelist domain - CHỈ cho phép các domain đã biết trước, KHÔNG cho URL tùy ý
+        if (!ALLOWED_HOSTS.contains(host)) {
+            throw new SecurityException("Domain không được phép: " + host);
+        }
+
+        // 2. Chặn địa chỉ IP nội bộ/loopback (dù domain resolve ra IP nội bộ sau DNS)
+        try {
+            InetAddress address = InetAddress.getByName(host);
+            if (address.isLoopbackAddress() || address.isSiteLocalAddress() || address.isLinkLocalAddress()) {
+                throw new SecurityException("Không được phép truy cập địa chỉ mạng nội bộ: " + host);
+            }
+        } catch (UnknownHostException e) {
+            throw new SecurityException("Không thể phân giải domain: " + host);
+        }
+
+        // 3. Chỉ cho phép scheme http/https, chặn file://, gopher://, ftp://...
+        if (!uri.getScheme().equals("http") && !uri.getScheme().equals("https")) {
+            throw new SecurityException("Chỉ cho phép HTTP/HTTPS");
+        }
+    }
+}
+```
+
+⚠️ **Bẫy tinh vi — DNS Rebinding:** Chỉ validate hostname **1 lần TRƯỚC KHI** gọi request không hoàn toàn an toàn — kẻ tấn công có thể dùng kỹ thuật **DNS Rebinding** (domain hợp lệ lúc validate trỏ tới IP công khai, nhưng đổi sang IP nội bộ ngay TRƯỚC KHI HTTP client thực sự kết nối) để vượt qua whitelist theo domain. Phòng thủ triệt để hơn cần validate **địa chỉ IP thực tế** ngay tại thời điểm kết nối (hoặc dùng thư viện/proxy chuyên dụng chặn SSRF ở tầng network).
+
+> **Nguyên tắc chung:** Bất kỳ tính năng nào cho phép user gián tiếp điều khiển **server tự gọi ra ngoài** (fetch URL, webhook callback, import file từ link, generate PDF từ URL...) đều là **ứng viên tiềm năng của SSRF** — luôn whitelist đích đến, không bao giờ tin tưởng URL do client cung cấp là "an toàn" chỉ vì nó có định dạng URL hợp lệ.
+
+---
+
+## 12. Checklist bảo mật cho Backend Developer
 
 Danh sách kiểm tra thực chiến trước khi đưa API/tính năng mới lên production:
 
@@ -535,6 +638,7 @@ Danh sách kiểm tra thực chiến trước khi đưa API/tính năng mới l�
   □ MỌI query DB dùng Parameterized Query (JPQL/Derived Query/Named Parameter Native Query)
   □ Input được validate (@Valid, Bean Validation) TRƯỚC KHI xử lý
   □ Output HTML được escape đúng cách (chống XSS)
+  □ XML Parser tắt External Entity nếu ứng dụng có nhận XML từ client (chống XXE)
 
 □ Transport & Storage Security
   □ HTTPS bắt buộc cho MỌI API (không chỉ login)
@@ -550,11 +654,15 @@ Danh sách kiểm tra thực chiến trước khi đưa API/tính năng mới l�
   □ Chạy Dependency Check định kỳ, cập nhật khi có CVE nghiêm trọng
   □ Log đầy đủ sự kiện bảo mật (login fail, access denied) - có Alert cho bất thường
   □ KHÔNG BAO GIỜ log password/token/dữ liệu nhạy cảm
+
+□ Server-Side Request (SSRF)
+  □ MỌI tính năng cho phép server tự gọi ra ngoài theo URL do user cung cấp
+    (import ảnh, webhook, preview link...) đều có whitelist domain + chặn dải IP nội bộ
 ```
 
 ---
 
-## 12. ⚠️ Các bẫy hay gặp
+## 13. ⚠️ Các bẫy hay gặp
 
 1. **Tin tưởng tuyệt đối vào JPA/Hibernate "tự động an toàn"** — quên rằng Native Query nối chuỗi thủ công vẫn có thể SQL Injection dù đang dùng Spring Data JPA.
 
@@ -576,13 +684,18 @@ Danh sách kiểm tra thực chiến trước khi đưa API/tính năng mới l�
 
 10. **Dựa hoàn toàn vào `SameSite=Lax` mà bỏ qua hoàn toàn CSRF Token** cho các thao tác cực kỳ nhạy cảm (chuyển tiền, đổi password) — nên áp dụng **defense in depth**, không chỉ dựa vào 1 lớp bảo vệ duy nhất.
 
+11. **Để XML Parser dùng cấu hình mặc định (chưa tắt External Entity)** khi có tính năng nhận XML/SVG/DOCX từ client — mở đường cho XXE đọc file hệ thống hoặc SSRF gián tiếp.
+
+12. **Cho phép server tự fetch URL do user cung cấp mà không whitelist** (tính năng preview link, import ảnh, webhook) — mở đường cho SSRF khai thác Cloud Metadata Service hoặc mạng nội bộ.
+
 ---
 
-## 13. Tổng kết — Bảng ghi nhớ nhanh
+## 14. Tổng kết — Bảng ghi nhớ nhanh
 
 | Khái niệm | Ghi nhớ nhanh |
 |---|---|
 | SQL Injection | Luôn dùng Parameterized Query — JPA/Hibernate an toàn mặc định, cẩn thận Native Query nối chuỗi |
+| XXE | XML Parser mặc định KHÔNG an toàn — luôn tắt External Entity khi nhận XML từ client |
 | XSS | Escape Output (không chỉ Validate Input) — Stored/Reflected/DOM-based |
 | SameSite Cookie | `Strict`/`Lax`/`None` — `Lax` là mặc định hiện đại, chặn phần lớn CSRF cổ điển |
 | IDOR | Lỗi Broken Access Control phổ biến nhất — LUÔN check Ownership, không chỉ check Authentication |
@@ -592,10 +705,11 @@ Danh sách kiểm tra thực chiến trước khi đưa API/tính năng mới l�
 | Insecure Deserialization | Tránh Java Native Serialization; giới hạn whitelist type khi Polymorphic JSON |
 | Vulnerable Components | Quét CVE định kỳ (OWASP Dependency-Check), cập nhật thư viện thường xuyên |
 | Security Logging | Log sự kiện bảo mật (login fail, access denied) + Alert chủ động |
+| SSRF | Server tự gọi URL do user cung cấp — whitelist domain + chặn IP nội bộ, cẩn thận DNS Rebinding |
 
 ---
 
-## 14. Bài tập luyện tập
+## 15. Bài tập luyện tập
 
 ### Phần A — Trắc nghiệm nhận định (Đúng/Sai + giải thích)
 
@@ -607,8 +721,10 @@ Danh sách kiểm tra thực chiến trước khi đưa API/tính năng mới l�
 6. Bind trực tiếp Request Body JSON vào JPA Entity (thay vì dùng DTO riêng) có thể dẫn tới lỗ hổng Mass Assignment.
 7. Log4Shell là ví dụ về lỗ hổng ở tầng Dependency (thư viện bên thứ 3), không phải lỗi trong code của riêng ứng dụng.
 8. HTTPS chỉ cần thiết cho trang đăng nhập, các API khác không chứa thông tin nhạy cảm thì không cần HTTPS.
+9. SSRF cho phép kẻ tấn công buộc CHÍNH SERVER gửi request tới địa chỉ nội bộ mà kẻ tấn công không thể truy cập trực tiếp từ bên ngoài.
+10. Cấu hình mặc định của hầu hết XML Parser trong Java đã tự động tắt External Entity, không cần cấu hình thêm gì để chống XXE.
 
-### Phần B — Bài tập viết code (5 bài)
+### Phần B — Bài tập viết code (6 bài)
 
 **Bài 1:** Cho đoạn code sau có lỗ hổng SQL Injection, hãy chỉ ra lỗi và sửa lại dùng Named Parameter:
 ```java
@@ -624,6 +740,8 @@ List<Product> findByCategory(@Param("category") String category);
 
 **Bài 5:** Giải thích (bằng ví dụ code minh họa) sự khác biệt giữa việc HASH và ENCRYPT 1 chuỗi số thẻ tín dụng — chỉ ra tại sao dùng sai kỹ thuật (hash số thẻ, hoặc encrypt password) đều là lỗi nghiêm trọng.
 
+**Bài 6:** Cho 1 tính năng `POST /webhooks/register` cho phép user đăng ký 1 URL để hệ thống gọi callback khi có sự kiện xảy ra. Viết 1 `SsrfProtectionValidator` đơn giản kiểm tra URL trước khi lưu: (a) chỉ cho phép scheme `https`, (b) chặn các địa chỉ IP loopback/site-local/link-local, (c) giải thích ngắn gọn vì sao chỉ validate 1 lần lúc đăng ký chưa đủ an toàn tuyệt đối (liên hệ DNS Rebinding).
+
 ### Phần C — Gợi ý đáp án
 
 <details>
@@ -637,6 +755,8 @@ List<Product> findByCategory(@Param("category") String category);
 6. **Đúng.** Đây chính là cơ chế của lỗ hổng Mass Assignment — field không mong muốn (VD: "role") có thể bị user tự set qua Request Body nếu bind trực tiếp vào Entity.
 7. **Đúng.** Log4Shell nằm trong thư viện Log4j (dependency bên thứ 3), ảnh hưởng tới MỌI ứng dụng dùng thư viện đó, không phải lỗi code riêng của từng ứng dụng.
 8. **Sai.** HTTPS nên áp dụng cho TOÀN BỘ API, không chỉ trang đăng nhập — kể cả API "không nhạy cảm" vẫn có thể mang JWT Token trong Header, có nguy cơ bị đánh cắp qua Man-in-the-Middle nếu không có HTTPS.
+9. **Đúng.** Đây chính là bản chất của SSRF — server đóng vai trò "con rối" gọi request giúp kẻ tấn công tới nơi họ không tự truy cập được (mạng nội bộ, Cloud Metadata Service).
+10. **Sai.** Ngược lại — cấu hình mặc định của hầu hết XML Parser trong Java KHÔNG an toàn (CHO PHÉP External Entity), phải chủ động tắt tường minh (`disallow-doctype-decl`, `external-general-entities`...) để chống XXE.
 
 </details>
 
@@ -809,6 +929,55 @@ public class CreditCardExample {
 2. **Nếu ENCRYPT password** (thay vì Hash bằng BCrypt): Về mặt kỹ thuật vẫn "chạy được" (encrypt rồi decrypt để so sánh) — nhưng **mất hoàn toàn lợi ích bảo mật đặc thù của BCrypt**: BCrypt được thiết kế **CỐ Ý CHẬM** (work factor có thể điều chỉnh) để chống Brute-force, và tự động sinh **salt ngẫu nhiên** cho mỗi lần hash. Dùng AES thay thế nghĩa là: (a) tốc độ decrypt nhanh hơn nhiều → dễ bị brute-force hơn, và (b) nếu **secretKey của AES bị lộ** (VD: rò rỉ config), TOÀN BỘ password của MỌI user đều bị giải mã ngay lập tức — trong khi với BCrypt, dù database bị lộ, kẻ tấn công vẫn phải brute-force TỪNG password riêng lẻ (rất tốn thời gian/tài nguyên).
 
 **Kết luận:** Chọn đúng công cụ (Hash cho dữ liệu không cần đọc lại như password; Encrypt cho dữ liệu cần đọc lại như số thẻ) không chỉ là vấn đề "đúng chức năng" mà còn là vấn đề **bảo mật cốt lõi** — dùng sai có thể phá vỡ hoàn toàn tính năng hoặc gây hậu quả bảo mật nghiêm trọng khi có sự cố rò rỉ dữ liệu.
+
+</details>
+
+<details>
+<summary><b>Đáp án Bài 6</b></summary>
+
+```java
+@Component
+public class SsrfProtectionValidator {
+
+    public void validateWebhookUrl(String urlString) {
+        URI uri;
+        try {
+            uri = new URI(urlString);
+        } catch (URISyntaxException e) {
+            throw new IllegalArgumentException("URL không hợp lệ: " + urlString);
+        }
+
+        // (a) Chỉ cho phép scheme https
+        if (!"https".equalsIgnoreCase(uri.getScheme())) {
+            throw new SecurityException("Webhook URL chỉ được phép dùng HTTPS");
+        }
+
+        String host = uri.getHost();
+        if (host == null) {
+            throw new SecurityException("URL không hợp lệ, thiếu host");
+        }
+
+        // (b) Chặn địa chỉ IP loopback/site-local/link-local
+        try {
+            InetAddress address = InetAddress.getByName(host);
+            if (address.isLoopbackAddress()
+                    || address.isSiteLocalAddress()
+                    || address.isLinkLocalAddress()
+                    || address.isAnyLocalAddress()) {
+                throw new SecurityException("Không được phép đăng ký webhook trỏ tới địa chỉ mạng nội bộ: " + host);
+            }
+        } catch (UnknownHostException e) {
+            throw new SecurityException("Không thể phân giải domain: " + host);
+        }
+    }
+}
+```
+
+**(c) Vì sao chỉ validate 1 lần lúc đăng ký chưa đủ an toàn tuyệt đối — DNS Rebinding:**
+
+Kỹ thuật **DNS Rebinding** khai thác khoảng thời gian giữa lúc **validate URL** và lúc **thực sự gọi webhook**: kẻ tấn công đăng ký domain của họ (VD: `evil.com`) trỏ tới 1 địa chỉ IP **công khai hợp lệ** — validator ở bước đăng ký kiểm tra `evil.com` → thấy IP công khai → PASS. Sau đó, trước khi hệ thống thực sự gọi webhook (có thể vài phút/giờ sau, khi có sự kiện xảy ra), kẻ tấn công **đổi DNS record** của `evil.com` để trỏ sang địa chỉ nội bộ (VD: `169.254.169.254` hoặc `127.0.0.1`). Vì DNS TTL rất ngắn, lần resolve DNS tiếp theo (lúc hệ thống thực sự gọi HTTP request) sẽ trả về địa chỉ nội bộ MỚI, vượt qua hoàn toàn validation đã làm trước đó.
+
+**Giải pháp triệt để hơn:** Validate địa chỉ IP **ngay tại thời điểm kết nối thực tế** (không chỉ lúc đăng ký) — hoặc dùng 1 lớp Proxy/Egress Gateway chuyên dụng đứng giữa server và Internet, có khả năng chặn theo IP đích thực tế của MỌI request đi ra, độc lập với DNS resolve có thể bị thao túng.
 
 </details>
 

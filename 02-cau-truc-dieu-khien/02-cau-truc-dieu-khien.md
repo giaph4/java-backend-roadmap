@@ -31,7 +31,7 @@ Mọi cấu trúc rẽ nhánh/vòng lặp trong Java (`if`, `while`, `for`, `do-
 ```java
 int x = 5;
 if (x) { ... }          // ❌ lỗi compile: "incompatible types: int cannot be converted to boolean"
-if (x != 0) { ... }     // ✅
+        if (x != 0) { ... }     // ✅
 ```
 
 Hệ quả tích cực: lỗi gõ nhầm `=` thành `==` **bị compiler bắt** trong đa số trường hợp:
@@ -53,7 +53,7 @@ if (a = 2) { ... }      // ❌ lỗi compile — (a = 2) có kiểu int, không 
 ```java
 Boolean flag = someMap.get("enabled");   // có thể null
 if (flag) { ... }                        // NullPointerException nếu flag == null (unboxing null)
-if (Boolean.TRUE.equals(flag)) { ... }   // ✅ null-safe
+        if (Boolean.TRUE.equals(flag)) { ... }   // ✅ null-safe
 ```
 
 ### Short-circuit — thứ tự đặt điều kiện có ý nghĩa
@@ -62,7 +62,7 @@ if (Boolean.TRUE.equals(flag)) { ... }   // ✅ null-safe
 
 ```java
 if (user != null && user.isActive()) { ... }        // an toàn
-if (list.isEmpty() || list.get(0) == null) { ... }   // không IndexOutOfBounds
+        if (list.isEmpty() || list.get(0) == null) { ... }   // không IndexOutOfBounds
 ```
 
 ### Phủ định điều kiện — luật De Morgan
@@ -83,13 +83,13 @@ if (list.isEmpty() || list.get(0) == null) { ... }   // không IndexOutOfBounds
 int score = 75;
 
 if (score >= 90) {
-    System.out.println("Xuất sắc");
+        System.out.println("Xuất sắc");
 } else if (score >= 70) {
-    System.out.println("Khá");
+        System.out.println("Khá");
 } else if (score >= 50) {
-    System.out.println("Trung bình");
+        System.out.println("Trung bình");
 } else {
-    System.out.println("Yếu");
+        System.out.println("Yếu");
 }
 ```
 
@@ -100,7 +100,7 @@ if (score >= 90) {
 ```java
 // Nguy hiểm — chỉ dòng đầu thuộc if
 if (score >= 90)
-    System.out.println("Xuất sắc");
+        System.out.println("Xuất sắc");
     System.out.println("Chúc mừng!"); // LUÔN chạy, không phụ thuộc if
 ```
 
@@ -146,11 +146,11 @@ Java không có tiền xử lý `#ifdef`. Nhưng `if` trên **compile-time const
 ```java
 static final boolean DEBUG = false;
 if (DEBUG) {
-    System.out.println("trace...");   // hợp lệ — khối này coi là "unreachable có điều kiện",
+        System.out.println("trace...");   // hợp lệ — khối này coi là "unreachable có điều kiện",
 }                                     // JIT/compiler có thể loại bỏ; KHÔNG bị lỗi unreachable
 
-while (false) { x = 1; }              // ❌ lỗi compile "unreachable statement" (luật riêng của while)
-if (false) { x = 1; }                // ✅ được phép (cố tình, để hỗ trợ "flag off")
+        while (false) { x = 1; }              // ❌ lỗi compile "unreachable statement" (luật riêng của while)
+        if (false) { x = 1; }                // ✅ được phép (cố tình, để hỗ trợ "flag off")
 ```
 
 ---
@@ -184,19 +184,19 @@ int day = 3;
 String dayName;
 
 switch (day) {
-    case 1:
-        dayName = "Thứ Hai";
+        case 1:
+dayName = "Thứ Hai";
         break;
-    case 2:
-        dayName = "Thứ Ba";
+        case 2:
+dayName = "Thứ Ba";
         break;
-    case 3:
-        dayName = "Thứ Tư";
+        case 3:
+dayName = "Thứ Tư";
         break;
-    default:
-        dayName = "Không xác định";
+default:
+dayName = "Không xác định";
         break;
-}
+        }
 ```
 
 ### Kiểu được phép làm biểu thức `switch`
@@ -222,10 +222,10 @@ Compiler sinh mã hai bước: `switch` trên `str.hashCode()` để chọn nhó
 enum Status { NEW, PAID, SHIPPED }
 
 switch (status) {          // KHÔNG viết case Status.NEW — chỉ `case NEW`
-    case NEW -> ...;
-    case PAID -> ...;
-    case SHIPPED -> ...;
-}
+        case NEW -> ...;
+        case PAID -> ...;
+        case SHIPPED -> ...;
+        }
 ```
 
 `switch (someEnum)` cũng ném NPE nếu `someEnum == null` (kiểu cổ điển).
@@ -248,11 +248,11 @@ switch (status) {          // KHÔNG viết case Status.NEW — chỉ `case NEW`
 
 ```java
 switch (day) {
-    case 6:
-    case 7:
+        case 6:
+        case 7:
         System.out.println("Cuối tuần");
         break;
-    default:
+default:
         System.out.println("Ngày thường");
 }
 ```
@@ -261,14 +261,14 @@ switch (day) {
 
 ```java
 switch (x) {
-    case 1:
-        int temp = 10;      // khai báo trong case 1
+        case 1:
+int temp = 10;      // khai báo trong case 1
         break;
-    case 2:
-        temp = 20;          // VẪN NHÌN THẤY temp (cùng scope switch) — nhưng có thể chưa gán → cẩn thận
+                case 2:
+temp = 20;          // VẪN NHÌN THẤY temp (cùng scope switch) — nhưng có thể chưa gán → cẩn thận
         // int temp = 30;   // ❌ lỗi: biến trùng tên trong cùng scope
         break;
-}
+        }
 ```
 
 Muốn scope riêng cho từng case: bọc thân case bằng `{ }`.
@@ -305,9 +305,9 @@ String dayName = switch (day) {
 ```java
 // dạng statement mũi tên — an toàn hơn switch statement cổ điển, không cần break
 switch (command) {
-    case "start" -> service.start();
+        case "start" -> service.start();
     case "stop"  -> service.stop();
-    default      -> log.warn("unknown: {}", command);
+default      -> log.warn("unknown: {}", command);
 }
 ```
 
@@ -392,8 +392,8 @@ String desc = switch (obj) {
 
 ```java
 if (obj instanceof String s && s.length() > 3) {
-    System.out.println(s.toUpperCase());   // s tự động ép kiểu, chỉ trong phạm vi điều kiện đúng
-}
+        System.out.println(s.toUpperCase());   // s tự động ép kiểu, chỉ trong phạm vi điều kiện đúng
+        }
 ```
 
 Biến `s` có phạm vi "theo luồng" (flow scoping): chỉ tồn tại ở nơi mà điều kiện `instanceof` chắc chắn đúng.
@@ -406,7 +406,7 @@ Biến `s` có phạm vi "theo luồng" (flow scoping): chỉ tồn tại ở n�
 
 ```java
 for (int i = 0; i < 5; i++) {
-    System.out.println("Lần lặp: " + i);
+        System.out.println("Lần lặp: " + i);
 }
 ```
 
@@ -414,11 +414,11 @@ Cấu trúc `for (khởi tạo; điều kiện; cập nhật)` — cả 3 phần
 
 ```java
 for (;;) { ... }                     // vòng lặp vô hạn (tương đương while(true))
-for (int i = 0; i < n; ) { ...; i += step; }  // cập nhật ở thân
+        for (int i = 0; i < n; ) { ...; i += step; }  // cập nhật ở thân
 
 // nhiều biến + toán tử dấu phẩy (chỉ dùng được trong phần khởi tạo & cập nhật của for)
-for (int lo = 0, hi = a.length - 1; lo < hi; lo++, hi--) {
-    int t = a[lo]; a[lo] = a[hi]; a[hi] = t;   // đảo mảng tại chỗ
+        for (int lo = 0, hi = a.length - 1; lo < hi; lo++, hi--) {
+int t = a[lo]; a[lo] = a[hi]; a[hi] = t;   // đảo mảng tại chỗ
 }
 ```
 
@@ -441,9 +441,9 @@ for (int lo = 0, hi = a.length - 1; lo < hi; lo++, hi--) {
 ```java
 int attempts = 0;
 while (attempts < 3) {
-    System.out.println("Thử lần " + attempts);
-    attempts++;                      // QUÊN dòng này → vòng lặp vô hạn
-}
+        System.out.println("Thử lần " + attempts);
+attempts++;                      // QUÊN dòng này → vòng lặp vô hạn
+        }
 ```
 
 > ⚠️ `while (cond);` (có dấu `;` ngay sau) là **vòng lặp với thân rỗng** — bug thầm lặng. Tương tự `for (...);`.
@@ -453,8 +453,8 @@ while (attempts < 3) {
 ```java
 int choice;
 do {
-    choice = readMenuChoice();
-    handle(choice);
+choice = readMenuChoice();
+handle(choice);
 } while (choice != 0);               // BẮT BUỘC dấu ; sau while
 ```
 
@@ -465,10 +465,10 @@ Chọn `do-while` khi thân **phải chạy trước** rồi mới có dữ li�
 ```java
 int[] scores = {90, 85, 77};
 for (int score : scores) {
-    System.out.println(score);
+        System.out.println(score);
 }
 
-for (String name : List.of("a", "b")) { ... }   // dùng được với mọi Iterable
+        for (String name : List.of("a", "b")) { ... }   // dùng được với mọi Iterable
 ```
 
 Compiler "giải đường" (desugar) for-each thành:
@@ -486,10 +486,10 @@ Hạn chế:
 
 ```java
 for (int i = 0; i < n; i++) {
-    for (int j = 0; j < m; j++) {
+        for (int j = 0; j < m; j++) {
         // chạy n * m lần — độ phức tạp O(n·m)
-    }
-}
+        }
+        }
 ```
 
 | Kỹ thuật tối ưu | Ý nghĩa |
@@ -510,13 +510,13 @@ for (int i = 0; i < n; i++) {
 
 ```java
 for (int i = 1; i <= 10; i++) {
-    if (i == 5) break;          // in: 1 2 3 4
-    System.out.println(i);
+        if (i == 5) break;          // in: 1 2 3 4
+        System.out.println(i);
 }
 
-for (int i = 1; i <= 10; i++) {
-    if (i % 2 == 0) continue;   // in: 1 3 5 7 9
-    System.out.println(i);
+        for (int i = 1; i <= 10; i++) {
+        if (i % 2 == 0) continue;   // in: 1 3 5 7 9
+        System.out.println(i);
 }
 ```
 
@@ -546,21 +546,21 @@ for (int i = 1; i <= 10; i++) {
 
 ```java
 outer:
-for (int i = 0; i < rows; i++) {
-    for (int j = 0; j < cols; j++) {
+        for (int i = 0; i < rows; i++) {
+        for (int j = 0; j < cols; j++) {
         if (matrix[i][j] == target) {
-            System.out.println("Thấy tại (" + i + "," + j + ")");
+        System.out.println("Thấy tại (" + i + "," + j + ")");
             break outer;            // thoát HẲN cả 2 vòng
         }
-    }
-}
+                }
+                }
 
 search:
-for (int i = 0; i < n; i++) {
-    for (int j = 0; j < n; j++) {
+        for (int i = 0; i < n; i++) {
+        for (int j = 0; j < n; j++) {
         if (skip(i, j)) continue search;   // sang lần lặp kế của vòng NGOÀI
     }
-}
+            }
 ```
 
 - Nhãn là một *identifier* + dấu `:` đứng ngay trước vòng lặp (hoặc trước một block).
@@ -586,12 +586,12 @@ return x;
 System.out.println("never");   // ❌ "unreachable statement"
 
 while (true) { ... }
-System.out.println("after");   // ❌ unreachable — while(true) không thể kết thúc bình thường
+        System.out.println("after");   // ❌ unreachable — while(true) không thể kết thúc bình thường
 
 for (int i = 0; i < 10; i++) {
-    break;
-    i++;                        // ❌ unreachable
-}
+        break;
+i++;                        // ❌ unreachable
+        }
 ```
 
 Luật đặc biệt:
@@ -615,11 +615,11 @@ Biến `final` (kể cả blank final) và biến local phải được compiler
 ```java
 final int grade;
 switch (level) {
-    case 1 -> grade = 10;
-    case 2 -> grade = 8;
-    default -> grade = 5;        // BỎ nhánh này → lỗi "variable grade might not have been assigned"
-}
-System.out.println(grade);
+        case 1 -> grade = 10;
+        case 2 -> grade = 8;
+default -> grade = 5;        // BỎ nhánh này → lỗi "variable grade might not have been assigned"
+        }
+        System.out.println(grade);
 ```
 
 `throw`/`return` trong một nhánh khiến nhánh đó "không cần gán" vì luồng không đi tiếp:
@@ -627,7 +627,7 @@ System.out.println(grade);
 ```java
 int v;
 if (cond) v = 1;
-else throw new IllegalStateException();
+        else throw new IllegalStateException();
 System.out.println(v);          // ✅ OK — nhánh else không "chảy" xuống đây
 ```
 
@@ -820,7 +820,7 @@ void subsets(int[] nums, int idx, List<Integer> path, List<List<Integer>> out) {
 ```java
 int x = 5;
 if (x > 10)
-    System.out.println("A");
+        System.out.println("A");
     System.out.println("B");
 ```
 
@@ -828,10 +828,10 @@ if (x > 10)
 ```java
 int n = 2;
 switch (n) {
-    case 1: System.out.println("Một");
+        case 1: System.out.println("Một");
     case 2: System.out.println("Hai");
     case 3: System.out.println("Ba"); break;
-    default: System.out.println("Khác");
+default: System.out.println("Khác");
 }
 ```
 
@@ -839,18 +839,18 @@ switch (n) {
 ```java
 String result;
 switch (grade) {
-    case 'A': result = "Xuất sắc"; break;
-    case 'B': result = "Khá"; break;
-    default:  result = "Cần cố gắng";
-}
+        case 'A': result = "Xuất sắc"; break;
+        case 'B': result = "Khá"; break;
+default:  result = "Cần cố gắng";
+        }
 ```
 
 **Câu 4.** Chạy bao nhiêu lần lặp, in ra gì?
 ```java
 for (int i = 0; i < 10; i++) {
-    if (i == 3) continue;
-    if (i == 7) break;
-    System.out.println(i);
+        if (i == 3) continue;
+        if (i == 7) break;
+        System.out.println(i);
 }
 ```
 
@@ -913,29 +913,29 @@ System.out.println(s);
 **Câu 10.** Vòng lặp sau kết thúc không? Vì sao?
 ```java
 for (int i = 1; i > 0; i++) {
-    // ...
-}
+        // ...
+        }
 ```
 
 **Câu 11.** In ra gì?
 ```java
 for (int i = 0; i < 3; i++) {
-    for (int j = 0; j < 3; j++) {
+        for (int j = 0; j < 3; j++) {
         if (j == 2) break;
         if (i == 2) continue;
         System.out.print(i + "" + j + " ");
     }
-}
+            }
 ```
 
 **Câu 12.** Đoạn này in ra gì, và điểm bẫy ở đâu?
 ```java
 int i = 0;
 while (i < 3) {
-    if (i == 1) continue;
-    System.out.println(i);
-    i++;
-}
+        if (i == 1) continue;
+        System.out.println(i);
+i++;
+        }
 ```
 
 ---

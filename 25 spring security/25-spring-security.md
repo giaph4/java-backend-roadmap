@@ -3,6 +3,8 @@
 > **Mức ưu tiên: 🔴 Cao**
 > **Vì sao quan trọng:** Bảo mật không phải là tính năng "thêm vào sau" — 1 lỗ hổng bảo mật (JWT không verify đúng, password lưu plaintext, thiếu CORS/CSRF protection) có thể làm lộ toàn bộ dữ liệu người dùng và phá hủy uy tín hệ thống. Đây cũng là chủ đề bị hỏi sâu nhất trong phỏng vấn Backend — không chỉ "dùng annotation nào" mà là **hiểu đúng cơ chế** Filter Chain, vì sao JWT phù hợp với REST hơn Session, và các lỗ hổng bảo mật kinh điển (OWASP Top 10 liên quan) để tránh mắc phải.
 
+> **Phạm vi bài này:** Tập trung vào cơ chế **Authentication/Authorization ở tầng ứng dụng Spring Boot** (Filter Chain, JWT, OAuth2, phân quyền, các lỗ hổng web kinh điển liên quan trực tiếp). Không đi sâu vào hạ tầng bảo mật mạng (Firewall, WAF, VPN), mã hóa dữ liệu ở tầng lưu trữ (Database Encryption at Rest), hay triển khai đầy đủ 1 OAuth2 Authorization Server (chỉ học vai trò Client/Resource Server).
+
 ---
 
 ## Mục lục
@@ -17,9 +19,12 @@
 8. [Method-level Security](#8-method-level-security)
 9. [CORS](#9-cors)
 10. [CSRF](#10-csrf)
-11. [⚠️ Các bẫy hay gặp & lỗ hổng bảo mật kinh điển](#11-các-bẫy-hay-gặp)
-12. [Tổng kết — Bảng ghi nhớ nhanh](#12-tổng-kết--bảng-ghi-nhớ-nhanh)
-13. [Bài tập luyện tập](#13-bài-tập-luyện-tập)
+11. [Xử lý lỗi Authentication/Authorization chuẩn hóa](#11-xử-lý-lỗi-authenticationauthorization)
+12. [Vô hiệu hóa JWT — Logout & Token Revocation](#12-vô-hiệu-hóa-jwt--logout--token-revocation)
+13. [HTTP Security Headers](#13-http-security-headers)
+14. [⚠️ Các bẫy hay gặp & lỗ hổng bảo mật kinh điển](#14-các-bẫy-hay-gặp)
+15. [Tổng kết — Bảng ghi nhớ nhanh](#15-tổng-kết--bảng-ghi-nhớ-nhanh)
+16. [Bài tập luyện tập](#16-bài-tập-luyện-tập)
 
 ---
 
@@ -180,6 +185,8 @@ String hash2 = passwordEncoder.encode("mypassword"); // $2a$10$xyz789... (KHÁC 
 // Nhưng cả 2 đều matches("mypassword", hash1/hash2) == true
 ```
 
+> **Argon2 — lựa chọn hiện đại hơn BCrypt:** `Argon2PasswordEncoder` (thắng cuộc thi Password Hashing Competition 2015) chống được tấn công bằng phần cứng chuyên dụng (GPU/ASIC) tốt hơn BCrypt nhờ thiết kế "memory-hard" (tốn nhiều RAM để tính, không chỉ tốn CPU). BCrypt vẫn là lựa chọn an toàn và phổ biến áp đảo trong thực tế; Argon2 đáng cân nhắc cho hệ thống có yêu cầu bảo mật rất cao. Spring Security hỗ trợ sẵn cả 2 qua `DelegatingPasswordEncoder` (tự động nhận diện thuật toán dựa trên tiền tố `{bcrypt}`/`{argon2}` lưu kèm hash).
+
 ---
 
 ## 4. Session-based Authentication
@@ -279,6 +286,49 @@ Access Token hết hạn -> Client gọi POST /auth/refresh kèm Refresh Token
 ---
 
 ## 6. Triển khai JWT Authentication đầy đủ
+
+### UserDetailsService — cầu nối giữa Entity User và Spring Security
+
+Trước khi viết `JwtService`, cần 1 mảnh ghép nền tảng: Spring Security **không biết gì về Entity `User` của bạn** — nó chỉ làm việc với interface chuẩn `UserDetails`. `UserDetailsService` là nơi "dịch" Entity riêng của ứng dụng sang ngôn ngữ mà Spring Security hiểu, được `AuthenticationManager` (mục dưới) và `JwtAuthenticationFilter` gọi ngầm.
+
+```java
+// Entity User của ứng dụng implement trực tiếp UserDetails - cách gọn nhất
+@Entity
+public class User implements UserDetails {
+    @Id @GeneratedValue private Long id;
+    private String email;
+    private String password; // Đã hash bằng BCrypt
+    @Enumerated(EnumType.STRING)
+    private Role role;
+
+    @Override
+    public Collection<? extends GrantedAuthority> getAuthorities() {
+        return List.of(new SimpleGrantedAuthority("ROLE_" + role.name())); // Tiền tố "ROLE_" bắt buộc cho hasRole()
+    }
+
+    @Override public String getUsername() { return email; }
+    @Override public String getPassword() { return password; }
+    @Override public boolean isAccountNonExpired() { return true; }
+    @Override public boolean isAccountNonLocked() { return true; }
+    @Override public boolean isCredentialsNonExpired() { return true; }
+    @Override public boolean isEnabled() { return true; }
+}
+
+@Service
+public class CustomUserDetailsService implements UserDetailsService {
+
+    private final UserRepository userRepository;
+
+    @Override
+    public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
+        // Được AuthenticationManager gọi ngầm khi login, và JwtAuthenticationFilter gọi khi verify token
+        return userRepository.findByEmail(email)
+                .orElseThrow(() -> new UsernameNotFoundException("Không tìm thấy user: " + email));
+    }
+}
+```
+
+⚠️ **Bẫy hay gặp:** Quên tiền tố `"ROLE_"` khi tạo `SimpleGrantedAuthority` — `hasRole("ADMIN")` trong `authorizeHttpRequests`/`@PreAuthorize` **ngầm tự thêm** tiền tố `"ROLE_"` khi so khớp, nên authority phải lưu là `"ROLE_ADMIN"`, không phải `"ADMIN"`. Nếu cố tình lưu authority không có tiền tố, phải dùng `hasAuthority("ADMIN")` thay vì `hasRole("ADMIN")`.
 
 ### JwtService — tạo và verify token
 
@@ -402,6 +452,26 @@ public class AuthController {
     }
 }
 ```
+
+### @AuthenticationPrincipal — lấy user hiện tại gọn gàng trong Controller
+
+Thay vì tự gọi `SecurityContextHolder.getContext().getAuthentication()` thủ công ở mọi Controller, Spring Security cung cấp annotation tiêm thẳng `UserDetails` của user đang đăng nhập vào tham số method:
+
+```java
+@RestController
+@RequestMapping("/api/v1/orders")
+public class OrderController {
+
+    @GetMapping("/me")
+    public List<OrderResponse> getMyOrders(@AuthenticationPrincipal User currentUser) {
+        // Spring Security tự lấy principal từ SecurityContext, ép kiểu về User (Entity implement UserDetails)
+        // -> KHÔNG cần gọi SecurityContextHolder thủ công, code Controller sạch hơn nhiều
+        return orderService.findByUserId(currentUser.getId());
+    }
+}
+```
+
+> **Lưu ý:** `@AuthenticationPrincipal` chỉ hoạt động đúng kiểu khi `Authentication.getPrincipal()` thực sự là instance của kiểu tham số khai báo (ở đây `User` — vì Entity `User` implement `UserDetails` trực tiếp). Nếu dùng `UserDetails` chuẩn (không implement bởi Entity), phải ép kiểu hoặc tạo class `UserPrincipal` riêng bọc quanh Entity.
 
 ---
 
@@ -587,7 +657,151 @@ http.csrf(csrf -> csrf
 
 ---
 
-## 11. ⚠️ Các bẫy hay gặp & lỗ hổng bảo mật kinh điển
+## 11. Xử lý lỗi Authentication/Authorization
+
+Mặc định, khi request bị từ chối, Spring Security trả về response **HTML/plain text đơn giản** (không phải JSON) — không nhất quán với format Error Response đã chuẩn hóa qua `@RestControllerAdvice` ở Module 14. Cần khai báo tường minh 2 handler để REST API luôn trả JSON nhất quán:
+
+```java
+@Component
+public class RestAuthenticationEntryPoint implements AuthenticationEntryPoint {
+    // Được gọi khi request KHÔNG có/token không hợp lệ -> tương ứng 401
+    @Override
+    public void commence(HttpServletRequest request, HttpServletResponse response,
+                           AuthenticationException authException) throws IOException {
+        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+
+        ErrorResponse error = ErrorResponse.of(HttpStatus.UNAUTHORIZED,
+                "Chưa xác thực hoặc token không hợp lệ", request.getRequestURI());
+        new ObjectMapper().writeValue(response.getWriter(), error);
+    }
+}
+
+@Component
+public class RestAccessDeniedHandler implements AccessDeniedHandler {
+    // Được gọi khi user ĐÃ xác thực nhưng KHÔNG đủ quyền -> tương ứng 403
+    @Override
+    public void handle(HttpServletRequest request, HttpServletResponse response,
+                         AccessDeniedException accessDeniedException) throws IOException {
+        response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+
+        ErrorResponse error = ErrorResponse.of(HttpStatus.FORBIDDEN,
+                "Không đủ quyền truy cập tài nguyên này", request.getRequestURI());
+        new ObjectMapper().writeValue(response.getWriter(), error);
+    }
+}
+```
+
+```java
+@Bean
+public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+    http
+        .exceptionHandling(ex -> ex
+            .authenticationEntryPoint(restAuthenticationEntryPoint) // 401 - chưa xác thực
+            .accessDeniedHandler(restAccessDeniedHandler))          // 403 - không đủ quyền
+        // ... phần cấu hình khác
+        ;
+    return http.build();
+}
+```
+
+> **Vì sao cần tách riêng 2 handler này khỏi `@RestControllerAdvice`:** `GlobalExceptionHandler` (Module 14) chỉ bắt được exception ném ra **từ trong Controller trở đi** — `AuthenticationException`/`AccessDeniedException` bị Spring Security chặn **ở tầng Filter, TRƯỚC KHI** request chạm tới `DispatcherServlet`/Controller, nên `@ExceptionHandler` thông thường **không bắt được**. Đây là lý do Spring Security cần cơ chế riêng (`AuthenticationEntryPoint`/`AccessDeniedHandler`) để đảm bảo response lỗi vẫn nhất quán format với phần còn lại của API.
+
+---
+
+## 12. Vô hiệu hóa JWT — Logout & Token Revocation
+
+**Vấn đề cố hữu của JWT:** Vì server không lưu trạng thái (Stateless), 1 token đã phát hành **vẫn hợp lệ cho tới khi hết hạn tự nhiên** — không có cách nào "thu hồi" 1 token cụ thể theo cách truyền thống, kể cả khi user bấm "Đăng xuất" hay bị phát hiện tài khoản bị chiếm đoạt.
+
+### Giải pháp 1 — Token Blacklist (Redis, kèm TTL)
+
+```java
+@Service
+public class TokenBlacklistService {
+
+    private final StringRedisTemplate redisTemplate;
+
+    public void blacklist(String token, Duration remainingTtl) {
+        // Lưu token vào Redis với TTL = thời gian còn lại tới khi token tự hết hạn
+        // -> Không cần lưu vĩnh viễn, tự động dọn dẹp khi token đằng nào cũng hết hạn
+        redisTemplate.opsForValue().set("blacklist:" + token, "true", remainingTtl);
+    }
+
+    public boolean isBlacklisted(String token) {
+        return redisTemplate.hasKey("blacklist:" + token);
+    }
+}
+
+@PostMapping("/logout")
+public ResponseEntity<Void> logout(@RequestHeader("Authorization") String authHeader) {
+    String token = authHeader.substring(7);
+    Date expiration = jwtService.extractExpiration(token);
+    Duration remainingTtl = Duration.between(Instant.now(), expiration.toInstant());
+    if (!remainingTtl.isNegative()) {
+        tokenBlacklistService.blacklist(token, remainingTtl);
+    }
+    return ResponseEntity.noContent().build();
+}
+```
+
+```java
+// Trong JwtAuthenticationFilter, kiểm tra blacklist TRƯỚC khi chấp nhận token
+if (tokenBlacklistService.isBlacklisted(token)) {
+    filterChain.doFilter(request, response); // Không set Authentication -> coi như chưa đăng nhập
+    return;
+}
+```
+
+### Giải pháp 2 — Refresh Token Rotation (phổ biến hơn cho hệ thống lớn)
+
+Thay vì blacklist từng Access Token (tốn bộ nhớ nếu traffic lớn), chỉ quản lý **Refresh Token** trong database/Redis — vì Access Token sống rất ngắn (15 phút) nên rủi ro nếu bị lộ cũng giới hạn:
+
+```
+1. Refresh Token được lưu trong DB, gắn với user + thiết bị, có thể revoke bất kỳ lúc nào
+2. Mỗi lần dùng Refresh Token để lấy Access Token mới -> server CẤP LUÔN Refresh Token MỚI,
+   đồng thời VÔ HIỆU HÓA Refresh Token cũ ("rotation")
+3. Nếu phát hiện 1 Refresh Token đã bị vô hiệu hóa NHƯNG vẫn có người cố dùng lại
+   -> dấu hiệu token đã bị đánh cắp -> hệ thống tự động revoke TOÀN BỘ token của user đó
+```
+
+| | Token Blacklist | Refresh Token Rotation |
+|---|---|---|
+| Quản lý gì | Từng Access Token bị thu hồi | Chỉ Refresh Token (ít hơn nhiều) |
+| Chi phí lưu trữ | Tăng theo lượng logout/token bị revoke | Thấp hơn, chỉ 1 bản ghi Refresh Token/thiết bị |
+| Phát hiện đánh cắp token | Không tự phát hiện được | Có — phát hiện qua việc dùng lại token đã rotate |
+| Độ phức tạp implement | Đơn giản | Phức tạp hơn, cần quản lý theo thiết bị |
+
+> **Thực tế:** "Logout tất cả thiết bị" hay "đổi mật khẩu thì đăng xuất mọi nơi" luôn cần 1 dạng state ở server (blacklist hoặc bảng Refresh Token) — đây là điểm JWT "thuần Stateless" phải nhượng bộ ít nhiều để đáp ứng nhu cầu thực tế, và là câu hỏi kinh điển trong phỏng vấn ("JWT Stateless thì làm sao logout được?").
+
+---
+
+## 13. HTTP Security Headers
+
+Ngoài Authentication/Authorization, Spring Security còn tự động thêm (và cho phép tùy chỉnh) 1 số **HTTP Response Header** giúp trình duyệt tự bảo vệ người dùng khỏi các lớp tấn công phổ biến khác:
+
+```java
+http.headers(headers -> headers
+    .frameOptions(frame -> frame.deny()) // X-Frame-Options: DENY - chống Clickjacking (nhúng trang trong <iframe> ẩn)
+    .contentTypeOptions(Customizer.withDefaults()) // X-Content-Type-Options: nosniff - chống MIME-sniffing attack
+    .httpStrictTransportSecurity(hsts -> hsts
+        .includeSubDomains(true)
+        .maxAgeInSeconds(31536000)) // Strict-Transport-Security - ép trình duyệt LUÔN dùng HTTPS trong 1 năm tới
+);
+```
+
+| Header | Chống lại | Ghi nhớ nhanh |
+|---|---|---|
+| `X-Frame-Options: DENY` | **Clickjacking** — nhúng trang của bạn trong `<iframe>` ẩn để lừa click | Spring Security bật mặc định |
+| `X-Content-Type-Options: nosniff` | **MIME-sniffing** — trình duyệt tự đoán sai loại file, thực thi nhầm script độc hại | Spring Security bật mặc định |
+| `Strict-Transport-Security` (HSTS) | **SSL Stripping** — ép downgrade kết nối từ HTTPS về HTTP | Chỉ nên bật khi site đã chạy HTTPS ổn định hoàn toàn |
+| `Content-Security-Policy` (CSP) | **XSS (Cross-Site Scripting)** — giới hạn nguồn script/style được phép chạy trên trang | Cần cấu hình riêng theo nhu cầu, không có giá trị mặc định "đúng cho mọi app" |
+
+> **Lưu ý:** Phần lớn các header này **quan trọng nhất với ứng dụng render HTML trực tiếp** (server-side rendering) hơn là REST API thuần JSON — vì XSS/Clickjacking khai thác qua trình duyệt hiển thị nội dung HTML. Với REST API backend cho SPA/Mobile, các header này vẫn nên giữ (đặc biệt HSTS) nhưng độ ưu tiên thấp hơn JWT/CORS/CSRF đã học ở các mục trước.
+
+---
+
+## 14. ⚠️ Các bẫy hay gặp & lỗ hổng bảo mật kinh điển
 
 1. **Lưu password dạng plaintext hoặc hash bằng MD5/SHA-256 thường** thay vì BCrypt/Argon2 → dễ bị brute-force nếu database bị lộ.
 
@@ -601,7 +815,7 @@ http.csrf(csrf -> csrf
 
 6. **`setAllowedOrigins("*")` kèm `setAllowCredentials(true)`** → vi phạm spec CORS, có thể gây lỗi runtime hoặc lỗ hổng nếu framework không chặn đúng.
 
-7. **Không revoke được Refresh Token khi cần** (VD: user đổi password, logout tất cả thiết bị) — nếu Refresh Token chỉ lưu ở client mà server không có cơ chế theo dõi/blacklist, không thể vô hiệu hóa được.
+7. **Không revoke được Refresh Token khi cần** (VD: user đổi password, logout tất cả thiết bị) — nếu Refresh Token chỉ lưu ở client mà server không có cơ chế theo dõi/blacklist, không thể vô hiệu hóa được (giải pháp: mục 12).
 
 8. **So sánh password bằng `==` hoặc `.equals()` trực tiếp** thay vì `passwordEncoder.matches()` — không thể hoạt động đúng vì hash có salt ngẫu nhiên.
 
@@ -613,9 +827,13 @@ http.csrf(csrf -> csrf
 
 12. **Log thông tin nhạy cảm** (password, token, số thẻ) ra console/log file → rò rỉ qua hệ thống logging tập trung (ELK, Splunk...).
 
+13. **Quên tiền tố `"ROLE_"` khi tạo `GrantedAuthority`** → `hasRole("ADMIN")` không bao giờ khớp vì nó ngầm so với `"ROLE_ADMIN"`, gây lỗi 403 khó hiểu dù role đã đúng.
+
+14. **Không giới hạn số lần đăng nhập sai (Brute-force login)** — thiếu cơ chế khóa tạm thời tài khoản/rate limit endpoint `/login` khiến kẻ tấn công có thể thử mật khẩu không giới hạn số lần (liên hệ `429`/Rate Limiting đã học ở Module 14).
+
 ---
 
-## 12. Tổng kết — Bảng ghi nhớ nhanh
+## 15. Tổng kết — Bảng ghi nhớ nhanh
 
 | Khái niệm | Ghi nhớ nhanh |
 |---|---|
@@ -625,14 +843,18 @@ http.csrf(csrf -> csrf
 | JWT | 3 phần Header.Payload.Signature — payload CHỈ encode, không encrypt |
 | Access vs Refresh Token | Access ngắn hạn dùng mỗi request; Refresh dài hạn để lấy Access mới |
 | Session vs JWT | Session cần đồng bộ giữa server (scale khó); JWT Stateless (scale dễ) |
+| UserDetailsService | Cầu nối Entity `User` ↔ Spring Security, `getAuthorities()` cần tiền tố `ROLE_` |
 | OAuth2 vs OIDC | OAuth2 = Authorization; OIDC = OAuth2 + Authentication (ID Token) |
 | Method-level Security | `@PreAuthorize`/`@PostAuthorize` — dùng AOP, cũng dính bẫy self-invocation |
 | CORS | Cơ chế TRÌNH DUYỆT thực thi, không chặn được Postman/curl/server-to-server |
 | CSRF | Chỉ nguy hiểm với Session-Cookie auth; JWT (Header) miễn nhiễm tự nhiên |
+| AuthenticationEntryPoint/AccessDeniedHandler | Bắt lỗi 401/403 ở tầng Filter — `@RestControllerAdvice` không bắt được |
+| Token Revocation | JWT Stateless không tự "logout" được — cần Blacklist (Redis) hoặc Refresh Token Rotation |
+| Security Headers | HSTS/X-Frame-Options/CSP — quan trọng nhất với app render HTML, vẫn nên giữ ở REST API |
 
 ---
 
-## 13. Bài tập luyện tập
+## 16. Bài tập luyện tập
 
 ### Phần A — Trắc nghiệm nhận định (Đúng/Sai + giải thích)
 
@@ -644,8 +866,10 @@ http.csrf(csrf -> csrf
 6. OAuth2 về bản chất được thiết kế cho mục đích Authentication (xác thực danh tính).
 7. Thứ tự khai báo rule trong `authorizeHttpRequests` không quan trọng, Spring Security tự tìm rule phù hợp nhất.
 8. Refresh Token thường có thời gian sống dài hơn Access Token.
+9. `GlobalExceptionHandler` (`@RestControllerAdvice`) có thể bắt được `AuthenticationException` do Spring Security ném ra ở tầng Filter.
+10. JWT thuần Stateless có thể "logout" 1 token cụ thể ngay lập tức mà không cần thêm bất kỳ state nào ở server.
 
-### Phần B — Bài tập viết code (5 bài)
+### Phần B — Bài tập viết code (6 bài)
 
 **Bài 1:** Viết đầy đủ `SecurityFilterChain` cho ứng dụng REST API dùng JWT: public cho `/api/v1/auth/**`, chỉ ADMIN truy cập `/api/v1/admin/**`, GET công khai cho `/api/v1/products/**`, còn lại yêu cầu đăng nhập. Đảm bảo đúng thứ tự rule.
 
@@ -662,6 +886,8 @@ configuration.setAllowedOrigins(List.of("*"));
 configuration.setAllowCredentials(true);
 ```
 
+**Bài 6:** Viết `AuthenticationEntryPoint` và `AccessDeniedHandler` trả về JSON theo format `ErrorResponse` chuẩn đã học ở Module 14 (gồm `timestamp`, `status`, `error`, `message`, `path`), và đăng ký cả 2 vào `SecurityFilterChain`.
+
 ### Phần C — Gợi ý đáp án
 
 <details>
@@ -675,6 +901,8 @@ configuration.setAllowCredentials(true);
 6. **Sai.** OAuth2 vốn được thiết kế cho **Authorization** (ủy quyền truy cập tài nguyên) — OpenID Connect mới là lớp mở rộng thêm cho Authentication.
 7. **Sai.** Thứ tự RẤT quan trọng — Spring Security đánh giá tuần tự từ trên xuống, khớp rule đầu tiên sẽ dừng lại, không tự tìm "rule phù hợp nhất".
 8. **Đúng.** Access Token ngắn hạn (phút-giờ) để giảm rủi ro nếu bị lộ; Refresh Token dài hạn (ngày-tuần) để tránh user phải đăng nhập lại liên tục.
+9. **Sai.** `AuthenticationException`/`AccessDeniedException` bị chặn ở tầng Filter, trước khi request chạm Controller/DispatcherServlet — `@RestControllerAdvice` không bắt được, phải dùng `AuthenticationEntryPoint`/`AccessDeniedHandler` riêng.
+10. **Sai.** JWT Stateless không có cách "thu hồi" ngay 1 token đã phát hành — cần thêm state ở server (Token Blacklist hoặc Refresh Token Rotation) mới làm được, đây là sự đánh đổi cố hữu của JWT.
 
 </details>
 
@@ -880,6 +1108,70 @@ configuration.setAllowedOrigins(List.of(
 configuration.setAllowCredentials(true); // Giờ mới an toàn để bật, vì origin đã bị giới hạn rõ ràng
 configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "PATCH"));
 configuration.setAllowedHeaders(List.of("Authorization", "Content-Type"));
+```
+
+</details>
+
+<details>
+<summary><b>Đáp án Bài 6</b></summary>
+
+```java
+@Component
+public class RestAuthenticationEntryPoint implements AuthenticationEntryPoint {
+
+    private final ObjectMapper objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
+
+    @Override
+    public void commence(HttpServletRequest request, HttpServletResponse response,
+                           AuthenticationException authException) throws IOException {
+        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+        response.setCharacterEncoding("UTF-8");
+
+        ErrorResponse error = new ErrorResponse(
+                Instant.now(), 401, "Unauthorized",
+                "Chưa xác thực hoặc token không hợp lệ", request.getRequestURI(), null);
+        objectMapper.writeValue(response.getWriter(), error);
+    }
+}
+
+@Component
+public class RestAccessDeniedHandler implements AccessDeniedHandler {
+
+    private final ObjectMapper objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
+
+    @Override
+    public void handle(HttpServletRequest request, HttpServletResponse response,
+                         AccessDeniedException accessDeniedException) throws IOException {
+        response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+        response.setCharacterEncoding("UTF-8");
+
+        ErrorResponse error = new ErrorResponse(
+                Instant.now(), 403, "Forbidden",
+                "Không đủ quyền truy cập tài nguyên này", request.getRequestURI(), null);
+        objectMapper.writeValue(response.getWriter(), error);
+    }
+}
+
+@Configuration
+@EnableWebSecurity
+public class SecurityConfig {
+
+    private final RestAuthenticationEntryPoint restAuthenticationEntryPoint;
+    private final RestAccessDeniedHandler restAccessDeniedHandler;
+
+    @Bean
+    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+        http
+            .exceptionHandling(ex -> ex
+                .authenticationEntryPoint(restAuthenticationEntryPoint)
+                .accessDeniedHandler(restAccessDeniedHandler))
+            // ... các cấu hình khác (csrf, sessionManagement, authorizeHttpRequests...)
+            ;
+        return http.build();
+    }
+}
 ```
 
 </details>

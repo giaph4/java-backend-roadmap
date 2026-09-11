@@ -3,6 +3,8 @@
 > **Mức ưu tiên: 🔴 Cao**
 > **Vì sao quan trọng:** Đây là module tổng hợp toàn bộ kiến thức từ Module 12-18 (Spring Core, Spring Boot, REST API, Persistence, Security, Testing, Caching/Messaging) và áp dụng vào 1 kiến trúc hệ thống **phân tán (distributed)**. Microservices không phải "công nghệ mới cần học" — nó là **cách tổ chức hệ thống** giải quyết vấn đề khi Monolith trở nên quá lớn để phát triển/scale. Hiểu đúng khi nào NÊN và KHÔNG NÊN dùng Microservices, cùng các vấn đề cố hữu của hệ phân tán (Network không đáng tin cậy, Distributed Transaction, Service Discovery) là kiến thức phân biệt rõ ràng Junior và Senior Backend Developer.
 
+> **Phạm vi bài này:** Tập trung vào **kiến trúc và các pattern** cần biết khi thiết kế/vận hành hệ thống Microservices ở tầng ứng dụng Spring Boot. Không đi sâu vào cấu hình hạ tầng cụ thể (Kubernetes YAML chi tiết, Service Mesh/Istio, CI/CD pipeline) — những chủ đề đó thuộc Module DevOps tiếp theo; ở đây chỉ nhắc tới mức đủ hiểu vai trò của chúng trong bức tranh tổng thể.
+
 ---
 
 ## Mục lục
@@ -15,9 +17,11 @@
 6. [Circuit Breaker & Resilience4j](#6-circuit-breaker--resilience4j)
 7. [Distributed Transaction & Saga Pattern](#7-distributed-transaction--saga-pattern)
 8. [Database per Service & Data Consistency](#8-database-per-service--data-consistency)
-9. [⚠️ Các bẫy hay gặp](#9-các-bẫy-hay-gặp)
-10. [Tổng kết — Bảng ghi nhớ nhanh](#10-tổng-kết--bảng-ghi-nhớ-nhanh)
-11. [Bài tập luyện tập](#11-bài-tập-luyện-tập)
+9. [Distributed Tracing — theo dõi request xuyên nhiều Service](#9-distributed-tracing)
+10. [Strangler Fig Pattern — di chuyển dần từ Monolith](#10-strangler-fig-pattern)
+11. [⚠️ Các bẫy hay gặp](#11-các-bẫy-hay-gặp)
+12. [Tổng kết — Bảng ghi nhớ nhanh](#12-tổng-kết--bảng-ghi-nhớ-nhanh)
+13. [Bài tập luyện tập](#13-bài-tập-luyện-tập)
 
 ---
 
@@ -87,7 +91,7 @@
 - Dự án **mới bắt đầu**, domain boundary **CHƯA RÕ RÀNG** — chia service quá sớm khi chưa hiểu hết nghiệp vụ dễ dẫn tới chia SAI ranh giới, sau này phải refactor lại toàn bộ (tốn kém hơn nhiều so với refactor trong Monolith)
 - Chưa có kinh nghiệm/hạ tầng DevOps đủ mạnh để vận hành hệ thống phân tán (Kubernetes, CI/CD cho nhiều service, centralized logging...)
 
-> **"Monolith First" strategy:** Nhiều kiến trúc sư có kinh nghiệm khuyến nghị **bắt đầu bằng Monolith** (nhưng thiết kế **module hóa tốt** bên trong — package theo domain rõ ràng như đã đề cập ở Module 13), rồi **tách dần thành Microservices** khi thực sự cần thiết (khi đã hiểu rõ domain boundary qua thực tế vận hành) — thay vì thiết kế Microservices ngay từ đầu dựa trên phỏng đoán domain boundary có thể sai.
+> **"Monolith First" strategy:** Nhiều kiến trúc sư có kinh nghiệm khuyến nghị **bắt đầu bằng Monolith** (nhưng thiết kế **module hóa tốt** bên trong — package theo domain rõ ràng như đã đề cập ở Module 13), rồi **tách dần thành Microservices** khi thực sự cần thiết (khi đã hiểu rõ domain boundary qua thực tế vận hành) — thay vì thiết kế Microservices ngay từ đầu dựa trên phỏng đoán domain boundary có thể sai. Kỹ thuật cụ thể để tách dần được trình bày ở mục 10 — Strangler Fig Pattern.
 
 ---
 
@@ -251,6 +255,27 @@ public class GatewayConfig {
     }
 }
 ```
+
+### Backend for Frontend (BFF) — biến thể của API Gateway theo từng loại Client
+
+**Vấn đề:** 1 API Gateway "dùng chung" cho mọi loại client (Web, Mobile, đối tác thứ 3) đôi khi phải trả về dữ liệu **thừa thãi** cho 1 số client (VD: Mobile không cần toàn bộ field mà Web Admin cần) hoặc buộc phải gộp nhiều endpoint theo nhu cầu riêng của 1 loại client, khiến Gateway chung ngày càng phình to và khó bảo trì.
+
+**Giải pháp BFF:** Thay vì 1 Gateway chung, tạo **nhiều Gateway nhỏ, mỗi cái phục vụ riêng 1 loại client**:
+
+```
+┌────────────┐      ┌──────────────┐
+│  Web App    │─────►│  Web BFF      │──┐
+└────────────┘      └──────────────┘   │
+                                          ├──► Order Service, User Service, Payment Service...
+┌────────────┐      ┌──────────────┐   │      (các Microservices nghiệp vụ dùng chung)
+│ Mobile App  │─────►│ Mobile BFF    │──┘
+└────────────┘      └──────────────┘
+```
+
+- **Web BFF:** Có thể gộp gọi nhiều service, trả về response giàu dữ liệu hơn (phù hợp màn hình phức tạp trên Web)
+- **Mobile BFF:** Trả về response tối giản, ít field hơn (tiết kiệm băng thông cho mạng di động)
+
+> **Khi nào cần BFF thay vì 1 Gateway chung:** Chỉ nên áp dụng khi thực sự có **sự khác biệt lớn về nhu cầu dữ liệu** giữa các loại client (VD: ứng dụng có cả Admin Dashboard phức tạp lẫn Mobile App đơn giản) — với hệ thống nhỏ/vừa, 1 API Gateway chung là đủ, thêm BFF sớm sẽ chỉ tăng số lượng thành phần cần vận hành mà chưa có lợi ích tương xứng (liên hệ nguyên tắc "đừng chia quá sớm" ở mục 2).
 
 ---
 
@@ -577,9 +602,109 @@ public OrderDetailResponse getOrderDetail(Long orderId) {
 
 **Giải pháp nâng cao hơn — CQRS (Command Query Responsibility Segregation):** Xây dựng 1 **Read Model** riêng (thường denormalized, tổng hợp sẵn dữ liệu từ nhiều service qua Event, lưu vào 1 DB đọc riêng tối ưu cho truy vấn) — tách biệt hoàn toàn luồng ghi (Command) và luồng đọc (Query). Đây là kỹ thuật nâng cao, thường chỉ cần thiết khi hệ thống đã rất lớn — nên biết khái niệm, không cần thành thạo ngay ở giai đoạn học này.
 
+### Contract Testing — kiểm thử ranh giới giữa các Service (liên hệ Module 17)
+
+Module 17 đã đề cập Test Pyramid có tầng Integration Test — nhưng với Microservices, Integration Test truyền thống (khởi động thật cả 2 service để test) **chậm và khó vận hành trong CI** (phải chạy song song nhiều service). **Contract Testing** giải quyết vấn đề này bằng cách kiểm tra Producer và Consumer **có tuân thủ đúng 1 "hợp đồng" (contract) đã thỏa thuận** — mà **không cần** khởi động cả 2 service cùng lúc:
+
+```
+1. Consumer (VD: Order Service) định nghĩa "hợp đồng" nó MONG ĐỢI từ Provider (User Service):
+   "GET /users/5 phải trả về JSON có field id, fullName, email"
+
+2. Contract này được lưu lại (VD: qua Pact Broker) và dùng để:
+   - Test phía Consumer: giả lập Provider theo ĐÚNG hợp đồng, test Order Service có xử lý đúng không
+   - Test phía Provider: User Service tự chạy test để đảm bảo API THẬT của mình vẫn khớp hợp đồng
+
+-> Nếu User Service đổi cấu trúc response (VD: đổi tên field) mà KHÔNG cập nhật hợp đồng,
+   test phía Provider sẽ FAIL NGAY trong CI - phát hiện breaking change TRƯỚC KHI deploy production,
+   mà không cần chạy Order Service thật để phát hiện.
+```
+
+> **Mức độ ưu tiên học:** Hiểu khái niệm và vấn đề nó giải quyết (phát hiện breaking change giữa các service mà không cần Integration Test tốn kém) là đủ ở giai đoạn này — công cụ phổ biến nhất là **Pact**. Triển khai đầy đủ Contract Testing thường học sâu hơn khi làm việc trong 1 team nhiều Microservices thực tế.
+
 ---
 
-## 9. ⚠️ Các bẫy hay gặp
+## 9. Distributed Tracing
+
+### Vấn đề: 1 request đi qua nhiều Service, lỗi xảy ra ở đâu?
+
+Trong Monolith, khi có lỗi, chỉ cần xem **1 log file duy nhất** để biết toàn bộ luồng xử lý. Trong Microservices, 1 request từ Client có thể đi qua **5-10 service khác nhau** — mỗi service ghi log riêng, ở máy chủ riêng:
+
+```
+Client -> API Gateway -> Order Service -> Inventory Service -> Payment Service -> Notification Service
+
+Nếu request này bị lỗi/chậm, log nằm rải rác ở 5 nơi khác nhau,
+KHÔNG có cách nào biết chúng thuộc CÙNG 1 request nếu không có cơ chế liên kết
+```
+
+### Giải pháp: Trace ID & Span ID
+
+**Distributed Tracing** giải quyết bằng cách gắn **1 Trace ID duy nhất** cho toàn bộ hành trình của 1 request, được **truyền tiếp (propagate)** qua HTTP Header ở mỗi lần gọi service tiếp theo — mỗi service khi log đều đính kèm Trace ID này:
+
+```
+Client request -> API Gateway sinh Trace ID: "abc-123"
+     │  Header: X-B3-TraceId: abc-123, X-B3-SpanId: span-1
+     ▼
+Order Service (nhận Trace ID abc-123, tạo Span riêng cho công việc của mình: span-2)
+     │  Header: X-B3-TraceId: abc-123, X-B3-SpanId: span-2, X-B3-ParentSpanId: span-1
+     ▼
+Payment Service (nhận Trace ID abc-123, tạo span-3)
+     │  Header: X-B3-TraceId: abc-123, X-B3-SpanId: span-3, X-B3-ParentSpanId: span-2
+
+-> Mọi log/metric của cả 3 service đều gắn kèm "abc-123"
+-> Tìm kiếm "abc-123" trong hệ thống giám sát tập trung sẽ thấy TOÀN BỘ hành trình request,
+   biết chính xác service nào chậm/lỗi, và tổng thời gian mỗi bước
+```
+
+- **Trace:** Toàn bộ hành trình của 1 request, từ đầu tới cuối, qua mọi service
+- **Span:** 1 đơn vị công việc cụ thể trong Trace đó (VD: "Order Service xử lý request" là 1 span, "Order Service gọi Payment Service" là 1 span con)
+
+> **Cách triển khai cụ thể (Micrometer Tracing + Zipkin/Jaeger, cấu hình sampling, propagate Trace ID qua log) thuộc phạm vi Module 21 — Observability**, nơi Distributed Tracing là 1 trong 3 trụ cột chính cùng Logs và Metrics. Ở module này chỉ cần nắm **vì sao** Microservices bắt buộc phải có Tracing — thiếu nó, debug lỗi xuyên nhiều service gần như "mò kim đáy bể" như minh họa ở trên.
+
+---
+
+## 10. Strangler Fig Pattern
+
+### Vấn đề: Làm sao tách Microservices từ 1 Monolith ĐANG CHẠY, không "đập đi xây lại"?
+
+Mục 2 đã khuyến nghị "Monolith First" rồi tách dần khi cần — nhưng **tách như thế nào** khi hệ thống Monolith đang chạy production, không thể dừng lại để viết lại từ đầu (rủi ro cực cao, dễ thất bại)?
+
+**Strangler Fig Pattern** (đặt tên theo cây đa bóp cổ — loài cây mọc bao quanh 1 cây chủ, dần dần thay thế hoàn toàn cây chủ mà không cần chặt hạ nó trước) — chiến lược tách Microservices **từng phần nhỏ, dần dần**, trong khi Monolith **vẫn chạy bình thường** suốt quá trình:
+
+```
+Giai đoạn 1: Monolith nguyên vẹn, đặt 1 API Gateway/Proxy ở TRƯỚC Monolith
+┌────────┐    ┌───────────┐
+│ Client  │───►│  Gateway   │───► Monolith (100% traffic)
+└────────┘    └───────────┘
+
+Giai đoạn 2: Tách 1 domain RÕ RÀNG nhất trước (VD: "Notification" - ít phụ thuộc domain khác)
+              thành Microservice riêng. Gateway route request notification sang service mới,
+              các request khác VẪN đi vào Monolith như cũ
+┌────────┐    ┌───────────┐    ┌─────────────────┐
+│ Client  │───►│  Gateway   │───►│ Notification Svc  │ (route /notifications/**)
+└────────┘    └─────┬─────┘    └─────────────────┘
+                     └──────────► Monolith (phần còn lại)
+
+Giai đoạn 3: Tiếp tục tách domain tiếp theo (VD: "Payment"), lặp lại quy trình
+              Monolith dần dần "co lại", các Microservice dần "lớn lên"
+
+Giai đoạn N: Monolith gốc cuối cùng chỉ còn lại phần lõi nhỏ, hoặc biến mất hoàn toàn
+              -> Toàn bộ traffic được Gateway route sang các Microservice
+```
+
+### Vì sao pattern này an toàn hơn "viết lại từ đầu"?
+
+| | Viết lại từ đầu (Big Bang Rewrite) | Strangler Fig Pattern |
+|---|---|---|
+| Rủi ro | **Rất cao** — hệ thống cũ và mới chạy song song trong thời gian dài, dễ phát sinh khác biệt hành vi, dự án dễ "chết" giữa chừng | Thấp hơn nhiều — mỗi lần chỉ tách 1 phần nhỏ, dễ rollback nếu có vấn đề |
+| Thời gian thấy giá trị | Chỉ thấy kết quả khi HOÀN TẤT toàn bộ (có thể mất hàng năm) | Thấy giá trị ngay sau mỗi domain được tách thành công |
+| Khả năng dừng giữa chừng | Khó — dở dang thì không dùng được gì cả | Dễ — có thể dừng ở bất kỳ giai đoạn nào, hệ thống vẫn hoạt động (1 phần Microservices + phần Monolith còn lại) |
+| Yêu cầu về domain boundary | Phải xác định TRƯỚC toàn bộ kiến trúc mới | Có thể học hỏi/điều chỉnh dần qua từng domain tách ra |
+
+> **Nguyên tắc chọn domain để tách trước:** Ưu tiên domain có **ranh giới rõ ràng nhất, ít phụ thuộc 2 chiều với phần còn lại** (VD: Notification, Reporting thường là ứng viên tốt để tách đầu tiên vì ít khi cần gọi ngược lại các domain khác) — để lại các domain còn nhiều phụ thuộc chằng chịt (VD: Order-Payment-Inventory liên quan chặt) tách sau cùng, khi đã có kinh nghiệm vận hành Microservices từ các domain đơn giản hơn.
+
+---
+
+## 11. ⚠️ Các bẫy hay gặp
 
 1. **Áp dụng Microservices quá sớm** khi team nhỏ, domain chưa rõ ràng — tăng độ phức tạp vận hành mà chưa có lợi ích tương xứng.
 
@@ -595,15 +720,19 @@ public OrderDetailResponse getOrderDetail(Long orderId) {
 
 7. **Bỏ qua Compensating Transaction khi thiết kế Saga** — chỉ nghĩ tới "happy path", không xử lý trường hợp 1 bước giữa chừng thất bại.
 
-8. **Không có Distributed Tracing** (VD: Zipkin, Jaeger — công cụ theo dõi 1 request đi qua bao nhiêu service) — khi có lỗi, không biết lỗi xảy ra ở service nào trong chuỗi gọi phức tạp.
+8. **Không có Distributed Tracing** — khi có lỗi, không biết lỗi xảy ra ở service nào trong chuỗi gọi phức tạp (giải pháp cụ thể ở mục 9).
 
 9. **Đặt tên Service quá chi tiết (quá "micro")** — chia nhỏ tới mức mỗi service chỉ có 1-2 API endpoint, gây bùng nổ số lượng service cần vận hành, tăng chi phí hạ tầng và độ phức tạp giao tiếp không cần thiết.
 
 10. **Không có API Gateway, để Client gọi trực tiếp từng service** — khó quản lý Authentication/Rate Limiting tập trung, khó thay đổi cấu trúc backend mà không ảnh hưởng Client.
 
+11. **Cố "viết lại từ đầu" (Big Bang Rewrite) thay vì tách dần** — dự án tách Microservices kéo dài, rủi ro cao, dễ bị hủy giữa chừng (nên áp dụng Strangler Fig Pattern ở mục 10).
+
+12. **Không có Contract Testing giữa các Service** — 1 service đổi cấu trúc API mà không ai biết, chỉ phát hiện breaking change khi đã deploy production, gây lỗi cho các service phụ thuộc.
+
 ---
 
-## 10. Tổng kết — Bảng ghi nhớ nhanh
+## 12. Tổng kết — Bảng ghi nhớ nhanh
 
 | Khái niệm | Ghi nhớ nhanh |
 |---|---|
@@ -611,6 +740,7 @@ public OrderDetailResponse getOrderDetail(Long orderId) {
 | Monolith First | Nên bắt đầu Monolith module hóa tốt, tách Microservices khi thực sự cần |
 | Service Discovery | Đăng ký + tra cứu địa chỉ instance động (Eureka, hoặc Kubernetes Service) |
 | API Gateway | 1 điểm vào duy nhất — routing, auth tập trung, rate limiting |
+| BFF | Gateway riêng theo từng loại client (Web/Mobile) khi nhu cầu dữ liệu khác biệt lớn |
 | Distributed Monolith | Anti-pattern — gọi Synchronous chằng chịt như Monolith nhưng chịu độ trễ mạng |
 | Circuit Breaker | CLOSED → OPEN (fail-fast) → HALF_OPEN (thử lại) — ngăn Cascading Failure |
 | Resilience4j | CircuitBreaker, Retry, RateLimiter, Bulkhead, TimeLimiter |
@@ -618,10 +748,13 @@ public OrderDetailResponse getOrderDetail(Long orderId) {
 | Choreography vs Orchestration | Event-driven phân tán vs có "nhạc trưởng" trung tâm |
 | Eventual Consistency | Hệ quả tất yếu của Distributed Transaction — không còn Strong Consistency như ACID |
 | Database per Service | Mỗi service 1 DB riêng — JOIN thay bằng API Composition/CQRS |
+| Contract Testing | Kiểm tra Producer/Consumer tuân thủ hợp đồng API mà không cần chạy cả 2 service |
+| Distributed Tracing | Trace ID xuyên suốt request qua nhiều service — triển khai cụ thể ở Module 21 |
+| Strangler Fig Pattern | Tách Microservices dần từng domain, Monolith vẫn chạy song song — an toàn hơn viết lại từ đầu |
 
 ---
 
-## 11. Bài tập luyện tập
+## 13. Bài tập luyện tập
 
 ### Phần A — Trắc nghiệm nhận định (Đúng/Sai + giải thích)
 
@@ -633,8 +766,10 @@ public OrderDetailResponse getOrderDetail(Long orderId) {
 6. Saga Pattern đảm bảo tính "Strong Consistency" giống hệt ACID Transaction truyền thống.
 7. API Gateway giúp tập trung xử lý Authentication, tránh phải lặp lại logic này ở từng Microservice riêng lẻ.
 8. Orchestration Saga có 1 thành phần trung tâm điều khiển toàn bộ luồng nghiệp vụ, trong khi Choreography Saga để mỗi service tự lắng nghe event và quyết định.
+9. Distributed Tracing dùng chung 1 Trace ID xuyên suốt các service để liên kết log của cùng 1 request lại với nhau.
+10. Strangler Fig Pattern yêu cầu dừng hoàn toàn Monolith cũ trong lúc phát triển Microservices mới, rồi mới chuyển đổi 1 lần duy nhất.
 
-### Phần B — Bài tập viết code (5 bài)
+### Phần B — Bài tập viết code (6 bài)
 
 **Bài 1:** Thiết kế sơ đồ (dạng text/ASCII) hệ thống "Đặt vé xem phim" theo Microservices gồm: `Movie Service`, `Booking Service`, `Payment Service`, `Notification Service` — chỉ rõ Database riêng của mỗi service và luồng giao tiếp Synchronous/Asynchronous phù hợp.
 
@@ -645,6 +780,8 @@ public OrderDetailResponse getOrderDetail(Long orderId) {
 **Bài 4:** Thiết kế Saga theo mô hình **Orchestration** cho luồng "Đặt vé xem phim" (Bài 1): Booking Service giữ chỗ ghế → Payment Service thu tiền → nếu thanh toán thất bại, thực hiện Compensating Transaction hủy giữ chỗ ghế. Viết pseudo-code minh họa.
 
 **Bài 5:** Giải thích (bằng ví dụ cụ thể) tình huống hệ thống rơi vào **"Distributed Monolith"** anti-pattern, và đề xuất cách tái cấu trúc lại giao tiếp giữa các service để tránh vấn đề này.
+
+**Bài 6:** Cho 1 hệ thống Monolith "Thương mại điện tử" đang chạy production gồm các domain: `User`, `Product`, `Order`, `Review`, `Notification`. Áp dụng **Strangler Fig Pattern**, hãy đề xuất thứ tự tách các domain thành Microservices (kèm lý do), và mô tả ngắn gọn vai trò của Gateway/Proxy trong suốt quá trình.
 
 ### Phần C — Gợi ý đáp án
 
@@ -659,6 +796,8 @@ public OrderDetailResponse getOrderDetail(Long orderId) {
 6. **Sai.** Saga chỉ đảm bảo "Eventual Consistency" (nhất quán cuối cùng, có độ trễ), KHÔNG phải Strong Consistency tức thời như ACID.
 7. **Đúng.** Đây là 1 trong những lợi ích chính của API Gateway — xử lý cross-cutting concern tập trung.
 8. **Đúng.** Đây chính là khác biệt cốt lõi giữa 2 mô hình triển khai Saga.
+9. **Đúng.** Trace ID được sinh ra ở request đầu tiên và propagate qua header ở mọi lần gọi service tiếp theo, giúp liên kết log rải rác thành 1 hành trình thống nhất.
+10. **Sai.** Ngược lại — Strangler Fig Pattern để Monolith VẪN CHẠY BÌNH THƯỜNG trong suốt quá trình, tách dần từng phần nhỏ thay vì dừng hẳn để viết lại 1 lần.
 
 </details>
 
@@ -842,6 +981,27 @@ Order Service tạo đơn hàng (Local Transaction) -> publish "OrderCreated" ev
 ```
 
 **Nguyên tắc áp dụng:** Chỉ giữ Synchronous cho những bước **THỰC SỰ cần kết quả ngay để quyết định bước tiếp theo** (VD: kiểm tra tồn kho đủ hay không TRƯỚC KHI xác nhận đơn hàng). Các tác vụ "phụ" không ảnh hưởng luồng chính (thông báo, tính điểm thưởng, cập nhật thống kê...) nên chuyển sang Asynchronous qua Event — giúp giảm coupling, tránh Cascading Failure, và loại bỏ hoàn toàn vòng lặp phụ thuộc giữa các service.
+
+</details>
+
+<details>
+<summary><b>Đáp án Bài 6</b></summary>
+
+**Thứ tự tách domain đề xuất:**
+
+1. **`Notification`** — tách ĐẦU TIÊN. Lý do: ít phụ thuộc 2 chiều với domain khác (chỉ NHẬN sự kiện từ các domain khác để gửi thông báo, không có domain nào cần gọi ngược lại nó để lấy dữ liệu quan trọng), rủi ro thấp nhất nếu có sự cố (gửi thông báo chậm/lỗi không ảnh hưởng nghiệp vụ chính).
+
+2. **`Review`** — tách THỨ HAI. Lý do: tương đối độc lập (chỉ cần biết `productId`/`userId` để gắn đánh giá, không có nghiệp vụ phức tạp phụ thuộc chặt vào `Order` hay `Product` theo thời gian thực).
+
+3. **`Product`** — tách THỨ BA. Lý do: là domain đọc nhiều (read-heavy), có thể hưởng lợi từ việc scale độc lập (dùng cache/search engine riêng), nhưng vẫn cần cẩn thận vì `Order` sẽ cần đọc thông tin sản phẩm khi tạo đơn hàng (cần API Composition).
+
+4. **`User`** — tách THỨ TƯ. Lý do: nhiều domain khác phụ thuộc vào User (Order cần biết user tồn tại, Review gắn với user...) — cần tách sau khi đã có kinh nghiệm xử lý giao tiếp liên service từ 3 domain trước.
+
+5. **`Order`** — tách CUỐI CÙNG (hoặc giữ lại làm phần lõi của Monolith lâu nhất). Lý do: là domain trung tâm, phụ thuộc/được phụ thuộc bởi hầu hết domain còn lại (User, Product, Payment, Inventory...) — độ phức tạp tách cao nhất, cần thực hiện sau cùng khi đã hiểu rõ ranh giới qua kinh nghiệm từ các domain trước.
+
+**Vai trò của Gateway/Proxy trong suốt quá trình:**
+
+Gateway được đặt phía trước Monolith **ngay từ giai đoạn đầu tiên** (kể cả khi chưa tách gì cả) — toàn bộ traffic đi qua Gateway trước khi tới Monolith. Ở mỗi giai đoạn tách 1 domain mới thành Microservice riêng, chỉ cần **cập nhật rule routing của Gateway** (VD: `/notifications/**` → Notification Service, phần còn lại → Monolith) mà **Client hoàn toàn không biết/không cần đổi gì** — với Client, địa chỉ gọi API luôn là Gateway, không quan tâm phía sau là Monolith hay đã tách thành Microservices. Đây chính là điểm mấu chốt giúp Strangler Fig Pattern thực hiện được "vô hình" với người dùng cuối, giảm rủi ro và cho phép rollback dễ dàng (chỉ cần đổi lại rule routing) nếu 1 domain nào đó tách ra gặp vấn đề.
 
 </details>
 

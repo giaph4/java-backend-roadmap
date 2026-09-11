@@ -3,6 +3,8 @@
 > **Mức ưu tiên: 🔴 Cao**
 > **Vì sao quan trọng:** Module 11 đã cho bạn nền tảng JPA/Hibernate; module này đưa bạn tới mức **thực chiến production**. Query động phức tạp (Specification/Querydsl), audit tự động (ai tạo/sửa record lúc nào), xử lý **race condition** khi nhiều request cùng sửa 1 dòng dữ liệu (Locking), và quản lý schema database qua version control (Flyway/Liquibase) — đây đều là những kỹ năng phân biệt rõ ràng giữa "biết dùng Spring Data JPA" và "dùng Spring Data JPA đúng cách trong hệ thống thật có nhiều người dùng đồng thời".
 
+> **Phạm vi bài này:** Tập trung vào các kỹ thuật Spring Data JPA/Hibernate **nâng cao ở tầng Repository/Persistence**. Kiến thức nền tảng (Entity mapping, quan hệ, vòng đời, N+1 cơ bản) thuộc Module 11 và không nhắc lại chi tiết. Authentication/Authorization (ai được phép gọi API) thuộc Module Spring Security — ở đây chỉ dùng `AuditorAware` để trả lời "ai đã sửa record", không đi sâu cơ chế xác thực.
+
 ---
 
 ## Mục lục
@@ -15,9 +17,11 @@
 6. [Optimistic Locking vs Pessimistic Locking](#6-optimistic-locking-vs-pessimistic-locking)
 7. [Database Migration: Flyway & Liquibase](#7-database-migration)
 8. [Projection — tối ưu query chỉ lấy field cần thiết](#8-projection)
-9. [⚠️ Các bẫy hay gặp](#9-các-bẫy-hay-gặp)
-10. [Tổng kết — Bảng ghi nhớ nhanh](#10-tổng-kết--bảng-ghi-nhớ-nhanh)
-11. [Bài tập luyện tập](#11-bài-tập-luyện-tập)
+9. [EntityGraph — kiểm soát Fetch Plan khai báo](#9-entitygraph)
+10. [Batch Operations nâng cao](#10-batch-operations-nâng-cao)
+11. [⚠️ Các bẫy hay gặp](#11-các-bẫy-hay-gặp)
+12. [Tổng kết — Bảng ghi nhớ nhanh](#12-tổng-kết--bảng-ghi-nhớ-nhanh)
+13. [Bài tập luyện tập](#13-bài-tập-luyện-tập)
 
 ---
 
@@ -74,6 +78,40 @@ userRepository.saveAndFlush(user); // Ép Hibernate chạy SQL NGAY LẬP TỨC
                                     // để dùng ngay trong cùng transaction cho logic tiếp theo
 ```
 
+### Custom Repository Implementation — khi Derived Query/Specification không đủ
+
+Đôi khi cần logic phức tạp mà không method nào ở trên đáp ứng được (native SQL đặc thù, gọi Stored Procedure, thao tác kết hợp nhiều bước) — nhưng vẫn muốn gọi qua cùng 1 `Repository` cho nhất quán. Spring Data JPA cho phép "chèn" implementation tùy chỉnh vào Repository chuẩn:
+
+```java
+// 1. Định nghĩa interface riêng cho phần custom
+public interface OrderRepositoryCustom {
+    List<Order> findHighValueOrdersWithNativeQuery(BigDecimal threshold);
+}
+
+// 2. Implement — tên class PHẢI có hậu tố "Impl" khớp với tên Repository chính
+public class OrderRepositoryCustomImpl implements OrderRepositoryCustom {
+
+    @PersistenceContext
+    private EntityManager entityManager;
+
+    @Override
+    public List<Order> findHighValueOrdersWithNativeQuery(BigDecimal threshold) {
+        return entityManager.createNativeQuery(
+                "SELECT * FROM orders WHERE total_amount > ? ORDER BY total_amount DESC", Order.class)
+                .setParameter(1, threshold)
+                .getResultList();
+    }
+}
+
+// 3. Repository chính kế thừa CẢ JpaRepository LẪN interface custom
+public interface OrderRepository extends JpaRepository<Order, Long>, OrderRepositoryCustom {
+    // Tự động có sẵn save/findById... (từ JpaRepository)
+    // VÀ findHighValueOrdersWithNativeQuery() (từ OrderRepositoryCustom, Spring tự ghép Impl vào)
+}
+```
+
+> **Quy ước bắt buộc:** Spring Data JPA tự động tìm class có tên `{TênRepository}Impl` (ở đây là `OrderRepositoryCustomImpl` — khớp với `OrderRepositoryCustom`, không phải `OrderRepository`) để ghép vào Proxy cuối cùng. Sai tên hậu tố `Impl` → Spring không tìm thấy implementation → lỗi lúc khởi động ứng dụng.
+
 ---
 
 ## 2. Derived Query Methods nâng cao
@@ -105,7 +143,7 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     // Đếm / kiểm tra tồn tại / xóa (không cần load Entity trước)
     long countByStatus(OrderStatus status);
     boolean existsByUserIdAndStatus(Long userId, OrderStatus status);
-    void deleteByStatus(OrderStatus status); // ⚠️ Xem bẫy ở mục 9
+    void deleteByStatus(OrderStatus status); // ⚠️ Xem bẫy ở mục 11
 
     // Query lồng qua quan hệ (Nested Property)
     List<Order> findByUser_Email(String email); // JOIN qua field "user" -> field "email"
@@ -114,6 +152,33 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
 ```
 
 ⚠️ **Giới hạn của Derived Query Method:** Tên method sẽ **rất dài và khó đọc** khi có quá nhiều điều kiện (VD: `findByStatusAndUserIdAndCreatedAtBetweenAndTotalAmountGreaterThanOrderByCreatedAtDesc`). Đây là dấu hiệu nên chuyển sang `@Query` (JPQL) hoặc `Specification`/`Querydsl`.
+
+### Streaming kết quả lớn — `Stream<T>` thay vì `List<T>`
+
+Khi query trả về **hàng trăm nghìn dòng** (VD: job export/báo cáo định kỳ), load toàn bộ vào `List<T>` cùng lúc tốn rất nhiều bộ nhớ. Spring Data JPA hỗ trợ trả `Stream<T>` để đọc dữ liệu **theo từng dòng (cursor)** thay vì load hết vào RAM:
+
+```java
+public interface OrderRepository extends JpaRepository<Order, Long> {
+
+    @QueryHints(@QueryHint(name = org.hibernate.jpa.HibernateHints.HINT_FETCH_SIZE, value = "1000"))
+    Stream<Order> findByStatus(OrderStatus status); // Trả Stream thay vì List
+}
+
+@Service
+public class OrderExportService {
+
+    @Transactional(readOnly = true) // BẮT BUỘC - Stream cần transaction/connection còn mở khi đọc
+    public void exportOrders(OrderStatus status) {
+        // try-with-resources BẮT BUỘC - Stream giữ connection DB mở, không đóng sẽ rò rỉ tài nguyên
+        try (Stream<Order> orderStream = orderRepository.findByStatus(status)) {
+            orderStream.forEach(order -> csvWriter.writeRow(order));
+            // Xử lý từng dòng ngay khi đọc được, KHÔNG giữ toàn bộ trong bộ nhớ
+        }
+    }
+}
+```
+
+⚠️ **Bẫy hay gặp:** Quên `try-with-resources` hoặc quên `@Transactional` khi dùng `Stream<T>` — connection tới database sẽ **không được đóng đúng lúc**, gây rò rỉ connection pool và có thể làm cạn kiệt pool sau một thời gian chạy.
 
 ---
 
@@ -442,7 +507,7 @@ public class ProductService {
 | Rủi ro | Có thể fail nhiều lần nếu xung đột thường xuyên (nhiều lần retry) | Rủi ro **Deadlock** nếu khóa nhiều resource theo thứ tự khác nhau |
 | Phù hợp | Xung đột hiếm, ưu tiên throughput | Xung đột thường xuyên, ưu tiên tính đúng đắn tuyệt đối |
 
-> **Liên hệ:** Chủ đề "trừ tồn kho không bị oversell khi flash sale" — 1 bài toán kinh điển trong phỏng vấn — chính là ứng dụng trực tiếp của Pessimistic Locking (hoặc các giải pháp nâng cao hơn như Redis distributed lock, sẽ gặp ở Module Microservices/System Design).
+> **Liên hệ:** Chủ đề "trừ tồn kho không bị oversell khi flash sale" — 1 bài toán kinh điển trong phỏng vấn — chính là ứng dụng trực tiếp của Pessimistic Locking (hoặc các giải pháp nâng cao hơn như Redis distributed lock, sẽ gặp ở Module Microservices/System Design). Ở tầng HTTP, khái niệm tương đương là `ETag`/`If-Match` — xem lại Module 14 (RESTful API Design).
 
 ---
 
@@ -498,6 +563,8 @@ spring:
 
 ⚠️ **Quy tắc bất di bất dịch với Flyway:** **KHÔNG BAO GIỜ sửa lại 1 file migration đã chạy** (đã có trong `flyway_schema_history` ở bất kỳ môi trường nào) — vì Flyway tính checksum (hash) của mỗi file, phát hiện file bị sửa sau khi đã chạy sẽ báo lỗi (`checksum mismatch`). Muốn sửa, phải tạo **file migration MỚI** (VD: `V5__fix_phone_column.sql`).
 
+**Khi checksum mismatch xảy ra ngoài ý muốn** (VD: migration bị sửa nhầm ở môi trường dev chưa kịp cẩn thận), lệnh CLI `flyway repair` sẽ tính lại checksum theo file hiện tại và cập nhật vào `flyway_schema_history` — đây là công cụ **chữa cháy**, không phải quy trình chuẩn nên tránh dùng ở production trừ khi hiểu rõ hệ quả (repair chỉ nên dùng khi chắc chắn schema thực tế và file migration đang khớp nhau).
+
 ### Liquibase (thay thế Flyway — dùng XML/YAML/JSON thay vì SQL thuần)
 
 ```xml
@@ -514,10 +581,33 @@ spring:
 </changeSet>
 ```
 
+**Rollback tường minh — điểm mạnh nổi bật của Liquibase so với Flyway (bản Community):**
+
+```xml
+<changeSet id="2" author="pho">
+    <addColumn tableName="users">
+        <column name="phone" type="VARCHAR(20)"/>
+    </addColumn>
+
+    <!-- Khai báo SẴN cách hoàn tác changeSet này -->
+    <rollback>
+        <dropColumn tableName="users" columnName="phone"/>
+    </rollback>
+</changeSet>
+```
+
+```bash
+# Hoàn tác changeSet gần nhất mà không cần viết migration "xuôi" mới để sửa
+liquibase rollback-count 1
+```
+
+> **So sánh:** Flyway (Community) **không hỗ trợ rollback tự động** — muốn "hoàn tác" phải tự viết 1 migration mới đi ngược lại thay đổi trước đó (VD: `V5__drop_phone_column.sql`). Liquibase cho phép khai báo `<rollback>` ngay trong changeSet, `liquibase rollback` tự thực thi — đây là lý do nhiều tổ chức lớn, đa database chọn Liquibase dù cú pháp phức tạp hơn.
+
 | | Flyway | Liquibase |
 |---|---|---|
 | Cú pháp | SQL thuần (dễ học, đúng SQL chuẩn dialect) | XML/YAML/JSON/SQL (trừu tượng hóa, database-agnostic hơn) |
 | Độ phức tạp | Đơn giản, dễ tiếp cận | Phức tạp hơn nhưng linh hoạt hơn (hỗ trợ rollback tự động tốt hơn) |
+| Rollback | Không tự động (Community) — phải viết migration mới | Hỗ trợ `<rollback>` khai báo sẵn, chạy `rollback-count` |
 | Phổ biến | **Rất phổ biến**, đặc biệt dự án Spring Boot | Phổ biến trong doanh nghiệp lớn, đa database |
 | Khuyến nghị người mới | ⭐⭐⭐ Nên bắt đầu với Flyway (đơn giản, SQL quen thuộc) | ⭐⭐ Cân nhắc khi cần tính năng nâng cao |
 
@@ -567,7 +657,129 @@ List<Order> fullOrders = orderRepository.findByStatus(OrderStatus.PENDING, Order
 
 ---
 
-## 9. ⚠️ Các bẫy hay gặp
+## 9. EntityGraph
+
+**Vấn đề:** Projection (mục 8) giải quyết N+1 bằng cách **không load Entity đầy đủ**. Nhưng đôi khi bạn **cần** Entity đầy đủ (để gọi method nghiệp vụ, cascade save...) và chỉ muốn kiểm soát **quan hệ LAZY nào cần fetch kèm luôn** trong 1 query — đây chính là mục đích của `@EntityGraph`.
+
+### Vấn đề N+1 nhắc lại nhanh (đã học ở Module 11)
+
+```java
+List<Order> orders = orderRepository.findAll();     // 1 query lấy Order
+orders.forEach(o -> o.getUser().getFullName());     // N query lấy User (LAZY) -> N+1!
+```
+
+Module 11 đã giới thiệu `JOIN FETCH` trong JPQL để giải quyết. `@EntityGraph` là cách làm **tương đương nhưng khai báo (declarative)**, không cần viết JPQL thủ công:
+
+### Named EntityGraph khai báo trên Entity
+
+```java
+@Entity
+@NamedEntityGraph(
+    name = "Order.withUser",
+    attributeNodes = @NamedAttributeNode("user")
+)
+public class Order {
+    @Id @GeneratedValue private Long id;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    private User user;
+}
+
+public interface OrderRepository extends JpaRepository<Order, Long> {
+
+    @EntityGraph("Order.withUser") // Tham chiếu tên graph đã khai báo trên Entity
+    List<Order> findByStatus(OrderStatus status);
+    // Hibernate tự sinh 1 câu LEFT JOIN FETCH duy nhất -> hết N+1
+}
+```
+
+### Ad-hoc EntityGraph — không cần khai báo trước trên Entity
+
+```java
+public interface OrderRepository extends JpaRepository<Order, Long> {
+
+    @EntityGraph(attributePaths = {"user", "orderItems"}) // Khai báo trực tiếp tại method, tiện hơn khi ít dùng lại
+    List<Order> findByCreatedAtAfter(LocalDateTime date);
+}
+```
+
+### So sánh với JOIN FETCH (JPQL thủ công)
+
+| | `JOIN FETCH` (JPQL) | `@EntityGraph` |
+|---|---|---|
+| Cách viết | Viết tay trong `@Query` | Khai báo attribute cần fetch, Hibernate tự sinh JOIN |
+| Tái sử dụng | Phải copy JPQL nếu dùng lại ở method khác | `@NamedEntityGraph` định nghĩa 1 lần, dùng lại nhiều method |
+| Linh hoạt | Cao (tùy biến toàn bộ câu query) | Giới hạn ở việc chọn attribute fetch kèm, không sửa được điều kiện WHERE phức tạp |
+| Phù hợp | Query phức tạp, cần kiểm soát tuyệt đối | Query đơn giản, chỉ cần "load kèm quan hệ X khi lấy Y" |
+
+⚠️ **Bẫy hay gặp:** `@EntityGraph` với **nhiều quan hệ `@OneToMany`/`@ManyToMany` cùng lúc** (`attributePaths = {"orderItems", "reviews"}`) có thể gây lỗi `MultipleBagFetchException` hoặc tạo ra **kết quả nhân bản (Cartesian Product)** do nhiều JOIN `*ToMany` cùng lúc — chỉ nên fetch kèm tối đa 1 quan hệ `*ToMany` trong 1 EntityGraph, các quan hệ còn lại nên load riêng hoặc dùng `Set` thay `List` để tránh lỗi bag.
+
+---
+
+## 10. Batch Operations nâng cao
+
+Khi cần insert/update **hàng loạt bản ghi** (import dữ liệu, batch job), gọi `save()` từng dòng trong vòng lặp sinh ra **N câu SQL riêng biệt** — rất chậm với dataset lớn. Hibernate hỗ trợ **gom nhiều câu INSERT/UPDATE thành 1 batch** gửi xuống database cùng lúc.
+
+### Bật JDBC Batching
+
+```yaml
+spring:
+  jpa:
+    properties:
+      hibernate:
+        jdbc:
+          batch_size: 50          # Gom tối đa 50 câu INSERT/UPDATE thành 1 batch
+        order_inserts: true       # Sắp xếp lại INSERT theo Entity type để batch hiệu quả hơn
+        order_updates: true
+```
+
+### saveAll() — cẩn thận với @GeneratedValue(strategy = IDENTITY)
+
+```java
+List<Product> products = buildLargeProductList(); // 10,000 sản phẩm
+productRepository.saveAll(products);
+```
+
+⚠️ **Bẫy quan trọng nhất của Batch Insert:** Chiến lược sinh khóa chính `GenerationType.IDENTITY` (auto-increment của DB) **vô hiệu hóa hoàn toàn JDBC Batching của Hibernate** — vì Hibernate cần biết ID ngay sau mỗi câu INSERT (để dùng cho việc quản lý Persistence Context), nên buộc phải insert **từng dòng một**, dù đã cấu hình `batch_size`.
+
+```java
+// ❌ Batching KHÔNG hoạt động - IDENTITY buộc insert từng dòng
+@Id
+@GeneratedValue(strategy = GenerationType.IDENTITY)
+private Long id;
+
+// ✅ Batching hoạt động bình thường - SEQUENCE cho phép Hibernate cấp phát ID trước theo lô
+@Id
+@GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "product_seq")
+@SequenceGenerator(name = "product_seq", sequenceName = "product_seq", allocationSize = 50)
+private Long id;
+```
+
+> **Khuyến nghị thực chiến:** Nếu ứng dụng có nhu cầu batch insert khối lượng lớn thường xuyên (import dữ liệu, ETL), nên **ưu tiên `SEQUENCE`** thay vì `IDENTITY` ngay từ khi thiết kế schema (PostgreSQL hỗ trợ tốt; MySQL 8+ cũng hỗ trợ `SEQUENCE` qua cơ chế riêng). Đổi chiến lược sinh khóa sau khi hệ thống đã chạy production là thay đổi lớn, cần cân nhắc kỹ từ đầu.
+
+### Định kỳ flush() + clear() để tránh phình Persistence Context
+
+```java
+@Transactional
+public void importProducts(List<ProductImportRow> rows) {
+    int batchSize = 50;
+    for (int i = 0; i < rows.size(); i++) {
+        Product product = mapToProduct(rows.get(i));
+        entityManager.persist(product);
+
+        if (i % batchSize == 0 && i > 0) {
+            entityManager.flush(); // Đẩy SQL xuống DB theo lô
+            entityManager.clear(); // Giải phóng Persistence Context - tránh OutOfMemoryError với dataset rất lớn
+        }
+    }
+}
+```
+
+⚠️ **Bẫy hay gặp:** Import/insert **hàng trăm nghìn record trong 1 transaction duy nhất** mà không `clear()` định kỳ → toàn bộ Entity vẫn nằm trong Persistence Context (bộ nhớ) cho tới cuối transaction → dễ gây `OutOfMemoryError` với dataset đủ lớn.
+
+---
+
+## 11. ⚠️ Các bẫy hay gặp
 
 1. **`deleteByX()` không có `@Transactional`** — Derived Query delete method cần `@Transactional` bao quanh (thường ở tầng Service), nếu không sẽ throw `InvalidDataAccessApiUsageException`.
 
@@ -589,25 +801,34 @@ List<Order> fullOrders = orderRepository.findByStatus(OrderStatus.PENDING, Order
 
 10. **Auditing không set `AuditorAware` đúng cách** → field `createdBy`/`updatedBy` luôn là `null` hoặc giá trị sai, audit trail vô nghĩa.
 
+11. **`@EntityGraph` fetch kèm nhiều quan hệ `*ToMany` cùng lúc** → `MultipleBagFetchException` hoặc kết quả bị nhân bản do Cartesian Product.
+
+12. **Batch insert khối lượng lớn với `GenerationType.IDENTITY`** → JDBC Batching bị vô hiệu hóa hoàn toàn, hiệu năng import tệ hơn nhiều so với mong đợi dù đã cấu hình `batch_size`.
+
 ---
 
-## 10. Tổng kết — Bảng ghi nhớ nhanh
+## 12. Tổng kết — Bảng ghi nhớ nhanh
 
 | Khái niệm | Ghi nhớ nhanh |
 |---|---|
 | `getReferenceById()` | Trả Proxy, không query ngay — dùng khi chỉ cần set FK |
+| Custom Repository | Interface `XxxCustom` + class `XxxCustomImpl`, ghép vào Repository chính |
+| Stream<T> | Đọc dữ liệu lớn theo cursor — bắt buộc `@Transactional` + try-with-resources |
 | Specification | Query động dùng Criteria API — String field name, không type-safe |
 | Querydsl | Query động type-safe hơn (Q-class), cần build step riêng |
 | Auditing | `@CreatedDate`/`@LastModifiedDate`/`@CreatedBy`/`@LastModifiedBy` + `@EnableJpaAuditing` |
 | Optimistic Locking | `@Version`, kiểm tra khi save, throw exception nếu conflict — phù hợp xung đột hiếm |
 | Pessimistic Locking | `SELECT ... FOR UPDATE`, khóa ngay khi đọc — phù hợp xung đột thường xuyên (flash sale) |
 | Flyway/Liquibase | Quản lý schema như code, version control — KHÔNG BAO GIỜ sửa migration đã chạy |
+| Liquibase rollback | `<rollback>` khai báo sẵn trong changeSet, Flyway (Community) không có tương đương |
 | ddl-auto khi dùng migration tool | Luôn `validate`, để Flyway/Liquibase quản lý schema thật |
 | Projection | Interface-based (đơn giản) hoặc Class-based DTO (type-safe hơn, khuyến nghị) |
+| EntityGraph | Khai báo fetch kèm quan hệ LAZY — tương đương `JOIN FETCH` nhưng declarative |
+| Batch Insert | `batch_size` + `order_inserts`; `IDENTITY` vô hiệu hóa batching, ưu tiên `SEQUENCE` |
 
 ---
 
-## 11. Bài tập luyện tập
+## 13. Bài tập luyện tập
 
 ### Phần A — Trắc nghiệm nhận định (Đúng/Sai + giải thích)
 
@@ -619,8 +840,10 @@ List<Order> fullOrders = orderRepository.findByStatus(OrderStatus.PENDING, Order
 6. Sửa lại nội dung 1 file migration Flyway đã từng chạy ở production là an toàn miễn là tên file không đổi.
 7. `@Version` field nên được lập trình viên set giá trị thủ công để kiểm soát chính xác.
 8. Pessimistic Locking có nguy cơ gây Deadlock nếu nhiều transaction khóa nhiều resource theo thứ tự khác nhau.
+9. `GenerationType.IDENTITY` không ảnh hưởng gì tới khả năng JDBC Batching của Hibernate.
+10. `@EntityGraph` fetch kèm cùng lúc 2 quan hệ `@OneToMany` khác nhau có thể gây lỗi hoặc kết quả nhân bản.
 
-### Phần B — Bài tập viết code (5 bài)
+### Phần B — Bài tập viết code (6 bài)
 
 **Bài 1:** Viết 1 `Specification` kết hợp 3 điều kiện tùy chọn cho `Product`: theo `category`, khoảng giá `minPrice`-`maxPrice`, và tên chứa từ khóa (`LIKE`). Viết Service method gọi kết hợp cả 3.
 
@@ -631,6 +854,8 @@ List<Order> fullOrders = orderRepository.findByStatus(OrderStatus.PENDING, Order
 **Bài 4:** Viết đầy đủ luồng xử lý tương tự Bài 3 nhưng bằng **Optimistic Locking** — bao gồm Entity có `@Version`, Service method, và 1 method wrapper có retry logic (dùng vòng lặp `for` đơn giản, không cần `@Retryable`) khi gặp `OptimisticLockException`.
 
 **Bài 5:** Viết 2 file Flyway migration: `V1__create_products_table.sql` (tạo bảng với các cột cơ bản) và `V2__add_category_index.sql` (thêm index cho cột `category`). Giải thích vì sao không được gộp chung vào 1 file V1 duy nhất nếu V1 đã từng chạy ở production.
+
+**Bài 6:** Cho Entity `Order` có quan hệ LAZY tới `User`. Viết `@NamedEntityGraph` tên `"Order.withUser"` và Repository method dùng `@EntityGraph` để lấy danh sách order theo status **không bị N+1**. Giải thích ngắn gọn vì sao cách này tốt hơn gọi `order.getUser().getFullName()` trực tiếp sau khi `findAll()`.
 
 ### Phần C — Gợi ý đáp án
 
@@ -645,6 +870,8 @@ List<Order> fullOrders = orderRepository.findByStatus(OrderStatus.PENDING, Order
 6. **Sai.** Tuyệt đối không được sửa — Flyway tính checksum dựa trên NỘI DUNG file, sửa nội dung sẽ gây lỗi checksum mismatch dù tên file giữ nguyên.
 7. **Sai.** `@Version` phải để Hibernate tự động quản lý hoàn toàn — set thủ công sẽ phá vỡ cơ chế Optimistic Locking.
 8. **Đúng.** Đây là rủi ro cố hữu của Pessimistic Locking — cần thiết kế thứ tự khóa nhất quán để tránh Deadlock.
+9. **Sai.** Ngược lại — `IDENTITY` vô hiệu hóa hoàn toàn JDBC Batching vì Hibernate cần ID ngay sau mỗi INSERT, buộc phải insert từng dòng một.
+10. **Đúng.** Nhiều quan hệ `*ToMany` fetch cùng lúc có thể gây `MultipleBagFetchException` hoặc Cartesian Product — chỉ nên fetch kèm tối đa 1 quan hệ `*ToMany` mỗi lần.
 
 </details>
 
@@ -876,6 +1103,38 @@ CREATE INDEX idx_products_category ON products(category);
 Flyway lưu lại **checksum (hash)** của từng file migration trong bảng `flyway_schema_history` ngay khi file đó chạy thành công lần đầu ở bất kỳ môi trường nào. Nếu sau đó bạn sửa nội dung file `V1__create_products_table.sql` (thêm câu `CREATE INDEX` vào) — dù chỉ thêm mà không xóa gì — checksum của file sẽ thay đổi. Lần deploy tiếp theo, Flyway so sánh checksum hiện tại của file với checksum đã lưu, phát hiện **không khớp** → ném lỗi `FlywayValidateException: Migration checksum mismatch`, ứng dụng **không khởi động được** ở bất kỳ môi trường nào đã từng chạy V1 trước đó.
 
 **Nguyên tắc:** Mỗi thay đổi schema, dù nhỏ, luôn phải là 1 **file migration MỚI** với version tăng dần (V2, V3...) — không bao giờ sửa lại file cũ đã chạy, giống như nguyên tắc "không được sửa lại 1 commit đã push lên remote" trong Git.
+
+</details>
+
+<details>
+<summary><b>Đáp án Bài 6</b></summary>
+
+```java
+@Entity
+@NamedEntityGraph(
+    name = "Order.withUser",
+    attributeNodes = @NamedAttributeNode("user")
+)
+public class Order {
+    @Id @GeneratedValue private Long id;
+    private OrderStatus status;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    private User user;
+}
+
+public interface OrderRepository extends JpaRepository<Order, Long> {
+
+    @EntityGraph("Order.withUser")
+    List<Order> findByStatus(OrderStatus status);
+}
+```
+
+**Vì sao tốt hơn gọi trực tiếp sau `findAll()`:**
+
+Nếu gọi `orderRepository.findAll()` rồi lặp qua từng `order.getUser().getFullName()`, mỗi lần truy cập `getUser()` với quan hệ `LAZY` sẽ kích hoạt **1 câu SELECT riêng** tới bảng `users` — với N order sẽ có N câu SELECT phụ, cộng với 1 câu SELECT ban đầu lấy Order → tổng **N+1 query** (vấn đề N+1 đã học ở Module 11).
+
+Dùng `@EntityGraph("Order.withUser")`, Hibernate nhận biết cần fetch kèm `user` ngay trong **1 câu JOIN FETCH duy nhất** khi thực thi `findByStatus()` — kết quả trả về Order đã có sẵn User được load đầy đủ, không còn câu SELECT nào phát sinh thêm khi truy cập `order.getUser()` sau đó. Tổng số query giảm từ N+1 xuống còn **1 query duy nhất**.
 
 </details>
 
