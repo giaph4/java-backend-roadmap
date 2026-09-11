@@ -2,6 +2,8 @@
 
 > **Mức ưu tiên: 🔴 Cao**
 > **Vì sao quan trọng:** Đây là cầu nối trực tiếp giữa Java Core/OOP và Spring Boot thực chiến. Gần như 100% backend Java hiện đại dùng Spring Data JPA (built trên Hibernate) để thao tác database. Không hiểu rõ cơ chế ORM — đặc biệt là **N+1 Query Problem** và **Lazy/Eager loading** — là nguyên nhân số 1 khiến ứng dụng Spring Boot chạy chậm bất thường trong production, và cũng là câu hỏi phỏng vấn "phân loại" ứng viên Junior vs Mid/Senior.
+>
+> **Phạm vi bài này:** cơ chế ORM/Hibernate và các annotation JPA nền tảng. Bài **không** đi sâu cấu hình Spring Boot Application Context/IoC (Module 12) hay REST API layer (module sau) — chỉ dùng `@Service`/`@Repository` như ví dụ minh họa cách JPA được dùng trong Spring.
 
 ---
 
@@ -12,14 +14,17 @@
 3. [Entity cơ bản: @Entity, @Id, @Table, @Column](#3-entity-cơ-bản)
 4. [Entity Lifecycle & Persistence Context](#4-entity-lifecycle--persistence-context)
 5. [Mapping quan hệ: @OneToMany, @ManyToOne, @ManyToMany, @OneToOne](#5-mapping-quan-hệ)
-6. [Lazy vs Eager Loading](#6-lazy-vs-eager-loading)
-7. [N+1 Query Problem](#7-n1-query-problem)
-8. [JPQL, Criteria API, Native Query](#8-jpql-criteria-api-native-query)
-9. [@Transactional — Transaction Management](#9-transactional)
-10. [Cascade Types & Orphan Removal](#10-cascade-types--orphan-removal)
-11. [⚠️ Các bẫy hay gặp](#11-các-bẫy-hay-gặp)
-12. [Tổng kết — Bảng ghi nhớ nhanh](#12-tổng-kết--bảng-ghi-nhớ-nhanh)
-13. [Bài tập luyện tập](#13-bài-tập-luyện-tập)
+6. [Inheritance Mapping — kế thừa giữa các Entity](#6-inheritance-mapping--kế-thừa-giữa-các-entity)
+7. [Lazy vs Eager Loading](#7-lazy-vs-eager-loading)
+8. [N+1 Query Problem](#8-n1-query-problem)
+9. [JPQL, Criteria API, Specification, Native Query](#9-jpql-criteria-api-specification-native-query)
+10. [@Transactional — Transaction Management](#10-transactional)
+11. [Cascade Types & Orphan Removal](#11-cascade-types--orphan-removal)
+12. [Optimistic & Pessimistic Locking](#12-optimistic--pessimistic-locking)
+13. [Second-Level Cache & Auditing](#13-second-level-cache--auditing)
+14. [⚠️ Các bẫy hay gặp](#14-các-bẫy-hay-gặp)
+15. [Tổng kết — Bảng ghi nhớ nhanh](#15-tổng-kết--bảng-ghi-nhớ-nhanh)
+16. [Bài tập luyện tập](#16-bài-tập-luyện-tập)
 
 ---
 
@@ -72,6 +77,10 @@ User user = entityManager.find(User.class, id);
 - Có "learning curve" riêng — hiểu sai cơ chế dễ tạo ra SQL tệ hơn viết tay
 - Có overhead hiệu năng nếu dùng không đúng cách (N+1 Problem là ví dụ điển hình)
 - Với query phức tạp (report, aggregation nặng), đôi khi native SQL vẫn tốt hơn
+
+### JDBC vẫn nằm dưới cùng — Hibernate không "thay thế" JDBC
+
+Dù dùng ORM, cuối cùng Hibernate vẫn phải mở `Connection`, tạo `PreparedStatement` và chạy SQL thật qua JDBC (Module 10) — Hibernate chỉ **tự động hóa** phần sinh SQL + map ResultSet, chứ không loại bỏ tầng JDBC. Hiểu điều này giúp lý giải vì sao mọi khái niệm đã học ở Module 10 (Connection Pool, Transaction, Isolation Level, Index) vẫn áp dụng nguyên vẹn khi dùng JPA — JPA chỉ là 1 lớp trừu tượng (abstraction) phía trên, không phải 1 thế giới hoàn toàn khác.
 
 ---
 
@@ -176,6 +185,61 @@ private int calculatedAge;
 private String description;
 ```
 
+### @Embeddable / @Embedded — nhóm nhiều cột thành 1 Value Object
+
+Một số nhóm field luôn đi cùng nhau về mặt nghiệp vụ (VD: địa chỉ gồm `street`, `city`, `country`) nhưng **không đáng để tách thành 1 Entity riêng** (không có `@Id` riêng, không có vòng đời độc lập) — JPA gọi đây là **Value Object**, ánh xạ bằng `@Embeddable`/`@Embedded`:
+
+```java
+@Embeddable   // KHÔNG có @Id, KHÔNG map thành bảng riêng — các field của nó "nhúng" vào bảng chứa nó
+public class Address {
+    private String street;
+    private String city;
+    private String country;
+    // constructor, getters, equals/hashCode theo giá trị (Value Object nên so sánh theo NỘI DUNG, Module 03.1)
+}
+
+@Entity
+public class User {
+    @Id @GeneratedValue private Long id;
+    private String fullName;
+
+    @Embedded  // Các field của Address (street, city, country) trở thành CỘT của bảng "users"
+    private Address address;
+}
+```
+```sql
+-- Kết quả: KHÔNG có bảng "address" riêng — 3 cột được nhúng thẳng vào bảng users
+CREATE TABLE users (id BIGINT PRIMARY KEY, full_name VARCHAR(100), street VARCHAR(200), city VARCHAR(100), country VARCHAR(100));
+```
+> **Phân biệt với `@OneToOne`:** `@Embeddable` phù hợp khi Value Object **không có ý nghĩa tồn tại độc lập** (Address luôn thuộc về đúng 1 User, không cần ID riêng, không ai truy vấn "Address" một mình) — nếu đối tượng cần vòng đời/ID riêng, hoặc được nhiều Entity khác tham chiếu tới, phải dùng quan hệ Entity thật (`@OneToOne`/`@ManyToOne`) như mục 5.
+
+### `@Converter` — ánh xạ kiểu dữ liệu tùy biến
+
+Khi kiểu dữ liệu Java không có ánh xạ SQL mặc định phù hợp (VD: muốn **mã hóa** 1 field nhạy cảm trước khi lưu DB, hoặc lưu 1 `List<String>` thành 1 cột `VARCHAR` dạng CSV), dùng `AttributeConverter`:
+
+```java
+@Converter(autoApply = true) // autoApply=true: tự áp dụng cho MỌI field kiểu List<String> trong toàn bộ project
+public class StringListConverter implements AttributeConverter<List<String>, String> {
+
+    @Override
+    public String convertToDatabaseColumn(List<String> list) {
+        return list == null ? null : String.join(",", list); // Java -> DB
+    }
+
+    @Override
+    public List<String> convertToEntityAttribute(String dbValue) {
+        return dbValue == null ? List.of() : Arrays.asList(dbValue.split(",")); // DB -> Java
+    }
+}
+
+@Entity
+public class Post {
+    @Convert(converter = StringListConverter.class) // không cần nếu đã autoApply=true
+    private List<String> tags;
+}
+```
+> **So với `JSONB`/Array của PostgreSQL (Module 10, mục 3):** nếu DB hỗ trợ sẵn kiểu native (JSONB, Array), ưu tiên dùng kiểu native đó (hiệu năng tốt hơn, truy vấn được trực tiếp trong SQL) — `@Converter` phù hợp hơn khi cần logic chuyển đổi tùy biến (mã hóa, nén dữ liệu) hoặc DB không hỗ trợ kiểu phức tạp (MySQL với danh sách đơn giản).
+
 ---
 
 ## 4. Entity Lifecycle & Persistence Context
@@ -237,6 +301,25 @@ User u2 = entityManager.find(User.class, 1L); // KHÔNG query DB, lấy từ cac
 System.out.println(u1 == u2); // true — cùng 1 object reference!
 ```
 
+### flush() — khi nào SQL thực sự được gửi xuống DB?
+
+Một hiểu lầm phổ biến: nghĩ rằng `persist()`/`setXxx()` gửi SQL xuống DB **ngay lập tức**. Thực tế, Hibernate **gom (batch)** các thay đổi lại trong Persistence Context và chỉ thực sự gửi SQL khi **flush** xảy ra — thường là ngay trước khi transaction commit, hoặc trước khi chạy 1 query JPQL có thể bị ảnh hưởng bởi thay đổi chưa lưu (auto-flush), hoặc khi gọi `entityManager.flush()` tường minh.
+
+```java
+@Transactional
+public void demo() {
+    User user = new User("Pho", "pho@example.com");
+    entityManager.persist(user); // CHƯA có INSERT SQL nào chạy — chỉ đưa vào Persistence Context
+
+    // Nếu ngay sau đó chạy 1 query JPQL có thể liên quan đến "user" mới này,
+    // Hibernate tự động flush TRƯỚC khi chạy query, để đảm bảo query thấy dữ liệu mới nhất
+    List<User> all = entityManager.createQuery("SELECT u FROM User u", User.class).getResultList();
+    // -> INSERT SQL của "user" chạy TRƯỚC SELECT phía trên (auto-flush)
+}
+// Transaction commit -> flush LẦN CUỐI (nếu còn thay đổi chưa flush) -> COMMIT thật ở tầng DB
+```
+> **Liên hệ:** đây chính là lý do vì sao có thể "batch" nhiều INSERT/UPDATE lại thành ít round-trip DB hơn (liên hệ Buffer Pool/gom ghi ở Module 10, mục 2) — Hibernate không nhất thiết chạy SQL ngay khi code gọi method, mà tối ưu hóa thời điểm gửi SQL xuống DB.
+
 ---
 
 ## 5. Mapping quan hệ
@@ -256,7 +339,7 @@ public class Order {
 
     private BigDecimal totalAmount;
 
-    @ManyToOne(fetch = FetchType.LAZY)   // LUÔN chỉ định LAZY tường minh (xem mục 6)
+    @ManyToOne(fetch = FetchType.LAZY)   // LUÔN chỉ định LAZY tường minh (xem mục 7)
     @JoinColumn(name = "user_id")        // Tên cột foreign key trong bảng orders
     private User user;
 }
@@ -403,7 +486,102 @@ public class UserProfile {
 
 ---
 
-## 6. Lazy vs Eager Loading
+## 6. Inheritance Mapping — kế thừa giữa các Entity
+
+Java hỗ trợ kế thừa class (`extends`, Module 03) nhưng SQL thuần **không có khái niệm kế thừa giữa các bảng** — JPA cung cấp 3 chiến lược khác nhau để ánh xạ 1 cây kế thừa Entity xuống các bảng quan hệ, mỗi chiến lược đánh đổi khác nhau giữa hiệu năng và tính chuẩn hóa.
+
+Ví dụ xuyên suốt: `Payment` (lớp cha trừu tượng) có 2 lớp con `CreditCardPayment` và `BankTransferPayment`, mỗi loại có field riêng.
+
+### 6.1. SINGLE_TABLE (mặc định) — 1 bảng cho toàn bộ cây kế thừa
+
+```java
+@Entity
+@Inheritance(strategy = InheritanceType.SINGLE_TABLE)
+@DiscriminatorColumn(name = "payment_type") // Cột phân biệt loại record nào thuộc class con nào
+public abstract class Payment {
+    @Id @GeneratedValue private Long id;
+    private BigDecimal amount;
+}
+
+@Entity
+@DiscriminatorValue("CREDIT_CARD")
+public class CreditCardPayment extends Payment {
+    private String cardNumber; // Field riêng — vẫn nằm CHUNG bảng "payment"
+}
+
+@Entity
+@DiscriminatorValue("BANK_TRANSFER")
+public class BankTransferPayment extends Payment {
+    private String bankAccount; // Field riêng
+}
+```
+```sql
+-- 1 bảng DUY NHẤT, cột riêng của mỗi loại con đều là NULL với record không thuộc loại đó
+CREATE TABLE payment (
+    id BIGINT PRIMARY KEY, amount DECIMAL(10,2), payment_type VARCHAR(20),
+    card_number VARCHAR(20),   -- NULL nếu payment_type = 'BANK_TRANSFER'
+    bank_account VARCHAR(50)   -- NULL nếu payment_type = 'CREDIT_CARD'
+);
+```
+| Ưu điểm | Nhược điểm |
+|---|---|
+| **Nhanh nhất** — không cần JOIN khi truy vấn | Nhiều cột `NULL` nếu các lớp con khác biệt lớn (giống Anti-pattern Sparse Table, Module 10 mục 3) |
+| Query đơn giản | Không áp được `NOT NULL` cho field riêng của lớp con ở tầng DB |
+
+### 6.2. JOINED — mỗi class 1 bảng, liên kết bằng khóa ngoại = khóa chính
+
+```java
+@Entity
+@Inheritance(strategy = InheritanceType.JOINED)
+public abstract class Payment {
+    @Id @GeneratedValue private Long id;
+    private BigDecimal amount;
+}
+
+@Entity
+public class CreditCardPayment extends Payment {
+    private String cardNumber; // Nằm ở bảng RIÊNG "credit_card_payment"
+}
+```
+```sql
+CREATE TABLE payment (id BIGINT PRIMARY KEY, amount DECIMAL(10,2));
+CREATE TABLE credit_card_payment (id BIGINT PRIMARY KEY REFERENCES payment(id), card_number VARCHAR(20));
+-- Đọc 1 CreditCardPayment đầy đủ = JOIN payment + credit_card_payment theo id
+```
+| Ưu điểm | Nhược điểm |
+|---|---|
+| Chuẩn hóa đúng đắn — không có cột `NULL` thừa | **Chậm hơn** — mỗi query đọc đầy đủ phải JOIN nhiều bảng |
+| Ràng buộc `NOT NULL`/`CHECK` áp được đúng cho từng loại | Phức tạp hơn khi có nhiều tầng kế thừa sâu |
+
+### 6.3. TABLE_PER_CLASS — mỗi class cụ thể 1 bảng độc lập hoàn toàn
+
+```java
+@Entity
+@Inheritance(strategy = InheritanceType.TABLE_PER_CLASS)
+public abstract class Payment {
+    @Id @GeneratedValue(strategy = GenerationType.TABLE) // Không dùng được IDENTITY/AUTO_INCREMENT ở strategy này!
+    private Long id;
+    private BigDecimal amount;
+}
+```
+```sql
+-- Mỗi bảng con tự lặp lại TOÀN BỘ cột của cha (amount), KHÔNG có bảng "payment" chung
+CREATE TABLE credit_card_payment (id BIGINT PRIMARY KEY, amount DECIMAL(10,2), card_number VARCHAR(20));
+CREATE TABLE bank_transfer_payment (id BIGINT PRIMARY KEY, amount DECIMAL(10,2), bank_account VARCHAR(50));
+```
+> **Ít được khuyến khích nhất trong thực tế:** truy vấn đa hình (`findAll()` trên `Payment` để lấy TẤT CẢ loại) phải dùng `UNION` giữa các bảng — chậm, và việc sinh ID tự động (`IDENTITY`) không hoạt động xuyên các bảng độc lập.
+
+### So sánh nhanh 3 chiến lược
+
+| Chiến lược | Số bảng | Tốc độ đọc | Khi dùng |
+|---|---|---|---|
+| `SINGLE_TABLE` (mặc định) | 1 bảng cho cả cây | **Nhanh nhất** | Các lớp con khác biệt ÍT, ưu tiên hiệu năng — **lựa chọn mặc định hợp lý cho đa số trường hợp** |
+| `JOINED` | 1 bảng cha + N bảng con | Chậm hơn (cần JOIN) | Các lớp con khác biệt NHIỀU, cần chuẩn hóa chặt, chấp nhận đánh đổi tốc độ |
+| `TABLE_PER_CLASS` | N bảng độc lập, không bảng cha | Chậm nhất khi truy vấn đa hình | Hiếm dùng — chỉ khi các lớp con gần như không có truy vấn chung nào |
+
+---
+
+## 7. Lazy vs Eager Loading
 
 Đây là khái niệm quyết định hiệu năng ứng dụng — **phải hiểu sâu**.
 
@@ -489,7 +667,7 @@ public interface OrderSummary {
 
 ---
 
-## 7. N+1 Query Problem
+## 8. N+1 Query Problem
 
 Đây là vấn đề hiệu năng **kinh điển nhất** khi làm việc với ORM — gần như chắc chắn sẽ gặp trong phỏng vấn và trong công việc thực tế.
 
@@ -586,7 +764,7 @@ List<OrderDTO> findAllOrderDTOs(); // 1 query, chỉ lấy đúng field cần, k
 
 ---
 
-## 8. JPQL, Criteria API, Native Query
+## 9. JPQL, Criteria API, Specification, Native Query
 
 ### JPQL (Java Persistence Query Language)
 
@@ -613,6 +791,20 @@ public interface UserRepository extends JpaRepository<User, Long> {
     List<User> findTop10ByOrderByCreatedAtDesc();
 }
 ```
+
+### Bulk Update/Delete — `@Modifying`
+
+JPQL thông thường (`SELECT`) trả về Entity đã Managed, nhưng đôi khi cần **UPDATE/DELETE hàng loạt** mà không muốn load từng Entity vào bộ nhớ (tốn RAM, chậm với dữ liệu lớn) — dùng `@Modifying`:
+
+```java
+public interface OrderRepository extends JpaRepository<Order, Long> {
+
+    @Modifying
+    @Query("UPDATE Order o SET o.status = 'CANCELLED' WHERE o.createdAt < :cutoff AND o.status = 'PENDING'")
+    int cancelStaleOrders(@Param("cutoff") LocalDateTime cutoff); // trả về SỐ DÒNG bị ảnh hưởng
+}
+```
+⚠️ **Bẫy quan trọng:** `@Modifying` thực thi SQL **trực tiếp** xuống DB, **bỏ qua hoàn toàn Persistence Context** — nếu trước đó đã `find()` và đang giữ Entity Managed trong bộ nhớ, các Entity đó **KHÔNG tự cập nhật** theo kết quả bulk update (dữ liệu trong bộ nhớ trở nên "cũ" so với DB). Cần gọi `entityManager.clear()` (hoặc `@Modifying(clearAutomatically = true)`) để tránh đọc nhầm dữ liệu cũ từ Persistence Context sau khi bulk update.
 
 ### Native Query — khi cần SQL đặc thù của từng DBMS
 
@@ -643,17 +835,43 @@ public List<User> searchUsers(String name, UserStatus status) {
 }
 ```
 
+### Specification — Criteria API "gọn hóa" trong Spring Data JPA
+
+Criteria API đúng nhưng khá dài dòng — Spring Data JPA cung cấp `Specification<T>` để viết query động theo phong cách khai báo hơn, tái sử dụng được từng điều kiện lọc riêng lẻ:
+
+```java
+public interface UserRepository extends JpaRepository<User, Long>, JpaSpecificationExecutor<User> {}
+
+public class UserSpecifications {
+    public static Specification<User> hasName(String name) {
+        return (root, query, cb) -> name == null ? null : cb.like(root.get("fullName"), "%" + name + "%");
+    }
+    public static Specification<User> hasStatus(UserStatus status) {
+        return (root, query, cb) -> status == null ? null : cb.equal(root.get("status"), status);
+    }
+}
+
+// Sử dụng: kết hợp linh hoạt các điều kiện, "và" (AND) với nhau — trả null nếu điều kiện đó không cần lọc
+Specification<User> spec = Specification.where(UserSpecifications.hasName(name))
+                                         .and(UserSpecifications.hasStatus(status));
+List<User> results = userRepository.findAll(spec);
+```
+> **So với Criteria API thuần:** `Specification` chỉ là 1 lớp bọc (wrapper) mỏng phía trên Criteria API, giúp mỗi điều kiện lọc trở thành 1 method tái sử dụng độc lập, dễ test, dễ compose (kết hợp `and`/`or`) — vẫn dùng chung engine Criteria phía dưới nên vẫn type-safe.
+
+### Bảng tổng hợp lựa chọn
+
 | Cách | Khi dùng |
 |---|---|
 | Derived Query Method | Query đơn giản, ít điều kiện |
 | JPQL (`@Query`) | Query phức tạp vừa phải, cố định |
-| Criteria API | Query **động** (nhiều điều kiện filter tùy chọn — search form) |
+| `@Modifying` + JPQL | UPDATE/DELETE hàng loạt, không cần load Entity vào bộ nhớ |
+| Criteria API / `Specification` | Query **động** (nhiều điều kiện filter tùy chọn — search form); `Specification` thường được ưa chuộng hơn vì gọn và tái sử dụng tốt hơn |
 | Native Query | Cần tính năng đặc thù của DBMS, tối ưu hiệu năng cực hạn |
 | **Querydsl** (thư viện ngoài, không thuộc JPA chuẩn) | Thay thế Criteria API, code dễ đọc hơn nhiều — phổ biến trong dự án lớn |
 
 ---
 
-## 9. @Transactional
+## 10. @Transactional
 
 ### Vì sao cần Transaction?
 
@@ -763,7 +981,7 @@ public void someMethod() { ... }
 
 ---
 
-## 10. Cascade Types & Orphan Removal
+## 11. Cascade Types & Orphan Removal
 
 ### Cascade — "lan truyền" thao tác từ Entity cha xuống Entity con
 
@@ -805,7 +1023,138 @@ user.getOrders().remove(order1); // Bỏ order1 ra khỏi list trong bộ nhớ
 
 ---
 
-## 11. ⚠️ Các bẫy hay gặp
+## 12. Optimistic & Pessimistic Locking
+
+Khi nhiều transaction/nhiều instance backend cùng truy cập 1 record (bài toán Lost Update đã học ở Module 10, mục 7), JPA cung cấp 2 cơ chế khóa ở tầng Entity để giải quyết.
+
+### Optimistic Locking — `@Version`
+
+**Ý tưởng:** "lạc quan" rằng va chạm hiếm khi xảy ra — không khóa row khi đọc, chỉ **kiểm tra tại thời điểm ghi** xem dữ liệu có bị ai đó sửa từ lúc mình đọc hay không, dựa trên 1 cột đếm phiên bản (`version`):
+
+```java
+@Entity
+public class Product {
+    @Id @GeneratedValue private Long id;
+    private String name;
+    private Integer stock;
+
+    @Version   // Hibernate TỰ ĐỘNG tăng field này mỗi lần UPDATE, và kiểm tra trong mệnh đề WHERE
+    private Long version;
+}
+```
+```sql
+-- Hibernate tự sinh SQL dạng:
+UPDATE product SET stock = 95, version = 6 WHERE id = 1 AND version = 5;
+-- Nếu version trong DB ĐÃ bị transaction khác đổi thành 6 từ trước (do đã update rồi),
+-- câu UPDATE trên khớp 0 dòng -> Hibernate ném OptimisticLockException NGAY LẬP TỨC
+```
+```java
+@Transactional
+public void reduceStock(Long productId, int quantity) {
+    Product product = productRepository.findById(productId).orElseThrow();
+    product.setStock(product.getStock() - quantity);
+    // Nếu 2 request đồng thời cùng đọc version=5, cùng trừ tồn kho, cùng cố UPDATE
+    // -> chỉ request NÀO COMMIT TRƯỚC thành công; request sau ném OptimisticLockException
+    // -> code gọi cần CATCH exception này và retry hoặc báo lỗi cho người dùng
+}
+```
+> **Liên hệ trực tiếp:** đây chính là cơ chế cụ thể của khái niệm "optimistic locking qua cột `version`" đã được nhắc tới ở Module 10, mục 7 — giờ hiện thực hóa bằng 1 annotation duy nhất, Hibernate lo toàn bộ phần sinh SQL kiểm tra version.
+
+### Pessimistic Locking — `@Lock`
+
+**Ý tưởng:** "bi quan" rằng va chạm rất có thể xảy ra — khóa row **ngay khi đọc**, chặn transaction khác đọc/ghi cho tới khi mình commit, tương đương `SELECT ... FOR UPDATE` (Module 10, mục 7):
+
+```java
+public interface ProductRepository extends JpaRepository<Product, Long> {
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE) // Sinh ra SELECT ... FOR UPDATE
+    @Query("SELECT p FROM Product p WHERE p.id = :id")
+    Optional<Product> findByIdForUpdate(@Param("id") Long id);
+}
+```
+
+### So sánh & khi nào dùng loại nào
+
+| Tiêu chí | Optimistic (`@Version`) | Pessimistic (`@Lock`) |
+|---|---|---|
+| Cơ chế | Không khóa khi đọc, kiểm tra khi ghi | Khóa row ngay khi đọc (`FOR UPDATE`) |
+| Hiệu năng khi ít va chạm | **Tốt** — không tạo điểm nghẽn (bottleneck) | Kém hơn — mọi transaction khác phải chờ |
+| Hiệu năng khi va chạm CAO | Kém — nhiều transaction phải retry liên tục | **Tốt hơn** — đảm bảo tuần tự ngay từ đầu, không tốn công retry |
+| Trải nghiệm khi thất bại | Người dùng thấy lỗi, có thể cần thử lại thao tác | Người dùng chỉ chờ lâu hơn 1 chút, không thấy lỗi |
+| Ví dụ phù hợp | Sửa hồ sơ cá nhân, cập nhật thông tin ít khi 2 người sửa cùng lúc | Trừ tồn kho vé flash-sale — va chạm gần như CHẮC CHẮN xảy ra |
+
+> **Liên hệ capstone:** bài toán "trừ số lượng vé còn lại" trong flash-sale là ví dụ kinh điển của va chạm **cực cao** — Pessimistic Locking (hoặc giải pháp ở tầng cache/Redis đã bàn ở Module 10, mục 10) thường phù hợp hơn Optimistic Locking thuần túy, vì retry liên tục hàng chục nghìn request cùng lúc sẽ gây "thundering herd" (dồn ứ do tất cả cùng retry gần như đồng thời).
+
+---
+
+## 13. Second-Level Cache & Auditing
+
+### Second-Level Cache — cache CHIA SẺ giữa nhiều transaction/request
+
+Persistence Context (First-Level Cache, mục 4) chỉ tồn tại trong phạm vi **1 transaction/1 EntityManager** — đóng transaction là cache mất. **Second-Level Cache (L2 Cache)** là 1 tầng cache **chia sẻ giữa toàn bộ ứng dụng**, tồn tại xuyên suốt nhiều transaction, thường cần thêm thư viện cache provider (Ehcache, Caffeine, hoặc Redis) tích hợp qua Hibernate:
+
+```java
+@Entity
+@Cacheable // Đánh dấu Entity này được phép cache ở L2
+@org.hibernate.annotations.Cache(usage = CacheConcurrencyStrategy.READ_WRITE)
+public class Category {
+    @Id @GeneratedValue private Long id;
+    private String name; // Dữ liệu Category ít thay đổi -> ứng viên tốt cho L2 Cache
+}
+```
+```yaml
+spring:
+  jpa:
+    properties:
+      hibernate:
+        cache:
+          use_second_level_cache: true
+          region.factory_class: org.hibernate.cache.jcache.JCacheRegionFactory
+```
+> **Khi nào dùng:** phù hợp cho dữ liệu **đọc nhiều, ghi ít, ít khi đổi** (danh mục sản phẩm, cấu hình hệ thống) — giống chính xác tiêu chí chọn dữ liệu để cache bằng Redis đã bàn ở Module 10, mục 6. **Không nên** bật tràn lan cho mọi Entity — dữ liệu thay đổi thường xuyên (đơn hàng, tồn kho) mà cache sai cách dễ dẫn tới đọc dữ liệu CŨ, gây bug khó phát hiện hơn cả N+1.
+>
+> **Phân biệt với Redis (Module 10):** Second-Level Cache là cache **ở tầng Hibernate**, tự động, gắn liền vòng đời Entity — còn dùng Redis làm cache là **tự tay** cache kết quả ở tầng ứng dụng (Service), kiểm soát rõ ràng hơn nhưng phải tự viết logic invalidate. Nhiều dự án production ưu tiên tự cache bằng Redis ở tầng Service (`@Cacheable` của Spring Cache) hơn là bật L2 Cache của Hibernate, vì dễ kiểm soát và debug hơn.
+
+### Auditing — tự động ghi "ai/khi nào" tạo và sửa dữ liệu
+
+Gần như MỌI bảng nghiệp vụ đều cần biết record được tạo/sửa khi nào, bởi ai — Spring Data JPA tự động hóa việc này thay vì phải set thủ công ở từng chỗ gọi `save()`:
+
+```java
+@EntityListeners(AuditingEntityListener.class) // Kích hoạt auditing cho Entity này
+@Entity
+public class Order {
+    @Id @GeneratedValue private Long id;
+
+    @CreatedDate
+    @Column(updatable = false)
+    private LocalDateTime createdAt;   // Tự động set khi persist() lần đầu
+
+    @LastModifiedDate
+    private LocalDateTime updatedAt;    // Tự động cập nhật mỗi lần entity thay đổi
+
+    @CreatedBy
+    private String createdBy;           // Tự động lấy từ AuditorAware<String> hiện tại (VD: user đang đăng nhập)
+
+    @LastModifiedBy
+    private String lastModifiedBy;
+}
+```
+```java
+@Configuration
+@EnableJpaAuditing // Bật cơ chế Auditing toàn ứng dụng
+public class JpaConfig {
+    @Bean
+    public AuditorAware<String> auditorProvider() {
+        return () -> Optional.of(SecurityContextHolder.getContext().getAuthentication().getName());
+        // Sẽ hiểu rõ hơn cơ chế SecurityContext khi học Spring Security ở các module sau
+    }
+}
+```
+> **Lợi ích:** loại bỏ hoàn toàn boilerplate "set `createdAt = LocalDateTime.now()`" lặp lại ở từng Service — đảm bảo **mọi** entity đều nhất quán có đủ thông tin audit, không sợ quên set ở 1 chỗ nào đó.
+
+---
+
+## 14. ⚠️ Các bẫy hay gặp
 
 1. **Quên `fetch = FetchType.LAZY` tường minh** cho `@ManyToOne`/`@OneToOne` → mặc định EAGER → load dư thừa dữ liệu không cần thiết, đôi khi gây vòng lặp vô hạn khi serialize sang JSON (`User` có `List<Order>`, mỗi `Order` lại có `User`...).
 
@@ -827,27 +1176,42 @@ user.getOrders().remove(order1); // Bỏ order1 ra khỏi list trong bộ nhớ
 
 10. **Trả Entity trực tiếp ra Controller/API** thay vì DTO → rò rỉ cấu trúc DB ra ngoài, dễ gặp LazyInitializationException khi serialize, khó version API sau này.
 
+11. **Bắt `OptimisticLockException` sai chỗ hoặc không bắt** — nếu không `catch` và xử lý (retry/báo lỗi rõ ràng cho người dùng), lỗi này sẽ chỉ hiện ra như 1 HTTP 500 khó hiểu ở tầng API thay vì thông điệp nghiệp vụ hợp lý ("dữ liệu vừa bị người khác cập nhật, vui lòng thử lại").
+
+12. **Dùng `@Modifying` mà quên `clearAutomatically`/`entityManager.clear()`** khi phía sau còn đọc lại các Entity đã bị bulk-update — Persistence Context vẫn giữ bản snapshot CŨ, dẫn tới đọc nhầm dữ liệu đã lỗi thời dù DB đã đúng.
+
+13. **Chọn `SINGLE_TABLE` cho cây kế thừa có quá nhiều lớp con khác biệt lớn** → bảng có hàng chục cột phần lớn là `NULL`, khó đọc, khó áp ràng buộc `NOT NULL` đúng nghĩa cho từng loại.
+
 ---
 
-## 12. Tổng kết — Bảng ghi nhớ nhanh
+## 15. Tổng kết — Bảng ghi nhớ nhanh
 
 | Khái niệm | Ghi nhớ nhanh |
 |---|---|
 | JPA vs Hibernate | JPA = spec (interface), Hibernate = implementation phổ biến nhất |
 | Entity Lifecycle | Transient → Managed → (Detached / Removed) |
 | Dirty Checking | Managed entity: chỉ cần set field, không cần gọi save() |
+| flush() | SQL không chạy ngay lập tức — Hibernate gom lại, chỉ gửi khi flush (trước commit hoặc trước query liên quan) |
 | Owning Side | Bên có `@JoinColumn` — quyết định giá trị FK thực tế trong DB |
+| `@Embeddable` | Nhóm field thành Value Object nhúng vào bảng chứa nó, không phải Entity riêng |
+| Inheritance Mapping | `SINGLE_TABLE` (mặc định, nhanh) / `JOINED` (chuẩn hóa, chậm hơn) / `TABLE_PER_CLASS` (hiếm dùng) |
 | Fetch mặc định | `@ManyToOne`/`@OneToOne` = EAGER; `@OneToMany`/`@ManyToMany` = LAZY |
 | Best practice Fetch | LUÔN khai báo `FetchType.LAZY` tường minh cho mọi quan hệ |
 | N+1 Problem | 1 query cha + N query con lặp lại → khắc phục bằng JOIN FETCH/EntityGraph/DTO |
+| Specification | Wrapper gọn hơn của Criteria API cho query động, dễ tái sử dụng điều kiện lọc |
+| `@Modifying` | Bulk UPDATE/DELETE bỏ qua Persistence Context — nhớ `clearAutomatically` |
 | @Transactional | Dựa trên AOP Proxy → self-invocation không hoạt động; chỉ rollback RuntimeException mặc định |
 | Cascade | Lan truyền thao tác cha → con; chỉ dùng cho quan hệ composition thật sự |
 | orphanRemoval | Xóa con khỏi collection cha → xóa luôn khỏi DB |
+| `@Version` (Optimistic) | Không khóa khi đọc, kiểm tra version khi ghi — tốt khi va chạm ít |
+| `@Lock` (Pessimistic) | Khóa row ngay khi đọc (`FOR UPDATE`) — tốt khi va chạm nhiều |
+| Second-Level Cache | Cache chia sẻ xuyên transaction ở tầng Hibernate — chỉ dùng cho dữ liệu đọc nhiều/đổi ít |
+| Auditing (`@CreatedDate`...) | Tự động ghi ai/khi nào tạo-sửa record, không cần set thủ công từng chỗ |
 | API response | Luôn trả DTO, không trả Entity trực tiếp |
 
 ---
 
-## 13. Bài tập luyện tập
+## 16. Bài tập luyện tập
 
 ### Phần A — Trắc nghiệm nhận định (Đúng/Sai + giải thích)
 
@@ -859,8 +1223,11 @@ user.getOrders().remove(order1); // Bỏ order1 ra khỏi list trong bộ nhớ
 6. `orphanRemoval = true` sẽ xóa entity con khỏi DB ngay khi bị remove khỏi List trong bộ nhớ, kể cả khi chưa transaction commit.
 7. N+1 Query Problem chỉ xảy ra với quan hệ `@OneToMany`, không xảy ra với `@ManyToOne`.
 8. Self-invocation (gọi method `@Transactional` từ method khác cùng class qua `this`) vẫn kích hoạt transaction bình thường.
+9. `@Embeddable` tạo ra 1 bảng riêng trong database, tương tự `@Entity`.
+10. Với `InheritanceType.SINGLE_TABLE`, thêm 1 lớp con mới có nhiều field riêng sẽ không cần tạo bảng mới, nhưng có thể làm bảng hiện tại có thêm nhiều cột `NULL`.
+11. Optimistic Locking (`@Version`) khóa row ngay khi đọc dữ liệu, giống Pessimistic Locking.
 
-### Phần B — Bài tập viết code (5 bài)
+### Phần B — Bài tập viết code (6 bài)
 
 **Bài 1:** Thiết kế 2 Entity `Category` và `Product` với quan hệ `@OneToMany`/`@ManyToOne` (1 Category có nhiều Product). Viết đầy đủ: entity, owning side/inverse side đúng chuẩn, helper method `addProduct()`/`removeProduct()` để đồng bộ 2 chiều.
 
@@ -878,6 +1245,8 @@ for (Category c : categories) {
 
 **Bài 5:** Thiết kế quan hệ `@ManyToMany` giữa `Student` và `Course`, sau đó refactor thành 2 quan hệ `@ManyToOne` thông qua Entity trung gian `Enrollment` có thêm field `enrolledDate` và `grade`. Giải thích vì sao cách 2 tốt hơn trong thực tế.
 
+**Bài 6 — Optimistic Locking cho bài toán trừ tồn kho.** Thêm `@Version` vào Entity `Product` ở Bài 1, viết method `reduceStock()` dùng `@Transactional` với Optimistic Locking. Mô tả (bằng lời) kịch bản 2 request đồng thời cùng gọi `reduceStock()` cho cùng 1 sản phẩm — điều gì xảy ra, và code cần xử lý thêm gì để trải nghiệm người dùng không bị lỗi 500 khó hiểu.
+
 ### Phần C — Gợi ý đáp án
 
 <details>
@@ -891,6 +1260,9 @@ for (Category c : categories) {
 6. **Sai.** Thao tác xóa (DELETE SQL) chỉ thực sự chạy khi transaction **flush/commit**, không xảy ra ngay lập tức khi gọi `remove()` trên List trong bộ nhớ.
 7. **Sai.** N+1 xảy ra với cả `@ManyToOne` (ví dụ load N Order rồi load User cho từng Order) lẫn `@OneToMany`.
 8. **Sai.** Self-invocation bỏ qua Proxy của Spring AOP, nên `@Transactional` không có tác dụng khi gọi qua `this`.
+9. **Sai.** `@Embeddable` KHÔNG tạo bảng riêng — các field của nó được "nhúng" thành cột ngay trong bảng của Entity chứa nó (`@Embedded`).
+10. **Đúng.** Đây chính là đánh đổi cố hữu của `SINGLE_TABLE`: không cần tạo bảng mới (nhanh, đơn giản), nhưng field riêng của mỗi lớp con là `NULL` với các record thuộc lớp con khác.
+11. **Sai.** Ngược lại — Optimistic Locking (`@Version`) KHÔNG khóa khi đọc, chỉ kiểm tra version tại thời điểm ghi. Pessimistic Locking (`@Lock`) mới là cơ chế khóa row ngay khi đọc.
 
 </details>
 
@@ -927,6 +1299,7 @@ public class Product {
 
     private String name;
     private BigDecimal price;
+    private Integer stock;
 
     @ManyToOne(fetch = FetchType.LAZY) // Owning side - luôn LAZY tường minh
     @JoinColumn(name = "category_id")
@@ -1110,6 +1483,62 @@ public class Course {
 - Tách thành Entity riêng giúp dễ dàng thêm field mới sau này (VD: `status: ENROLLED/DROPPED/COMPLETED`) mà không phải đổi kiến trúc.
 - Truy vấn linh hoạt hơn: có thể query trực tiếp trên `Enrollment` (VD: tìm tất cả sinh viên có điểm > 8 trong 1 khóa học) mà không cần join phức tạp qua bảng trung gian ẩn.
 - Tránh được các vấn đề hiệu năng/hành vi khó đoán của `@ManyToMany` (Hibernate quản lý bảng trung gian tự động đôi khi xóa/insert lại toàn bộ khi có thay đổi nhỏ).
+
+</details>
+
+<details>
+<summary><b>Đáp án Bài 6</b></summary>
+
+```java
+@Entity
+public class Product {
+    @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+    private String name;
+    private Integer stock;
+
+    @Version
+    private Long version; // Hibernate tự quản lý field này
+}
+
+@Service
+public class ProductService {
+
+    @Transactional
+    public void reduceStock(Long productId, int quantity) {
+        Product product = productRepository.findById(productId)
+                .orElseThrow(() -> new EntityNotFoundException("Không tìm thấy sản phẩm"));
+
+        if (product.getStock() < quantity) {
+            throw new InsufficientStockException("Tồn kho không đủ");
+        }
+        product.setStock(product.getStock() - quantity);
+        // Khi commit, Hibernate sinh: UPDATE product SET stock=?, version=? WHERE id=? AND version=?
+        // Nếu version không khớp (đã bị request khác update trước) -> ném OptimisticLockException
+    }
+}
+
+@Service
+public class ProductFacadeService {
+    private static final int MAX_RETRY = 3;
+
+    public void reduceStockWithRetry(Long productId, int quantity) {
+        for (int attempt = 1; attempt <= MAX_RETRY; attempt++) {
+            try {
+                productService.reduceStock(productId, quantity);
+                return; // Thành công -> thoát
+            } catch (OptimisticLockException e) {
+                if (attempt == MAX_RETRY) {
+                    throw new RuntimeException("Hệ thống đang bận, vui lòng thử lại sau", e);
+                }
+                // Có thể thêm độ trễ ngắn (backoff) trước khi retry lần tiếp theo
+            }
+        }
+    }
+}
+```
+
+**Kịch bản 2 request đồng thời:** cả 2 cùng `findById()` đọc được `stock=100, version=5`. Request A commit trước → DB cập nhật thành `stock=95, version=6`. Khi Request B cố commit (`UPDATE ... WHERE id=1 AND version=5`), điều kiện `version=5` **không còn khớp** DB (đã là 6) → 0 dòng bị ảnh hưởng → Hibernate ném `OptimisticLockException`. Nếu code KHÔNG bắt exception này, người dùng B sẽ thấy lỗi HTTP 500 khó hiểu; vì vậy tầng Service nên **bắt exception và retry** (đọc lại dữ liệu mới nhất rồi thử lại) hoặc trả về thông báo nghiệp vụ rõ ràng ("Sản phẩm vừa được cập nhật, vui lòng thử lại") thay vì để lỗi kỹ thuật lộ ra ngoài.
 
 </details>
 

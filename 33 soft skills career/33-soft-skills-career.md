@@ -3,6 +3,8 @@
 > **Mức ưu tiên: 🟢 Bổ sung (nhưng quyết định tốc độ thăng tiến sự nghiệp)**
 > **Vì sao quan trọng:** Đây là module cuối cùng trong lộ trình — 23 module trước đã trang bị đầy đủ kiến thức kỹ thuật từ Java Core tới System Design. Nhưng thực tế công việc, đặc biệt khi làm việc nhóm và muốn thăng tiến từ Junior lên Senior, **kỹ thuật giỏi thôi là chưa đủ**. Khả năng viết tài liệu rõ ràng, review code mang tính xây dựng, dùng Git thành thạo trong môi trường nhiều người, và biết cách trình bày kiến thức khi phỏng vấn — đây là những gì phân biệt 1 Developer "làm được việc" với 1 Developer "được tin tưởng giao trọng trách lớn hơn".
 
+> **Phạm vi bài này:** Kỹ năng làm việc nhóm và phát triển sự nghiệp áp dụng trực tiếp cho công việc Backend Developer — viết tài liệu, Code Review, Git nâng cao, phỏng vấn, lộ trình cấp bậc, giao tiếp kỹ thuật, và học từ sự cố. Không đi sâu kỹ năng quản lý dự án tổng quát (Agile/Scrum framework đầy đủ) hay đàm phán lương/phúc lợi — những chủ đề đó rộng hơn phạm vi kỹ thuật của lộ trình 24 module này.
+
 ---
 
 ## Mục lục
@@ -13,9 +15,10 @@
 4. [Chuẩn bị phỏng vấn Backend Developer](#4-chuẩn-bị-phỏng-vấn-backend-developer)
 5. [Lộ trình phát triển Junior → Mid → Senior](#5-lộ-trình-phát-triển-junior--mid--senior)
 6. [Giao tiếp kỹ thuật trong team](#6-giao-tiếp-kỹ-thuật-trong-team)
-7. [⚠️ Các bẫy hay gặp](#7-các-bẫy-hay-gặp)
-8. [Tổng kết — Bảng ghi nhớ nhanh](#8-tổng-kết--bảng-ghi-nhớ-nhanh)
-9. [Bài tập luyện tập](#9-bài-tập-luyện-tập)
+7. [Postmortem — học từ sự cố production](#7-postmortem--học-từ-sự-cố-production)
+8. [⚠️ Các bẫy hay gặp](#8-các-bẫy-hay-gặp)
+9. [Tổng kết — Bảng ghi nhớ nhanh](#9-tổng-kết--bảng-ghi-nhớ-nhanh)
+10. [Bài tập luyện tập](#10-bài-tập-luyện-tập)
 
 ---
 
@@ -159,6 +162,43 @@ Code Review có 3 mục đích chính, theo thứ tự ưu tiên:
 ```
 
 > **Nguyên tắc quan trọng nhất:** **PR nhỏ dễ review hơn PR lớn** — 1 PR thay đổi 50 dòng tập trung vào 1 tính năng được review kỹ hơn NHIỀU so với 1 PR thay đổi 2000 dòng gộp nhiều thứ (người review dễ "lướt qua" cho xong khi PR quá lớn, dẫn tới bỏ sót lỗi).
+
+### Nhận phản hồi & xử lý bất đồng quan điểm — kỹ năng ít được nói tới
+
+Phần lớn tài liệu về Code Review tập trung vào **cách viết** comment — nhưng kỹ năng ngang bằng quan trọng là **cách tiếp nhận** comment, đặc biệt khi không đồng ý với góp ý.
+
+**Khung SBI (Situation-Behavior-Impact) — phản hồi tập trung vào sự việc, không phải con người:**
+
+```
+Situation (Bối cảnh cụ thể): "Ở PR #245, trong method processPayment()..."
+Behavior (Hành vi quan sát được): "...code gọi 3 service khác nhau tuần tự,
+                                     không có Circuit Breaker..."
+Impact (Ảnh hưởng thực tế): "...nếu 1 trong 3 service chậm, toàn bộ request
+                               có thể bị treo, ảnh hưởng UX của TẤT CẢ user
+                               đang checkout cùng lúc (liên hệ Module 19 -
+                               Cascading Failure)."
+```
+
+Cấu trúc SBI giữ phản hồi **khách quan, bám vào sự việc cụ thể** — tránh rơi vào nhận xét chung chung về năng lực ("code của bạn thiếu cẩn thận") dễ gây phòng thủ ở người nhận, dù người viết comment hoàn toàn không có ý đó.
+
+**Khi KHÔNG đồng ý với comment của reviewer — "Disagree and Commit":**
+
+```
+1. Trình bày RÕ RÀNG lý do không đồng ý, kèm dữ liệu/lập luận cụ thể
+   (VD: "Mình chọn cách này vì đã benchmark, cách kia chậm hơn 3 lần trong
+   trường hợp dataset lớn")
+
+2. Nếu sau khi thảo luận vẫn còn bất đồng và cần tiến độ:
+   - Với vấn đề KHÔNG ảnh hưởng correctness/bảo mật -> chấp nhận theo ý kiến
+     đa số/người có kinh nghiệm hơn, tiếp tục công việc ("commit" dù "disagree")
+   - Với vấn đề ảnh hưởng correctness/bảo mật -> cần escalate lên Tech Lead
+     để có quyết định cuối cùng, không nên tự ý bỏ qua
+
+3. KHÔNG để bất đồng ý kiến trở thành tranh cãi cá nhân - tách biệt
+   "ý tưởng bị phản đối" khỏi "năng lực bị phủ nhận"
+```
+
+> **Vì sao quan trọng:** 1 team liên tục "sa lầy" trong tranh luận không đi đến quyết định sẽ chậm hơn 1 team biết khi nào nên tiếp tục tranh luận và khi nào nên đồng thuận tạm thời để tiến độ không bị chặn — đây là dấu hiệu rõ ràng của tư duy Senior (liên hệ mục 5), không chỉ là kỹ năng giao tiếp đơn thuần.
 
 ---
 
@@ -405,6 +445,41 @@ Tách thành Payment Service riêng, giao tiếp qua REST + Message Queue (Modul
 
 **Lợi ích:** Cho phép cả team **góp ý TRƯỚC KHI** đầu tư công sức code — tránh tình huống code xong rồi mới phát hiện hướng đi sai, phải làm lại từ đầu.
 
+### ADR (Architecture Decision Record) — ghi lại quyết định SAU khi đã chốt
+
+RFC (ở trên) là tài liệu **thảo luận trước khi quyết định**. **ADR** phục vụ mục đích khác: 1 bản ghi **ngắn gọn, bất biến (immutable)** về **quyết định đã chốt**, lưu lại vĩnh viễn trong repository (thường ở thư mục `docs/adr/`) — trả lời câu hỏi "**Vì sao** chúng ta lại làm theo cách này?" mà 1 thành viên mới (hoặc chính bạn 2 năm sau) sẽ luôn thắc mắc khi đọc code.
+
+```markdown
+# ADR-007: Chọn PostgreSQL thay vì MongoDB cho Order Service
+
+## Trạng thái
+Đã chấp thuận (Accepted) — 2026-03-15
+
+## Bối cảnh
+Order Service cần lưu dữ liệu đơn hàng có quan hệ chặt chẽ (Order-OrderItem-Payment),
+cần Transaction ACID cho luồng thanh toán, và team đã có kinh nghiệm vận hành SQL.
+
+## Quyết định
+Dùng PostgreSQL làm Database chính cho Order Service, không dùng MongoDB.
+
+## Hệ quả (Consequences)
+- Tích cực: Tận dụng được Transaction ACID có sẵn, JOIN dữ liệu quan hệ dễ dàng
+  (liên hệ Module 10 - so sánh RDBMS vs NoSQL)
+- Tiêu cực: Khó scale ghi theo chiều ngang bằng MongoDB Sharding tự nhiên -
+  nếu tương lai cần, sẽ cần tự triển khai Database Sharding (Module 22)
+- Đã cân nhắc nhưng KHÔNG chọn: MongoDB (phù hợp hơn cho Product Catalog,
+  không phù hợp cho luồng Payment cần Strong Consistency)
+```
+
+| | RFC | ADR |
+|---|---|---|
+| Thời điểm viết | TRƯỚC khi quyết định — để thu thập ý kiến | SAU khi đã chốt — để ghi lại lịch sử |
+| Mục đích | Thảo luận, thuyết phục, xin góp ý | Lưu trữ lý do, tra cứu về sau |
+| Độ dài | Có thể dài, nhiều phương án so sánh | Ngắn gọn (thường dưới 1 trang), súc tích |
+| Thay đổi sau khi viết | Có thể chỉnh sửa qua nhiều vòng góp ý | KHÔNG sửa lại — quyết định mới thì viết ADR mới, đánh dấu ADR cũ "Superseded" |
+
+> **Giá trị thực tế:** Rất nhiều tranh luận lặp lại trong team ("sao lại chọn cách này, đổi sang cách kia đi") có thể tránh được chỉ bằng cách trỏ tới **1 ADR đã có sẵn** — thay vì phải giải thích lại từ đầu mỗi lần có người mới đặt câu hỏi tương tự.
+
 ### Ước lượng thời gian (Estimation) — kỹ năng thường bị đánh giá thấp
 
 ```
@@ -423,7 +498,64 @@ Tách thành Payment Service riêng, giao tiếp qua REST + Message Queue (Modul
 
 ---
 
-## 7. ⚠️ Các bẫy hay gặp
+## 7. Postmortem — học từ sự cố production
+
+### Vì sao mỗi sự cố production nghiêm trọng cần 1 bản Postmortem
+
+Module 21 (Observability) đã trang bị công cụ để **phát hiện và điều tra** sự cố (Logs/Metrics/Traces, Distributed Tracing). **Postmortem** (hay Incident Report) là bước tiếp theo — tài liệu hóa **những gì đã xảy ra và học được gì**, viết SAU KHI sự cố đã được khắc phục, với tinh thần cốt lõi: **Blameless** (không quy trách nhiệm cá nhân) — tập trung vào **hệ thống và quy trình** đã cho phép lỗi xảy ra, không phải "ai đã gây ra lỗi".
+
+```markdown
+# Postmortem: Sự cố Payment Service downtime 23 phút (2026-04-02)
+
+## Tóm tắt (Summary)
+Payment Service không phản hồi trong 23 phút (14:05 - 14:28), ảnh hưởng ~1,200
+giao dịch thanh toán bị timeout. Nguyên nhân gốc: HikariCP Connection Pool cạn kiệt
+do 1 migration mới thêm Index nhưng quên đóng Connection trong luồng batch job.
+
+## Dòng thời gian (Timeline)
+- 14:05 - Alert "HighErrorRate" kích hoạt (liên hệ Module 21)
+- 14:08 - On-call engineer bắt đầu điều tra qua Grafana Dashboard
+- 14:15 - Xác định nguyên nhân qua Distributed Tracing: Connection Pool đầy
+- 14:22 - Restart Payment Service instance để giải phóng connection
+- 14:28 - Hệ thống phục hồi hoàn toàn, xác nhận qua Health Check
+
+## Nguyên nhân gốc rễ (Root Cause)
+Batch job đồng bộ dữ liệu chạy mỗi giờ dùng JdbcTemplate trực tiếp,
+không đóng Connection đúng cách trong nhánh xử lý lỗi (thiếu try-with-resources).
+
+## Tác động (Impact)
+- ~1,200 giao dịch timeout, ~150 giao dịch khách hàng phải thử lại thủ công
+- Không có giao dịch nào bị mất dữ liệu/trừ tiền sai (nhờ Idempotency Key - Module 14)
+
+## Hành động khắc phục (Action Items)
+□ [P0] Sửa batch job dùng try-with-resources cho Connection - Assignee: A - Deadline: 2026-04-03
+□ [P1] Thêm Alert cho HikariCP Connection Pool usage > 80% - Assignee: B - Deadline: 2026-04-10
+□ [P2] Thêm Integration Test mô phỏng Connection Leak cho batch job - Assignee: A - Deadline: 2026-04-15
+```
+
+### Nguyên tắc Blameless Postmortem
+
+```
+❌ "Bạn A quên đóng Connection nên gây ra sự cố này."
+   (quy trách nhiệm cá nhân -> người khác sợ báo cáo sự cố tương lai, giấu lỗi)
+
+✅ "Code review process hiện tại chưa có checklist bắt buộc kiểm tra resource
+   management cho code JDBC thủ công -> cần thêm mục này vào checklist Code
+   Review (Module 24, mục 2) để ngăn lỗi tương tự."
+   (tập trung vào QUY TRÌNH có thể cải thiện, không phải cá nhân)
+```
+
+| | Có văn hóa Blameless | Không có văn hóa Blameless |
+|---|---|---|
+| Khi có sự cố | Team chủ động báo cáo sớm, minh bạch | Có xu hướng giấu/trì hoãn báo cáo vì sợ bị khiển trách |
+| Hành động khắc phục | Tập trung sửa QUY TRÌNH/hệ thống | Dừng lại ở việc "nhắc nhở" cá nhân, lỗi tương tự dễ lặp lại |
+| Tác động dài hạn | Hệ thống ngày càng bền vững (mỗi sự cố là 1 bài học) | Sự cố tương tự có xu hướng lặp lại |
+
+> **Liên hệ trực tiếp Module 21 (Error Budget):** Postmortem chính là hoạt động cụ thể hóa việc "học từ Error Budget đã tiêu" — không chỉ dừng ở việc dừng release tạm thời, mà còn tài liệu hóa đầy đủ để tránh lặp lại đúng loại sự cố đó trong tương lai. Đây cũng là kỹ năng thể hiện rõ tư duy Senior (mục 5) — nhìn sự cố ở góc độ hệ thống/quy trình, không phải cá nhân.
+
+---
+
+## 8. ⚠️ Các bẫy hay gặp
 
 1. **Viết Documentation 1 lần rồi không bao giờ cập nhật** — tài liệu lỗi thời còn nguy hiểm hơn không có tài liệu (người đọc tin tưởng thông tin SAI).
 
@@ -445,26 +577,33 @@ Tách thành Payment Service riêng, giao tiếp qua REST + Message Queue (Modul
 
 10. **Đề xuất thay đổi kiến trúc lớn mà không trình bày Trade-off rõ ràng** — khiến team khó đánh giá và dễ nghi ngờ quyết định, thay vì đồng thuận dựa trên lý lẽ rõ ràng.
 
+11. **Viết Postmortem quy trách nhiệm cá nhân thay vì tập trung vào quy trình** — phá vỡ văn hóa Blameless, khiến team ngần ngại báo cáo/minh bạch về sự cố trong tương lai.
+
+12. **Không viết ADR cho quyết định kiến trúc quan trọng, chỉ trao đổi miệng/chat** — lý do quyết định bị "thất truyền" khi thành viên liên quan rời team, dẫn tới tranh luận lặp lại vô ích về những quyết định đã có cân nhắc kỹ từ trước.
+
 ---
 
-## 8. Tổng kết — Bảng ghi nhớ nhanh
+## 9. Tổng kết — Bảng ghi nhớ nhanh
 
 | Khái niệm | Ghi nhớ nhanh |
 |---|---|
 | README tốt | Cài đặt, chạy, cấu trúc dự án, API doc — người MỚI đọc hiểu được ngay |
 | Comment code | Giải thích WHY (lý do), không phải WHAT (code đã tự nói) |
 | Code Review | 3 mục đích: đúng đắn, chia sẻ kiến thức, nhất quán — đặt câu hỏi thay vì ra lệnh |
+| SBI Feedback | Situation-Behavior-Impact — phản hồi bám sự việc, không quy kết năng lực |
+| Disagree and Commit | Tranh luận rõ ràng, nhưng biết khi nào đồng thuận tạm thời để không chặn tiến độ |
 | PR nhỏ | Dễ review hơn PR lớn — luôn ưu tiên chia nhỏ |
 | Git Flow vs Trunk-Based | Release theo chu kỳ vs Continuous Deployment (Module 20) |
 | git bisect | Binary Search tìm commit lỗi — O(log n) thay vì kiểm tra từng commit |
 | STAR Method | Situation - Task - Action - Result — trả lời câu hỏi dự án trong phỏng vấn |
 | Junior → Senior | Không chỉ "code giỏi hơn" — là mức độ TRÁCH NHIỆM và khả năng RA QUYẾT ĐỊNH có đánh đổi |
-| RFC/Technical Proposal | Trình bày đánh đổi TRƯỚC khi code — tránh làm lại từ đầu |
+| RFC vs ADR | RFC = thảo luận TRƯỚC quyết định; ADR = ghi lại lý do SAU khi đã chốt, không sửa lại |
 | Estimation | Chia nhỏ công việc + buffer cho rủi ro không lường trước |
+| Blameless Postmortem | Tập trung sửa QUY TRÌNH/hệ thống, không quy trách nhiệm cá nhân |
 
 ---
 
-## 9. Bài tập luyện tập
+## 10. Bài tập luyện tập
 
 ### Phần A — Trắc nghiệm nhận định (Đúng/Sai + giải thích)
 
@@ -476,8 +615,10 @@ Tách thành Payment Service riêng, giao tiếp qua REST + Message Queue (Modul
 6. Sự khác biệt giữa Junior và Senior Developer chủ yếu nằm ở việc biết nhiều công nghệ/framework hơn.
 7. PR (Pull Request) càng lớn (thay đổi nhiều dòng code cùng lúc) thì càng dễ được review kỹ lưỡng.
 8. git bisect sử dụng thuật toán Binary Search để tìm commit gây ra bug hiệu quả hơn kiểm tra tuần tự từng commit.
+9. ADR (Architecture Decision Record) nên được chỉnh sửa lại mỗi khi có quyết định mới thay thế quyết định cũ, thay vì viết 1 ADR mới.
+10. Postmortem theo văn hóa Blameless nên tập trung phân tích quy trình/hệ thống, không quy trách nhiệm cho 1 cá nhân cụ thể.
 
-### Phần B — Bài tập thực hành (5 bài, không cần code)
+### Phần B — Bài tập thực hành (6 bài, không cần code)
 
 **Bài 1:** Viết 1 đoạn README.md ngắn gọn (theo cấu trúc ở mục 1) cho 1 dự án giả định "Hệ thống quản lý thư viện" (Library Management System) mà bạn đã thiết kế ở Module 11-13.
 
@@ -496,6 +637,8 @@ public List<Order> getOrders() {
 
 **Bài 5:** Viết 1 bản RFC/Technical Proposal ngắn gọn (theo cấu trúc ở mục 6) đề xuất thêm Redis Cache (Module 18) cho API "lấy danh sách sản phẩm" đang bị chậm do lượng truy cập cao — bao gồm rõ phần Đánh đổi (Trade-off).
 
+**Bài 6:** Viết 1 bản Postmortem ngắn gọn (theo cấu trúc ở mục 7) cho tình huống giả định: "API `POST /orders` trả về lỗi 500 hàng loạt trong 10 phút do 1 Deploy mới vô tình xóa mất Index trên cột `orders.user_id`, khiến query chậm bất thường và Connection Pool bị cạn kiệt." Đảm bảo tuân thủ nguyên tắc Blameless.
+
 ### Phần C — Gợi ý đáp án
 
 <details>
@@ -509,6 +652,8 @@ public List<Order> getOrders() {
 6. **Sai.** Khác biệt cốt lõi nằm ở mức độ TRÁCH NHIỆM, khả năng RA QUYẾT ĐỊNH có đánh đổi, và giao tiếp — không chỉ đơn thuần "biết nhiều công nghệ".
 7. **Sai.** Ngược lại — PR càng lớn càng KHÓ review kỹ (reviewer dễ "lướt qua" khi quá nhiều thay đổi), nên luôn ưu tiên chia PR nhỏ, tập trung.
 8. **Đúng.** Đây chính là nguyên lý hoạt động của git bisect — tìm commit lỗi trong O(log n) bước thay vì kiểm tra tuần tự O(n).
+9. **Sai.** Ngược lại — ADR KHÔNG nên sửa lại sau khi đã viết; quyết định mới thay thế quyết định cũ thì viết 1 ADR MỚI, và đánh dấu ADR cũ là "Superseded" để giữ nguyên lịch sử quyết định.
+10. **Đúng.** Đây chính là nguyên tắc cốt lõi của văn hóa Blameless Postmortem — tập trung cải thiện hệ thống/quy trình thay vì quy trách nhiệm cá nhân.
 
 </details>
 
@@ -654,6 +799,53 @@ Thêm Redis Cache theo pattern Cache-Aside (@Cacheable) cho API này, với:
 2. Ngày 2: Áp dụng @Cacheable/@CacheEvict cho ProductService, viết Unit Test
 3. Ngày 3: Deploy lên môi trường staging, đo lại hiệu năng thực tế, giám sát 
    qua Grafana Dashboard (liên hệ Module 21) trước khi lên production
+```
+
+</details>
+
+<details>
+<summary><b>Đáp án Bài 6</b></summary>
+
+```markdown
+# Postmortem: Lỗi 500 hàng loạt tại POST /orders (2026-05-10)
+
+## Tóm tắt (Summary)
+Endpoint `POST /orders` trả về lỗi 500 cho phần lớn request trong 10 phút
+(09:40 - 09:50), do 1 bản Deploy vô tình làm mất Index trên cột `orders.user_id`,
+khiến query bị chậm bất thường và Connection Pool cạn kiệt theo dây chuyền.
+
+## Dòng thời gian (Timeline)
+- 09:40 - Deploy phiên bản mới hoàn tất (bao gồm 1 migration script sửa schema)
+- 09:42 - Alert "HighErrorRate" kích hoạt cho endpoint POST /orders
+- 09:45 - Team điều tra qua Grafana, phát hiện Latency P99 tăng vọt lên 8s
+- 09:47 - Dùng Distributed Tracing xác định query kiểm tra đơn hàng trùng
+          (WHERE user_id = ?) đang chạy Full Table Scan thay vì dùng Index
+- 09:48 - Xác nhận migration script mới đã DROP nhầm Index cũ mà không tạo lại
+- 09:50 - Chạy migration khẩn cấp tạo lại Index, hệ thống phục hồi hoàn toàn
+
+## Nguyên nhân gốc rễ (Root Cause)
+Migration script (Flyway - Module 15) chứa lệnh `DROP INDEX idx_orders_user_id`
+để chuẩn bị đổi cấu trúc cột, nhưng file migration TIẾP THEO (dự kiến tạo lại
+Index mới) đã bị bỏ sót trong lần deploy này do lỗi thao tác merge branch.
+
+## Tác động (Impact)
+- Khoảng 400 request POST /orders bị lỗi 500 trong 10 phút
+- Không có dữ liệu nào bị mất/sai lệch (các request lỗi đều KHÔNG được ghi vào DB)
+
+## Hành động khắc phục (Action Items)
+□ [P0] Thêm bước kiểm tra "Index coverage" tự động trong CI trước khi migration
+       được merge - Assignee: A - Deadline: 2026-05-12
+□ [P1] Thêm Alert riêng cho Query Latency bất thường trên bảng orders -
+       Assignee: B - Deadline: 2026-05-15
+□ [P2] Cập nhật checklist Code Review (mục 2) - bắt buộc review kỹ các
+       migration script có DROP INDEX/DROP COLUMN - Assignee: Team - Deadline: 2026-05-20
+
+## Ghi chú
+Sự cố này phản ánh khoảng trống trong quy trình review migration script,
+không phải lỗi của cá nhân người thực hiện merge - quy trình review hiện tại
+chưa có bước xác minh riêng cho các thay đổi schema có tính phá hủy
+(destructive schema change). Các Action Item ở trên tập trung vào việc bổ
+sung lớp kiểm tra tự động, thay vì chỉ nhắc nhở cá nhân cẩn thận hơn.
 ```
 
 </details>

@@ -1,34 +1,49 @@
 # Module 05.2 — Concurrency Utilities
 
-> **Mức độ ưu tiên: Trung bình → Cao trong thực tế** — Trong backend thực tế, **KHÔNG BAO GIỜ** tự tạo `new Thread()` thủ công như Module 05.1 — luôn dùng `ExecutorService` (Thread Pool). Đây là kiến thức trực tiếp áp dụng khi làm việc với xử lý bất đồng bộ trong Spring (`@Async`), gọi API song song, và là nền tảng bắt buộc trước khi tiếp cận capstone Flash-Sale (Module cuối lộ trình).
+> **Mức độ ưu tiên: Cao trong thực tế** — Backend **không bao giờ** `new Thread()` thủ công (Module 05.1) — luôn dùng `ExecutorService`. Đây là kiến thức áp dụng trực tiếp cho `@Async` của Spring, gọi API song song, và là nền tảng bắt buộc trước capstone Flash-Sale.
+
+> **Phạm vi bài này:** toàn bộ `java.util.concurrent` ở mức ứng dụng — thread pool (`ExecutorService`, `ThreadPoolExecutor`), `BlockingQueue`, `Future`/`CompletableFuture`, `CountDownLatch`/`CyclicBarrier`/`Semaphore`, `Atomic*`, `Lock`/`ReadWriteLock`/`Condition`, `ConcurrentHashMap`. **Chỉ nhắc tên, không đi sâu:** cơ chế `synchronized`/`volatile`/`wait`/happens-before (Module 05.1 — chỉ nhắc lại vừa đủ), `@Async`/`ThreadPoolTaskExecutor` của Spring (Module 13), reactive `Mono`/`Flux` (Module 19), Fork/Join framework nội bộ. Virtual thread (Java 21) nêu vừa đủ để biết xu hướng.
 
 ---
 
 ## Mục lục
 
-1. [Vì sao không nên tự tạo Thread thủ công](#1-vì-sao-không-nên-tự-tạo-thread-thủ-công)
+1. [Vì sao không tự tạo Thread — và cách chọn kích thước pool](#1-vì-sao-không-tự-tạo-thread--và-cách-chọn-kích-thước-pool)
 2. [ExecutorService — Thread Pool cơ bản](#2-executorservice--thread-pool-cơ-bản)
 3. [Các loại Thread Pool có sẵn](#3-các-loại-thread-pool-có-sẵn)
-4. [ThreadPoolExecutor — tùy chỉnh sâu](#4-threadpoolexecutor--tùy-chỉnh-sâu)
-5. [Future — lấy kết quả bất đồng bộ](#5-future--lấy-kết-quả-bất-đồng-bộ)
-6. [CompletableFuture — bất đồng bộ hiện đại (Java 8+)](#6-completablefuture--bất-đồng-bộ-hiện-đại-java-8)
-7. [CountDownLatch](#7-countdownlatch)
-8. [Semaphore](#8-semaphore)
-9. [AtomicInteger & các lớp Atomic — thay thế nhẹ hơn cho synchronized](#9-atomicinteger--các-lớp-atomic--thay-thế-nhẹ-hơn-cho-synchronized)
-10. [Tổng kết — Bảng ghi nhớ nhanh](#10-tổng-kết--bảng-ghi-nhớ-nhanh)
-11. [Bài tập luyện tập](#11-bài-tập-luyện-tập)
+4. [ThreadPoolExecutor — hàng đợi quyết định hành vi](#4-threadpoolexecutor--hàng-đợi-quyết-định-hành-vi)
+5. [BlockingQueue — producer/consumer](#5-blockingqueue--producerconsumer)
+6. [Future — lấy kết quả bất đồng bộ](#6-future--lấy-kết-quả-bất-đồng-bộ)
+7. [CompletableFuture — bất đồng bộ hiện đại](#7-completablefuture--bất-đồng-bộ-hiện-đại)
+8. [CountDownLatch, CyclicBarrier, Phaser](#8-countdownlatch-cyclicbarrier-phaser)
+9. [Semaphore](#9-semaphore)
+10. [Atomic — CAS, ABA, LongAdder](#10-atomic--cas-aba-longadder)
+11. [Lock, ReadWriteLock, Condition](#11-lock-readwritelock-condition)
+12. [ConcurrentHashMap](#12-concurrenthashmap)
+13. [Tổng kết — Bảng ghi nhớ nhanh](#13-tổng-kết--bảng-ghi-nhớ-nhanh)
+14. [Bài tập luyện tập](#14-bài-tập-luyện-tập)
 
 ---
 
-## 1. Vì sao không nên tự tạo Thread thủ công
+## 1. Vì sao không tự tạo Thread — và cách chọn kích thước pool
 
-Nhắc lại Module 05.1: tạo `Thread` là **tốn kém** (JVM phải cấp phát Stack riêng, đăng ký với OS scheduler...). Nếu 1 backend service tạo `new Thread()` cho **mỗi request** đến (có thể hàng nghìn request/giây), hệ thống sẽ nhanh chóng:
+Nhắc Module 05.1: mỗi platform thread tốn ~1 MB stack + đăng ký với OS scheduler. `new Thread()` cho **mỗi request** (hàng nghìn/giây) dẫn tới:
 
-- **Cạn kiệt tài nguyên** (mỗi thread tốn ~1MB Stack mặc định — hàng nghìn thread = hàng GB RAM chỉ để quản lý thread).
-- **Chi phí context-switching cao** — CPU tốn thời gian chuyển đổi qua lại giữa quá nhiều thread thay vì xử lý công việc thực sự.
-- **Không kiểm soát được** số lượng thread tối đa — dễ dẫn đến `OutOfMemoryError` khi traffic tăng đột biến.
+- **Cạn tài nguyên** — hàng nghìn thread = hàng GB RAM chỉ để quản lý thread.
+- **Context switch quá nhiều** — CPU dành thời gian chuyển ngữ cảnh thay vì làm việc thật.
+- **Không có trần** — traffic tăng đột biến → `OutOfMemoryError: unable to create new native thread`.
+- **Không có ranh giới xử lý lỗi, không đặt tên thread, không backpressure.**
 
-**Giải pháp chuẩn công nghiệp: Thread Pool** — tạo sẵn 1 số lượng thread **cố định (hoặc có giới hạn)**, tái sử dụng chúng để xử lý nhiều task liên tiếp, thay vì tạo mới rồi hủy liên tục.
+**Thread pool** tách "gửi việc" (submit) khỏi "chạy việc" (execute): một số thread cố định, tái dùng, có hàng đợi và chính sách quá tải.
+
+### Chọn số thread cho pool
+
+| Loại tác vụ | Công thức gần đúng |
+|---|---|
+| **CPU-bound** (tính toán, mã hóa, xử lý ảnh) | `số nhân + 1` — thêm thread chỉ làm tăng context switch |
+| **I/O-bound** (gọi DB, HTTP, đọc file) | `số nhân × (1 + thời gian chờ / thời gian tính)` — thread nằm chờ I/O không dùng CPU |
+
+Ví dụ 8 nhân, tác vụ gọi API mất 90 ms chờ + 10 ms xử lý → `8 × (1 + 90/10) = 80` thread. Luôn **đo** (throughput, latency p99) rồi chỉnh, đừng đoán.
 
 ---
 
@@ -37,457 +52,712 @@ Nhắc lại Module 05.1: tạo `Thread` là **tốn kém** (JVM phải cấp ph
 ```java
 import java.util.concurrent.*;
 
-ExecutorService executor = Executors.newFixedThreadPool(4); // Thread Pool với 4 thread cố định
+ExecutorService pool = Executors.newFixedThreadPool(4);
 
-executor.submit(() -> {
-    System.out.println("Task chạy trên: " + Thread.currentThread().getName());
-});
+pool.execute(() -> log.info("fire-and-forget"));                 // Runnable, void
+Future<Integer> f = pool.submit(() -> 1 + 1);                     // Callable, có Future
 
-executor.submit(() -> System.out.println("Task khác"));
-
-executor.shutdown(); // BẮT BUỘC gọi — báo hiệu không nhận task mới, chờ task hiện tại hoàn thành rồi mới đóng pool
+pool.shutdown();                                                   // không nhận task mới, chờ task đang chạy
 ```
 
-### `submit()` vs `execute()`
+### `submit()` vs `execute()` — và bẫy nuốt exception
 
-| Method | Trả về | Khi nào dùng |
+| Method | Trả về | Exception khi task ném |
 |---|---|---|
-| `execute(Runnable)` | `void` — không lấy được kết quả hay theo dõi task | Task đơn giản, không cần biết kết quả (fire-and-forget) |
-| `submit(Runnable/Callable)` | `Future<T>` — có thể theo dõi, lấy kết quả, hủy task | Đa số trường hợp thực tế — linh hoạt hơn `execute()` |
-
-### `Runnable` vs `Callable` — khi nào cần lấy kết quả trả về
+| `execute(Runnable)` | `void` | Đi tới `UncaughtExceptionHandler` của thread → in `stderr` |
+| `submit(Runnable/Callable)` | `Future<T>` | **Nuốt vào `Future`** — chỉ lộ ra khi gọi `future.get()` (bọc trong `ExecutionException`) |
 
 ```java
-Runnable task1 = () -> System.out.println("Không trả về gì");   // run() không có return value
-
-Callable<Integer> task2 = () -> { // call() CÓ return value, và được phép ném checked exception
-    return 1 + 1;
-};
-
-Future<Integer> future = executor.submit(task2);
+Future<?> f = pool.submit(() -> { throw new RuntimeException("nổ"); });
+// KHÔNG in gì — exception nằm im trong f
+try {
+    f.get();
+} catch (ExecutionException e) {
+    Throwable real = e.getCause();   // RuntimeException("nổ")
+}
 ```
 
-### `shutdown()` vs `shutdownNow()` vs `awaitTermination()`
+> ⚠️ **Bug rất phổ biến:** `submit(...)` một task rồi **không bao giờ gọi `get()`** → exception biến mất hoàn toàn, không log, không dấu vết. Nếu chỉ fire-and-forget, dùng `execute()`, hoặc bọc `try/catch` trong chính task.
+
+### `Runnable` vs `Callable`
 
 ```java
-executor.shutdown();         // "graceful shutdown" — không nhận task mới, CHỜ task đang chạy hoàn thành
-executor.shutdownNow();      // "forceful shutdown" — cố gắng NGẮT NGAY task đang chạy (dùng interrupt), trả về danh sách task chưa chạy
-boolean finished = executor.awaitTermination(30, TimeUnit.SECONDS); // CHỜ tối đa 30s để pool đóng hẳn, trả về true nếu đóng kịp thời hạn
+Runnable r         = () -> log.info("no return, no checked exception");
+Callable<Integer> c = () -> { return riskyIo(); };   // trả giá trị + được throws checked
+Future<Integer> fc  = pool.submit(c);
 ```
 
-> ⚠️ **Lỗi rất hay gặp ở người mới:** **quên gọi `shutdown()`** — Thread Pool sẽ **giữ JVM sống mãi**, chương trình không bao giờ tự kết thúc (vì các thread trong pool mặc định không phải daemon thread) dù logic nghiệp vụ đã xong hết.
+### `invokeAll` / `invokeAny`
+
+```java
+List<Callable<Integer>> tasks = List.of(() -> a(), () -> b(), () -> c());
+List<Future<Integer>> all = pool.invokeAll(tasks);           // CHỜ tất cả xong, trả list Future
+Integer first = pool.invokeAny(tasks);                        // trả kết quả của task ĐẦU TIÊN xong, hủy phần còn lại
+```
+
+### Đóng pool đúng cách — mẫu hai pha (Javadoc)
+
+```java
+void shutdownGracefully(ExecutorService pool) {
+    pool.shutdown();                                          // pha 1: ngừng nhận task mới
+    try {
+        if (!pool.awaitTermination(30, TimeUnit.SECONDS)) {
+            pool.shutdownNow();                               // pha 2: interrupt task đang chạy
+            if (!pool.awaitTermination(30, TimeUnit.SECONDS))
+                log.error("pool không chịu dừng");
+        }
+    } catch (InterruptedException e) {
+        pool.shutdownNow();
+        Thread.currentThread().interrupt();
+    }
+}
+```
+
+| Method | Hành vi |
+|---|---|
+| `shutdown()` | Không nhận task mới; task trong hàng đợi **vẫn chạy** |
+| `shutdownNow()` | `interrupt()` các task đang chạy; trả về `List<Runnable>` các task **chưa** chạy |
+| `awaitTermination(t, unit)` | Chờ tối đa `t` để pool đóng hẳn; `true` nếu kịp |
+
+> ⚠️ Quên `shutdown()` → thread pool (mặc định **không phải daemon**) giữ JVM sống mãi, chương trình không tự thoát.
+
+### Java 19+ — `ExecutorService` là `AutoCloseable`
+
+```java
+try (ExecutorService pool = Executors.newFixedThreadPool(4)) {
+    pool.submit(task1);
+    pool.submit(task2);
+}   // close() = shutdown() + awaitTermination (chờ) — hết khối là mọi task đã xong
+```
+
+### Đặt tên thread (để đọc log / thread dump)
+
+```java
+ThreadFactory named = r -> { Thread t = new Thread(r, "order-worker"); return t; };
+ExecutorService pool = Executors.newFixedThreadPool(4, named);
+```
 
 ---
 
 ## 3. Các loại Thread Pool có sẵn
 
 ```java
-ExecutorService fixedPool = Executors.newFixedThreadPool(4);
-// Số thread CỐ ĐỊNH (4). Task thừa xếp vào HÀNG ĐỢI KHÔNG GIỚI HẠN chờ đến lượt.
-// Phù hợp: khối lượng công việc ổn định, biết trước mức tải trung bình.
+Executors.newFixedThreadPool(4);
+// 4 thread cố định. Task thừa → LinkedBlockingQueue KHÔNG GIỚI HẠN.
+// ⚠️ Tải tăng đột biến → hàng đợi phình vô hạn → OutOfMemoryError. Xem mục 4.
 
-ExecutorService cachedPool = Executors.newCachedThreadPool();
-// Số thread TỰ ĐỘNG tăng/giảm theo nhu cầu (không giới hạn tối đa!), thread rảnh 60s sẽ tự bị hủy.
-// Phù hợp: nhiều task NGẮN, số lượng dao động thất thường.
-// ⚠️ RỦI RO: nếu có QUÁ NHIỀU task cùng lúc, có thể tạo VÔ SỐ thread → cạn tài nguyên hệ thống.
+Executors.newCachedThreadPool();
+// Thread tăng/giảm theo nhu cầu, KHÔNG có trần; thread rảnh 60s tự hủy.
+// ⚠️ Quá nhiều task cùng lúc → tạo hàng vạn thread → cạn tài nguyên.
 
-ExecutorService singleThread = Executors.newSingleThreadExecutor();
-// CHỈ 1 thread duy nhất — các task chạy TUẦN TỰ, đảm bảo thứ tự.
-// Phù hợp: cần xử lý tuần tự nghiêm ngặt (ví dụ ghi log theo đúng thứ tự xảy ra).
+Executors.newSingleThreadExecutor();
+// 1 thread, task chạy tuần tự đúng thứ tự submit. Không cast/chỉnh lại được (khác newFixedThreadPool(1)).
 
-ScheduledExecutorService scheduledPool = Executors.newScheduledThreadPool(2);
-// Hỗ trợ chạy task theo LỊCH (delay, định kỳ lặp lại) — tương tự cron job nhưng ở tầng ứng dụng.
-scheduledPool.scheduleAtFixedRate(
-    () -> System.out.println("Chạy mỗi 5 giây"),
-    0,    // delay ban đầu
-    5,    // khoảng cách giữa các lần chạy
-    TimeUnit.SECONDS
-);
+Executors.newScheduledThreadPool(2);   // chạy theo lịch — xem dưới
+
+Executors.newWorkStealingPool();       // ForkJoinPool, mỗi thread một deque, "trộm việc" của nhau — hợp task chia nhỏ đệ quy
+
+Executors.newVirtualThreadPerTaskExecutor();   // Java 21 — mỗi task một VIRTUAL thread
 ```
 
-> **Khuyến nghị thực tế (Java 19+):** JDK hiện đại khuyến khích cân nhắc `Executors.newVirtualThreadPerTaskExecutor()` (Virtual Threads — Project Loom, đã nhắc sơ ở Module 05 lý thuyết ban đầu, chính thức ổn định từ Java 21) cho khối lượng lớn task I/O-bound (gọi API, truy vấn database) — nhẹ hơn thread truyền thống hàng trăm lần. Đây là kiến thức **bổ sung**, không bắt buộc phải thành thạo ngay, nhưng nên biết xu hướng vì các dự án Spring Boot mới (từ Spring 6 / Boot 3.2+) đã hỗ trợ tận dụng Virtual Thread.
+### `ScheduledExecutorService` — `scheduleAtFixedRate` vs `scheduleWithFixedDelay`
+
+```java
+var sched = Executors.newScheduledThreadPool(2);
+
+sched.scheduleAtFixedRate(job, 0, 5, TimeUnit.SECONDS);
+// Lần chạy thứ n bắt đầu tại initialDelay + n×period. Task chạy lâu hơn period → các lần chạy DỒN nhau (không chồng lấn, nhưng chạy liên tục không nghỉ).
+
+sched.scheduleWithFixedDelay(job, 0, 5, TimeUnit.SECONDS);
+// Lần sau bắt đầu 5s SAU KHI lần trước KẾT THÚC. Luôn có khoảng nghỉ cố định.
+```
+
+> ⚠️ **Task định kỳ ném exception mà không `catch` → lịch lặp DỪNG HẲN, im lặng.** Luôn bọc toàn bộ thân task định kỳ trong `try/catch` và log.
+
+### Virtual thread (Java 21) — nhắc xu hướng
+
+```java
+try (var pool = Executors.newVirtualThreadPerTaskExecutor()) {
+    for (var req : requests) pool.submit(() -> handleBlocking(req));   // hàng chục nghìn task I/O
+}
+```
+
+Virtual thread cực nhẹ (không tốn ~1 MB stack, JVM lập lịch trên số ít carrier thread) → không cần "pool để tái dùng" nữa; tạo một cái cho mỗi task. **Không** pool virtual thread; giới hạn tài nguyên bằng `Semaphore` thay vì kích thước pool. Spring Boot 3.2+ hỗ trợ. Chi tiết ngoài phạm vi bài.
 
 ---
 
-## 4. ThreadPoolExecutor — tùy chỉnh sâu
-
-Khi cần kiểm soát chi tiết hơn `Executors.newFixedThreadPool()` cho phép (kích thước hàng đợi, chính sách xử lý khi quá tải...), dùng trực tiếp `ThreadPoolExecutor`:
+## 4. ThreadPoolExecutor — hàng đợi quyết định hành vi
 
 ```java
-ThreadPoolExecutor executor = new ThreadPoolExecutor(
-    2,                              // corePoolSize — số thread TỐI THIỂU luôn duy trì
-    4,                              // maximumPoolSize — số thread TỐI ĐA được tạo thêm khi hàng đợi đầy
-    60L, TimeUnit.SECONDS,          // keepAliveTime — thời gian thread "thừa" (giữa core và max) rảnh trước khi bị hủy
-    new LinkedBlockingQueue<>(100), // hàng đợi chứa task khi tất cả thread đang bận (giới hạn 100 task chờ)
-    new ThreadPoolExecutor.CallerRunsPolicy() // Rejection Policy — xử lý khi hàng đợi VÀ pool đều đầy
-);
+ThreadPoolExecutor pool = new ThreadPoolExecutor(
+    2,                                  // corePoolSize — thread tối thiểu luôn giữ
+    4,                                  // maximumPoolSize — thread tối đa
+    60L, TimeUnit.SECONDS,              // keepAliveTime — thread "thừa" (core..max) rảnh bao lâu thì hủy
+    new ArrayBlockingQueue<>(100),      // hàng đợi task chờ
+    new ThreadPoolExecutor.CallerRunsPolicy());   // làm gì khi pool + queue đều đầy
 ```
 
-### Cơ chế hoạt động (rất hay hỏi phỏng vấn Senior)
+### Luồng quyết định khi có task mới
 
 ```
-Task mới đến
-    │
-    ▼
-Số thread hiện tại < corePoolSize?
-    │
-   Có ──► Tạo thread MỚI xử lý ngay
-    │
-   Không
-    ▼
-Hàng đợi (Queue) còn chỗ?
-    │
-   Có ──► Đưa vào hàng đợi, CHỜ thread rảnh
-    │
-   Không
-    ▼
-Số thread hiện tại < maximumPoolSize?
-    │
-   Có ──► Tạo thêm thread MỚI (vượt core, tối đa đến max) để xử lý ngay
-    │
-   Không (Pool VÀ Queue đều đầy)
-    ▼
-Áp dụng REJECTION POLICY
+Số thread < corePoolSize?  ──Có──► tạo thread mới, chạy ngay
+        │Không
+Hàng đợi còn chỗ?          ──Có──► xếp vào hàng đợi
+        │Không
+Số thread < maximumPoolSize? ─Có──► tạo thread mới (vượt core), chạy ngay
+        │Không
+        ▼
+   REJECTION POLICY
 ```
 
-### Rejection Policy — khi hệ thống quá tải, làm gì với task mới?
+### ⚠️ Loại hàng đợi quyết định `maximumPoolSize` có tác dụng hay không
+
+| Hàng đợi | Hệ quả |
+|---|---|
+| `LinkedBlockingQueue` **không bound** | Task luôn xếp được vào queue → bước "tạo thread vượt core" **không bao giờ tới** → `maximumPoolSize` **bị bỏ qua**, queue phình đến OOM. Đây là cấu hình của `newFixedThreadPool`. |
+| `SynchronousQueue` (sức chứa 0) | Không giữ task nào — mỗi task cần một thread rảnh **ngay**, không thì tạo thread mới tới `max`; hết `max` → reject. Cấu hình của `newCachedThreadPool` (với `max = Integer.MAX_VALUE`). |
+| `ArrayBlockingQueue(n)` / `LinkedBlockingQueue(n)` **có bound** | Queue đầy mới tạo thread tới `max`; `max` đầy mới reject. **Đây là cấu hình đúng cho backend** — có trần bộ nhớ rõ ràng. |
+
+### Rejection Policy
 
 | Policy | Hành vi |
 |---|---|
-| `AbortPolicy` (mặc định) | Ném `RejectedExecutionException` — task bị từ chối thẳng |
-| `CallerRunsPolicy` | Task được chạy **ngay trên thread đang submit nó** (thường là thread gọi, không phải thread trong pool) — có tác dụng "làm chậm" tốc độ nhận task mới, giảm tải tự nhiên |
-| `DiscardPolicy` | Âm thầm **bỏ qua** task mới, không báo lỗi gì (⚠️ nguy hiểm — dễ mất dữ liệu/task quan trọng mà không biết) |
-| `DiscardOldestPolicy` | Bỏ task **cũ nhất** đang chờ trong hàng đợi để nhường chỗ cho task mới |
+| `AbortPolicy` (mặc định) | Ném `RejectedExecutionException` |
+| `CallerRunsPolicy` | Chạy task **trên thread đang submit** → tự làm chậm tốc độ nhận task (backpressure tự nhiên) |
+| `DiscardPolicy` | Bỏ im lặng task mới — ⚠️ mất việc không dấu vết |
+| `DiscardOldestPolicy` | Bỏ task **cũ nhất** trong queue, xếp task mới vào |
 
-> **Liên hệ thực tế:** cấu hình Thread Pool cho `@Async` trong Spring Boot (Module 13) thực chất chính là cấu hình `ThreadPoolTaskExecutor` — về bản chất là 1 wrapper của `ThreadPoolExecutor` này. Hiểu rõ cơ chế core/max/queue/rejection policy ở đây sẽ giúp cấu hình đúng cho ứng dụng Spring Boot thực tế, tránh out-of-memory khi traffic tăng đột biến.
-
----
-
-## 5. Future — lấy kết quả bất đồng bộ
-
-`Future<T>` đại diện cho **kết quả của 1 tác vụ bất đồng bộ**, có thể chưa hoàn thành ngay khi nhận được object `Future`.
+### Giám sát runtime
 
 ```java
-ExecutorService executor = Executors.newFixedThreadPool(2);
+pool.getActiveCount();          // thread đang chạy task
+pool.getQueue().size();          // task đang chờ
+pool.getPoolSize();              // tổng thread hiện có
+pool.getLargestPoolSize();       // đỉnh cao nhất từng đạt
+pool.getCompletedTaskCount();    // task đã xong
+```
 
-Future<Integer> future = executor.submit(() -> {
-    Thread.sleep(2000); // giả lập tác vụ tốn thời gian (gọi API, tính toán phức tạp...)
-    return 42;
+### Bẫy: thread starvation deadlock
+
+```java
+ExecutorService pool = Executors.newFixedThreadPool(2);
+Future<String> a = pool.submit(() -> {
+    Future<String> b = pool.submit(() -> "con");   // task con
+    return b.get();                                  // CHỜ task con
 });
-
-System.out.println("Task đã được submit, tiếp tục làm việc khác trong lúc chờ...");
-
-Integer result = future.get(); // ⚠️ BLOCKING — dừng lại CHỜ cho đến khi task hoàn thành mới lấy được kết quả
-System.out.println("Kết quả: " + result);
-
-// Có thể giới hạn thời gian chờ
-try {
-    Integer result2 = future.get(1, TimeUnit.SECONDS); // ném TimeoutException nếu quá 1s mà chưa xong
-} catch (TimeoutException e) {
-    System.out.println("Task chạy quá lâu!");
-}
-
-future.isDone();     // kiểm tra task đã xong chưa, KHÔNG block
-future.cancel(true);  // cố gắng hủy task (true = cho phép interrupt nếu đang chạy)
+// 2 task cha chiếm cả 2 thread, cùng chờ task con — task con không có thread để chạy → treo vĩnh viễn
 ```
 
-### Hạn chế lớn nhất của `Future` — lý do `CompletableFuture` ra đời
+→ Task **không** được submit task khác vào **cùng pool** rồi block chờ nó. Dùng pool riêng, hoặc `CompletableFuture` chaining.
 
-`Future.get()` là **blocking** — không có cách nào "đăng ký callback" để tự động xử lý khi task xong, cũng **không thể kết hợp (compose/chain)** nhiều Future với nhau một cách gọn gàng (ví dụ "chạy task B ngay khi task A xong, dùng kết quả của A").
+> **Liên hệ Spring:** `@Async` dùng `ThreadPoolTaskExecutor` — wrapper của `ThreadPoolExecutor` này. Hiểu core/max/queue/rejection ở đây là cấu hình đúng cho Spring Boot (Module 13).
 
 ---
 
-## 6. CompletableFuture — bất đồng bộ hiện đại (Java 8+)
+## 5. BlockingQueue — producer/consumer
 
-`CompletableFuture<T>` giải quyết toàn bộ hạn chế của `Future` — hỗ trợ **callback không cần block**, **kết hợp (chaining) nhiều bước bất đồng bộ**.
-
-### Tạo và xử lý callback không cần block
+Hàng đợi an toàn đa luồng, **tự chặn** khi rỗng/đầy — nền tảng của thread pool và mọi mô hình producer/consumer, thay cho `wait`/`notify` viết tay (Module 05.1).
 
 ```java
-CompletableFuture<Integer> future = CompletableFuture.supplyAsync(() -> {
-    // chạy bất đồng bộ trên Thread Pool mặc định (ForkJoinPool.commonPool())
-    try { Thread.sleep(1000); } catch (InterruptedException e) {}
-    return 42;
-});
+BlockingQueue<Task> queue = new ArrayBlockingQueue<>(1000);
 
-future.thenAccept(result -> System.out.println("Kết quả: " + result)); // callback — chạy TỰ ĐỘNG khi future hoàn thành, KHÔNG block thread hiện tại
-System.out.println("Dòng này có thể chạy TRƯỚC dòng in kết quả ở trên!");
+// Producer
+queue.put(task);          // CHẶN nếu queue đầy
+queue.offer(task, 200, TimeUnit.MILLISECONDS);   // chờ tối đa rồi trả false
+
+// Consumer
+Task t = queue.take();    // CHẶN nếu queue rỗng
+Task t2 = queue.poll(1, TimeUnit.SECONDS);        // chờ tối đa rồi trả null
 ```
 
-### Chaining — nối tiếp nhiều bước xử lý bất đồng bộ
-
-```java
-CompletableFuture<String> pipeline = CompletableFuture
-    .supplyAsync(() -> fetchUserFromDatabase(1L))     // (1) lấy user
-    .thenApply(user -> user.getEmail())                 // (2) BIẾN ĐỔI kết quả — như map() trong Stream
-    .thenApply(email -> email.toLowerCase())             // (3) tiếp tục biến đổi
-    .thenApply(email -> "Đã gửi email đến: " + email);   // (4) biến đổi cuối cùng
-
-String result = pipeline.join(); // giống get() nhưng không ném checked exception (dễ dùng trong lambda hơn)
-```
-
-### `thenApply` vs `thenAccept` vs `thenRun` — phân biệt rõ
-
-| Method | Nhận đầu vào? | Trả về giá trị? | Tương tự |
-|---|---|---|---|
-| `thenApply(Function)` | Có (kết quả bước trước) | Có (kết quả mới) | `map()` trong Stream |
-| `thenAccept(Consumer)` | Có | Không (`void`) | Tiêu thụ kết quả, không biến đổi tiếp |
-| `thenRun(Runnable)` | Không | Không | Chỉ cần biết bước trước đã xong, không quan tâm kết quả là gì |
-
-### Kết hợp nhiều CompletableFuture chạy song song
-
-```java
-CompletableFuture<Integer> futureA = CompletableFuture.supplyAsync(() -> fetchDataFromServiceA());
-CompletableFuture<Integer> futureB = CompletableFuture.supplyAsync(() -> fetchDataFromServiceB());
-
-// thenCombine — CHỜ CẢ HAI hoàn thành, rồi kết hợp 2 kết quả lại
-CompletableFuture<Integer> combined = futureA.thenCombine(futureB, (resultA, resultB) -> resultA + resultB);
-
-System.out.println(combined.join());
-```
-
-```java
-// allOf — chờ TẤT CẢ future trong danh sách hoàn thành (không quan tâm giá trị trả về cụ thể)
-CompletableFuture<Void> all = CompletableFuture.allOf(futureA, futureB);
-all.join(); // chờ cả 2 xong
-
-// anyOf — chỉ cần MỘT trong các future hoàn thành trước là đủ (ví dụ: gọi 2 server dự phòng, lấy kết quả server nào phản hồi trước)
-CompletableFuture<Object> any = CompletableFuture.anyOf(futureA, futureB);
-```
-
-### Xử lý lỗi trong CompletableFuture — `exceptionally` & `handle`
-
-```java
-CompletableFuture<Integer> future = CompletableFuture
-    .supplyAsync(() -> {
-        if (Math.random() > 0.5) throw new RuntimeException("Lỗi ngẫu nhiên");
-        return 42;
-    })
-    .exceptionally(ex -> { // giống "catch" — chỉ chạy khi có exception, cung cấp giá trị THAY THẾ
-        System.out.println("Đã xảy ra lỗi: " + ex.getMessage());
-        return -1; // giá trị fallback
-    });
-
-// handle() — chạy trong MỌI trường hợp (thành công LẪN lỗi), giống try/catch/finally gộp lại
-future.handle((result, ex) -> {
-    if (ex != null) {
-        return "Lỗi: " + ex.getMessage();
-    }
-    return "Thành công: " + result;
-});
-```
-
-> **Liên hệ thực tế:** `CompletableFuture` chính là nền tảng để hiểu **Reactive Programming** (`Mono`/`Flux` trong Spring WebFlux, sẽ nhắc ở Module 05 lý thuyết nâng cao và Module 19 — Microservices) — dù WebFlux có API khác, tư duy "chaining các bước xử lý bất đồng bộ không blocking" là hoàn toàn tương tự.
-
----
-
-## 7. CountDownLatch
-
-`CountDownLatch` cho phép **1 (hoặc nhiều) thread chờ cho đến khi 1 tập hợp các thao tác ở các thread khác hoàn thành** — hoạt động như "bộ đếm ngược dùng 1 lần".
-
-```java
-CountDownLatch latch = new CountDownLatch(3); // khởi tạo với đếm = 3
-
-for (int i = 0; i < 3; i++) {
-    int taskId = i;
-    new Thread(() -> {
-        System.out.println("Task " + taskId + " đang xử lý...");
-        try { Thread.sleep(1000); } catch (InterruptedException e) {}
-        System.out.println("Task " + taskId + " hoàn thành");
-        latch.countDown(); // giảm đếm đi 1 mỗi khi 1 task xong
-    }).start();
-}
-
-latch.await(); // main thread BLOCK ở đây cho đến khi đếm về 0 (cả 3 task đều đã countDown())
-System.out.println("Tất cả 3 task đã hoàn thành, tiếp tục xử lý...");
-```
-
-### Khác biệt quan trọng với `join()`
-
-`join()` chỉ chờ được **1 thread cụ thể** (hoặc lặp qua danh sách để chờ từng cái); `CountDownLatch` linh hoạt hơn — có thể dùng để đồng bộ **nhiều nhóm thread khác nhau**, hoặc dùng theo mô hình "1 thread chờ N thread khác **báo hiệu** đã sẵn sàng/hoàn thành" mà không cần giữ tham chiếu trực tiếp đến từng `Thread` object.
-
-> ⚠️ **Lưu ý:** `CountDownLatch` chỉ dùng được **1 lần** — sau khi đếm về 0, không thể "reset" lại để dùng tiếp (khác với `CyclicBarrier`, 1 công cụ tương tự nhưng có thể tái sử dụng — kiến thức mở rộng, không bắt buộc trong lộ trình này).
-
----
-
-## 8. Semaphore
-
-`Semaphore` giới hạn **số lượng thread tối đa được truy cập đồng thời** vào 1 tài nguyên có giới hạn — giống như "số chỗ đậu xe có hạn trong bãi".
-
-```java
-Semaphore semaphore = new Semaphore(3); // chỉ cho phép TỐI ĐA 3 thread cùng truy cập tại 1 thời điểm
-
-for (int i = 0; i < 10; i++) {
-    int taskId = i;
-    new Thread(() -> {
-        try {
-            semaphore.acquire(); // "xin" 1 "giấy phép" (permit) — nếu hết chỗ (đã có 3 thread đang giữ), BLOCK chờ
-            System.out.println("Task " + taskId + " đang sử dụng tài nguyên...");
-            Thread.sleep(2000); // giả lập công việc tốn thời gian
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        } finally {
-            semaphore.release(); // TRẢ LẠI "giấy phép" — BẮT BUỘC đặt trong finally để đảm bảo luôn được giải phóng dù có exception
-        }
-    }).start();
-}
-```
-
-### Ứng dụng thực tế trong backend
-
-`Semaphore` cực kỳ hữu ích để **giới hạn số kết nối đồng thời** đến 1 tài nguyên bên ngoài có giới hạn — ví dụ: giới hạn tối đa 5 request gọi đồng thời đến 1 API bên thứ ba (tránh bị họ chặn do gọi quá nhiều cùng lúc — rate limiting phía client), hoặc giới hạn số luồng ghi file cùng lúc để tránh quá tải disk I/O.
-
-### So sánh `synchronized` vs `Semaphore`
-
-| Tiêu chí | `synchronized` | `Semaphore` |
-|---|---|---|
-| Số thread được vào cùng lúc | Luôn là **1** | Có thể cấu hình **N** (bất kỳ số nào ≥ 1) |
-| Linh hoạt | Cứng, gắn với 1 object lock cụ thể | Linh hoạt hơn — permit có thể "acquire" ở 1 chỗ, "release" ở chỗ khác |
-
----
-
-## 9. AtomicInteger & các lớp Atomic — thay thế nhẹ hơn cho synchronized
-
-Với các thao tác đơn giản trên **1 biến số nguyên/số thực/reference** (không phải logic phức tạp nhiều bước), package `java.util.concurrent.atomic` cung cấp các lớp đảm bảo **atomicity** mà **KHÔNG cần dùng lock (`synchronized`)** — dựa trên cơ chế phần cứng CPU gọi là **CAS (Compare-And-Swap)**, thường nhanh hơn `synchronized` trong tình huống tranh chấp (contention) không quá gay gắt.
-
-```java
-import java.util.concurrent.atomic.AtomicInteger;
-
-AtomicInteger counter = new AtomicInteger(0);
-
-counter.incrementAndGet();     // tương đương ++count, nhưng ATOMIC — an toàn tuyệt đối với đa luồng, KHÔNG cần synchronized
-counter.getAndIncrement();     // tương đương count++ (trả về giá trị TRƯỚC KHI tăng)
-counter.addAndGet(5);          // cộng thêm 5, trả về kết quả sau khi cộng
-counter.compareAndSet(5, 10);  // nếu giá trị hiện tại ĐÚNG BẰNG 5, đổi thành 10 (trả về true/false báo có đổi thành công hay không)
-
-System.out.println(counter.get());
-```
-
-### Áp dụng lại bài toán Race Condition ở Module 05.1 — cách giải quyết gọn hơn `synchronized`
-
-```java
-public class Counter {
-    private AtomicInteger count = new AtomicInteger(0);
-
-    public void increment() {
-        count.incrementAndGet(); // KHÔNG cần "synchronized" — bản thân AtomicInteger đã đảm bảo an toàn đa luồng
-    }
-
-    public int getCount() {
-        return count.get();
-    }
-}
-```
-
-> **Khi nào chọn `Atomic*` thay vì `synchronized`?** Khi thao tác **chỉ đơn giản** trên 1 biến số/reference (tăng, giảm, so sánh-và-đổi) — `Atomic*` thường **nhanh hơn** vì không có overhead của việc "giữ/nhả lock" ở tầng OS. Khi logic **phức tạp hơn**, liên quan đến **nhiều biến/nhiều bước** cần đồng bộ cùng lúc (ví dụ ví dụ `BankAccount.transfer()` ở Module 05.1 — vừa trừ tài khoản này vừa cộng tài khoản kia) — vẫn cần `synchronized` (hoặc `Lock` nâng cao hơn) để đảm bảo tính nhất quán của **toàn bộ nhóm thao tác**.
-
----
-
-## 10. Tổng kết — Bảng ghi nhớ nhanh
-
-| Công cụ | Dùng khi nào |
+| Loại | Đặc điểm |
 |---|---|
-| `ExecutorService` | Luôn dùng thay vì tự tạo `new Thread()` thủ công trong code backend thực tế |
-| `newFixedThreadPool` | Tải ổn định, biết trước quy mô |
-| `newCachedThreadPool` | Nhiều task ngắn, tải dao động — cẩn thận rủi ro tạo vô số thread |
-| `ThreadPoolExecutor` tùy chỉnh | Cần kiểm soát chi tiết core/max/queue/rejection policy |
-| `Future` | Lấy kết quả bất đồng bộ — nhưng `get()` là **blocking** |
-| `CompletableFuture` | Callback không-block, chaining nhiều bước, kết hợp nhiều task song song |
-| `CountDownLatch` | 1 thread chờ N thread khác hoàn thành (dùng 1 lần) |
-| `Semaphore` | Giới hạn số thread tối đa truy cập đồng thời vào tài nguyên có hạn |
-| `Atomic*` (AtomicInteger...) | Thao tác đơn giản trên 1 biến — nhanh hơn `synchronized`, dựa trên CAS |
-| `synchronized` | Vẫn cần thiết khi logic phức tạp, nhiều biến/nhiều bước phải nhất quán cùng lúc |
+| `ArrayBlockingQueue(n)` | Mảng vòng, **bound cố định**, tùy chọn fair. Hợp làm buffer có trần. |
+| `LinkedBlockingQueue` | Linked list, bound tùy chọn (mặc định gần vô hạn). Throughput cao, hai khóa riêng cho đầu/cuối. |
+| `SynchronousQueue` | Sức chứa 0 — mỗi `put` chờ một `take` khớp (hand-off trực tiếp). |
+| `PriorityBlockingQueue` | Không bound, lấy ra theo `Comparator`/`Comparable`. |
+| `DelayQueue` | Phần tử chỉ lấy được khi đã "đến hạn" (`Delayed`). Hợp scheduler, retry có trễ. |
+| `LinkedTransferQueue` | `transfer()` — chặn tới khi có consumer thực sự nhận. |
+
+> Producer/consumer với `BlockingQueue` **không cần** `synchronized`/`wait`/`notify` — mọi đồng bộ nằm trong queue.
 
 ---
 
-## 11. Bài tập luyện tập
+## 6. Future — lấy kết quả bất đồng bộ
+
+```java
+Future<Integer> f = pool.submit(() -> { Thread.sleep(2000); return 42; });
+
+f.isDone();                              // không block
+Integer r = f.get();                     // ⚠️ BLOCKING tới khi xong
+Integer r2 = f.get(1, TimeUnit.SECONDS); // ném TimeoutException nếu quá hạn
+f.cancel(true);                          // true = interrupt nếu đang chạy; false = chỉ hủy nếu chưa bắt đầu
+f.isCancelled();
+```
+
+### `get()` ném ba loại exception
+
+| Exception | Khi nào |
+|---|---|
+| `ExecutionException` | Task ném exception → gói vào đây; lấy gốc bằng `getCause()` |
+| `InterruptedException` | Thread đang chờ `get()` bị interrupt |
+| `CancellationException` | Task đã bị `cancel()` |
+| `TimeoutException` | Chỉ với `get(timeout, unit)` |
+
+### Hạn chế — lý do có `CompletableFuture`
+
+`Future.get()` **blocking**; không đăng ký được callback; không nối (compose) nhiều `Future`; không có xử lý lỗi khai báo.
+
+---
+
+## 7. CompletableFuture — bất đồng bộ hiện đại
+
+### Tạo & callback không block
+
+```java
+CompletableFuture<Integer> cf = CompletableFuture.supplyAsync(() -> slowCompute());   // chạy trên ForkJoinPool.commonPool()
+cf.thenAccept(r -> log.info("kết quả {}", r));     // callback tự chạy khi xong, KHÔNG block thread hiện tại
+```
+
+> ⚠️ `supplyAsync(task)` không truyền executor → chạy trên **`ForkJoinPool.commonPool()`** dùng chung JVM (cùng rủi ro như `parallelStream` — Module 03.3). Với tác vụ **I/O**, luôn truyền pool riêng:
+> ```java
+> CompletableFuture.supplyAsync(() -> callHttp(), ioPool)
+>                  .thenApplyAsync(this::parse, cpuPool);
+> ```
+
+### `thenApply` vs `thenCompose` vs `thenCombine`
+
+| Method | Đầu vào | Kết quả | Tương tự Stream |
+|---|---|---|---|
+| `thenApply(Function<T,R>)` | `T` | `CF<R>` | `map` |
+| `thenCompose(Function<T,CF<R>>)` | `T` | `CF<R>` (không lồng) | `flatMap` |
+| `thenAccept(Consumer<T>)` | `T` | `CF<Void>` | tiêu thụ |
+| `thenRun(Runnable)` | — | `CF<Void>` | chỉ cần biết "đã xong" |
+| `thenCombine(CF<U>, BiFunction)` | `T` + `U` | `CF<R>` | zip 2 nguồn |
+
+```java
+findUser(id)
+    .thenApply(User::name)               // CF<String>
+    .thenCompose(name -> loadProfile(name))   // loadProfile trả CF<Profile> → KHÔNG lồng
+    .thenCombine(loadSettings(id), (profile, settings) -> render(profile, settings));
+```
+
+`thenApply` vs `thenApplyAsync`: bản thường chạy callback **trên thread vừa hoàn thành bước trước** (hoặc thread gọi, nếu đã xong); bản `Async` đẩy callback sang pool → dùng khi callback nặng hoặc muốn tách pool.
+
+### Kết hợp nhiều future
+
+```java
+CompletableFuture<Integer> a = supplyAsync(this::fetchA, pool);
+CompletableFuture<Integer> b = supplyAsync(this::fetchB, pool);
+
+a.thenCombine(b, Integer::sum);                    // chờ CẢ HAI, gộp
+
+CompletableFuture.allOf(a, b).join();               // chờ tất cả (trả Void)
+CompletableFuture.anyOf(a, b).join();               // chỉ cần MỘT xong (ví dụ 2 server dự phòng)
+
+// allOf trả Void → thu kết quả bằng join sau khi allOf hoàn thành:
+List<CompletableFuture<Integer>> fs = ids.stream().map(id -> supplyAsync(() -> fetch(id), pool)).toList();
+CompletableFuture<List<Integer>> results = CompletableFuture
+    .allOf(fs.toArray(CompletableFuture[]::new))
+    .thenApply(v -> fs.stream().map(CompletableFuture::join).toList());
+```
+
+### Xử lý lỗi — `exceptionally` / `handle` / `whenComplete`
+
+```java
+cf.exceptionally(ex -> -1)                          // chỉ chạy khi LỖI, trả giá trị thay thế
+  .handle((result, ex) -> ex != null ? "lỗi: " + ex : "ok: " + result)   // chạy MỌI trường hợp, biến đổi
+  .whenComplete((result, ex) -> log.info("xong (ex={})", ex));           // chạy MỌI trường hợp, KHÔNG biến đổi, ném lại lỗi
+```
+
+> Bên trong chuỗi `CompletableFuture`, exception được bọc trong **`CompletionException`** — trong `exceptionally`/`handle` nhớ `ex.getCause()` để lấy gốc.
+
+### Timeout (Java 9+) & hoàn thành thủ công
+
+```java
+cf.orTimeout(2, TimeUnit.SECONDS);                       // quá hạn → hoàn thành với TimeoutException
+cf.completeOnTimeout(fallbackValue, 2, TimeUnit.SECONDS); // quá hạn → hoàn thành với giá trị dự phòng
+
+// Bọc API callback cũ thành CompletableFuture:
+CompletableFuture<String> bridge = new CompletableFuture<>();
+legacyClient.onSuccess(bridge::complete);
+legacyClient.onError(bridge::completeExceptionally);
+```
+
+### `join()` vs `get()`
+
+`join()` ném `CompletionException` (unchecked) → dùng được trong lambda/Stream. `get()` ném checked `ExecutionException`/`InterruptedException`.
+
+> **Liên hệ:** `CompletableFuture` là nền tảng tư duy cho reactive (`Mono`/`Flux` — Module 19): "nối các bước bất đồng bộ, không block".
+
+---
+
+## 8. CountDownLatch, CyclicBarrier, Phaser
+
+### `CountDownLatch` — một thread chờ N thao tác xong (dùng MỘT lần)
+
+```java
+CountDownLatch done = new CountDownLatch(3);
+for (int i = 0; i < 3; i++) {
+    pool.submit(() -> { try { work(); } finally { done.countDown(); } });
+}
+done.await();                                   // block tới khi đếm về 0
+done.await(10, TimeUnit.SECONDS);               // hoặc chờ có thời hạn
+System.out.println("cả 3 đã xong");
+```
+
+Sau khi về 0 **không reset được**.
+
+### Mẫu "start gate / end gate" — đo hiệu năng công bằng
+
+```java
+CountDownLatch startGate = new CountDownLatch(1);
+CountDownLatch endGate   = new CountDownLatch(N);
+for (int i = 0; i < N; i++) pool.submit(() -> {
+    startGate.await();                          // mọi thread chờ ở vạch xuất phát
+    try { task(); } finally { endGate.countDown(); }
+});
+long t0 = System.nanoTime();
+startGate.countDown();                          // thả TẤT CẢ cùng lúc
+endGate.await();
+long elapsedNs = System.nanoTime() - t0;        // đo đúng từ lúc bắt đầu đồng loạt
+```
+
+### So sánh với `CyclicBarrier` và `Phaser`
+
+| Công cụ | Ai chờ ai | Tái dùng | Điểm riêng |
+|---|---|---|---|
+| `CountDownLatch(n)` | 1+ thread chờ **n lần `countDown()`** (từ thread bất kỳ) | **Không** | Đơn giản nhất; "cổng" một chiều |
+| `CyclicBarrier(n)` | **n thread chờ lẫn nhau** cùng tới điểm hẹn | **Có** (tự reset) | Chạy được `barrierAction` khi đủ n; hợp thuật toán theo vòng (simulation) |
+| `Phaser` | Số bên (parties) **thay đổi động** qua từng pha | Có | `register()`/`arriveAndAwaitAdvance()`; linh hoạt nhất, phức tạp nhất |
+
+---
+
+## 9. Semaphore
+
+Giới hạn **số thread tối đa** vào một tài nguyên cùng lúc — "N chỗ trong bãi đỗ".
+
+```java
+Semaphore sem = new Semaphore(5, /* fair */ true);   // 5 permit, cấp theo thứ tự chờ
+
+for (int i = 0; i < 100; i++) pool.submit(() -> {
+    if (!sem.tryAcquire(200, TimeUnit.MILLISECONDS))
+        throw new RejectedExecutionException("hệ thống bận");
+    try {
+        callThirdPartyApi();                          // tối đa 5 lời gọi song song
+    } finally {
+        sem.release();                               // BẮT BUỘC trong finally
+    }
+});
+```
+
+### Ba điểm khác biệt so với `synchronized` / `Lock`
+
+| | `Semaphore` |
+|---|---|
+| Số thread vào cùng lúc | **N** (cấu hình), không phải luôn 1 |
+| Gắn với chủ sở hữu (owner) | **Không** — thread A `acquire`, thread B `release` là hợp lệ |
+| Reentrant | **Không** — cùng thread `acquire()` hai lần chiếm **hai** permit |
+
+`acquire(n)` / `release(n)` lấy/trả nhiều permit. `release()` nhiều hơn `acquire()` → **tăng** tổng permit (bug nếu vô ý; hoặc chủ đích để "mở rộng hạn ngạch").
+
+### Ứng dụng backend
+
+Rate-limit phía client (tối đa 5 request song song tới API đối tác theo SLA), giới hạn số luồng ghi file/kết nối tới hệ thống ngoài, "bơm" giới hạn cho một hàng chờ virtual thread.
+
+---
+
+## 10. Atomic — CAS, ABA, LongAdder
+
+`java.util.concurrent.atomic` đảm bảo **atomicity trên một biến** mà **không cần lock**, dựa trên lệnh CPU **CAS (Compare-And-Swap)**: "nếu giá trị hiện tại đúng bằng `expected` thì đổi thành `new`, trả về có đổi được không".
+
+```java
+AtomicInteger c = new AtomicInteger(0);
+c.incrementAndGet();          // ++c, atomic
+c.getAndIncrement();          // c++ (trả giá trị TRƯỚC khi tăng)
+c.addAndGet(5);
+c.compareAndSet(5, 10);       // nếu đang là 5 → thành 10, trả true/false
+c.updateAndGet(n -> n * 2);   // Java 8 — áp một hàm, atomic (dùng CAS loop nội bộ)
+c.accumulateAndGet(3, Integer::sum);
+```
+
+### CAS loop — nền tảng của lock-free
+
+Cho check-then-act "còn vé thì giảm" (mục ví dụ oversold ở Module 05.1) — `get()` rồi `decrementAndGet()` **vẫn race**. Gộp atomic:
+
+```java
+boolean bookTicket() {
+    while (true) {
+        int cur = tickets.get();
+        if (cur <= 0) return false;                     // hết vé
+        if (tickets.compareAndSet(cur, cur - 1)) return true;   // đúng một thread "thắng"
+        // CAS thất bại (thread khác vừa đổi) → lặp lại với giá trị mới nhất
+    }
+}
+// hoặc gọn: int left = tickets.updateAndGet(n -> n > 0 ? n - 1 : n);
+```
+
+### ABA problem
+
+Thread 1 đọc giá trị `A`. Thread 2 đổi `A → B → A`. Thread 1 `compareAndSet(A, C)` **thành công** dù thực tế giá trị đã "đi một vòng" — với cấu trúc dữ liệu lock-free (stack/queue trỏ node), điều này gây hỏng. Khắc phục: **`AtomicStampedReference`** — CAS kiểm tra **cả giá trị lẫn "tem" (version) tăng dần**.
+
+### `LongAdder` / `LongAccumulator` — đếm dưới tranh chấp cao
+
+```java
+LongAdder hits = new LongAdder();
+hits.increment();          // ghi vào "ô" (cell) riêng theo thread → giảm tranh chấp CAS
+long total = hits.sum();   // gộp các cell — KHÔNG phải ảnh chụp nguyên tử tại một thời điểm
+```
+
+`AtomicLong` dưới nhiều thread cùng `incrementAndGet()` → CAS thất bại và retry liên tục (contention). `LongAdder` tách thành nhiều cell → nhanh hơn nhiều cho **đếm/thống kê**; nhược điểm: `sum()` không nhất quán tức thời. Dùng `AtomicLong` khi cần đọc giá trị chính xác thường xuyên.
+
+### `AtomicReference` — hoán đổi object bất biến lock-free
+
+```java
+AtomicReference<Config> config = new AtomicReference<>(initial);
+config.updateAndGet(old -> old.withTimeout(5000));   // thay bằng bản mới, atomic
+```
+
+---
+
+## 11. Lock, ReadWriteLock, Condition
+
+`ReentrantLock` làm mọi việc `synchronized` làm, **cộng thêm** những thứ `synchronized` không có (Module 05.1 đã trỏ tới đây).
+
+```java
+private final ReentrantLock lock = new ReentrantLock();
+
+lock.lock();
+try {
+    // critical section
+} finally {
+    lock.unlock();          // ⚠️ BẮT BUỘC trong finally — quên = lock kẹt vĩnh viễn
+}
+```
+
+### Những gì `synchronized` không có
+
+```java
+if (lock.tryLock()) { ... }                              // thử, không chờ
+if (lock.tryLock(1, TimeUnit.SECONDS)) { ... }           // chờ có thời hạn → phá "no preemption" của deadlock
+lock.lockInterruptibly();                                 // đang chờ lock vẫn interrupt được
+new ReentrantLock(true);                                  // fair — cấp theo thứ tự chờ (chậm hơn, chống starvation)
+```
+
+| | `synchronized` | `ReentrantLock` |
+|---|---|---|
+| Nhả lock | Tự động (hết khối / exception) | **Thủ công** `unlock()` trong `finally` |
+| `tryLock` / timeout / interruptible | Không | Có |
+| Fairness | Không | Tùy chọn |
+| Số điều kiện chờ (`Condition`) | 1 (`wait`/`notify`) | Nhiều |
+| Cú pháp | Gọn, khó rò rỉ | Dài, dễ quên `unlock` |
+
+→ **Mặc định dùng `synchronized`**; chuyển sang `ReentrantLock` khi cần `tryLock`/timeout/interruptible/fairness/nhiều `Condition`.
+
+### `Condition` — nhiều "phòng chờ" trên một lock
+
+```java
+private final ReentrantLock lock = new ReentrantLock();
+private final Condition notFull  = lock.newCondition();
+private final Condition notEmpty = lock.newCondition();
+
+void put(T x) throws InterruptedException {
+    lock.lock();
+    try {
+        while (count == capacity) notFull.await();       // chờ ĐÚNG điều kiện "chưa đầy"
+        items[tail] = x; tail = (tail + 1) % capacity; count++;
+        notEmpty.signal();                                // đánh thức ĐÚNG bên chờ "có phần tử"
+    } finally { lock.unlock(); }
+}
+```
+
+So với `wait`/`notifyAll` một phòng (Module 05.1): `signal()` đánh thức đúng nhóm cần thiết, không "đánh thức nhầm" bên kia.
+
+### `ReadWriteLock` — nhiều reader song song, một writer độc quyền
+
+```java
+private final ReadWriteLock rw = new ReentrantReadWriteLock();
+
+T read()  { rw.readLock().lock();  try { return data; } finally { rw.readLock().unlock(); } }
+void write(T v) { rw.writeLock().lock(); try { data = v; } finally { rw.writeLock().unlock(); } }
+```
+
+Dùng khi **đọc >> ghi** (cache, bảng cấu hình). `StampedLock` (Java 8) — nhanh hơn nữa với "optimistic read" nhưng không reentrant, dễ dùng sai.
+
+---
+
+## 12. ConcurrentHashMap
+
+`HashMap` không an toàn đa luồng (Module 03.1 — có thể mất update, JDK 7 còn vòng lặp vô hạn khi resize). `Collections.synchronizedMap` khóa toàn bảng mỗi thao tác → nghẽn. `ConcurrentHashMap` khóa mịn / lock-free cho đọc.
+
+```java
+ConcurrentHashMap<String, Long> counts = new ConcurrentHashMap<>();
+
+counts.merge(key, 1L, Long::sum);                          // đếm — ATOMIC (khác HashMap.merge)
+counts.computeIfAbsent(key, k -> new CopyOnWriteArrayList<>()).add(x);   // khởi tạo nhánh — atomic
+counts.compute(key, (k, v) -> v == null ? 1L : v + 1L);
+long total = counts.reduceValues(1000, Long::sum);         // duyệt song song
+```
+
+- **Không cho `null`** key hoặc value.
+- `get`/đọc **không khóa**; iteration **weakly-consistent** — không ném `ConcurrentModificationException`, nhưng có thể không thấy thay đổi xảy ra sau khi iterator tạo.
+- `size()` là **ước lượng** (không khóa toàn bảng) — đừng dùng cho logic chính xác.
+- Hàm trong `compute`/`merge`/`computeIfAbsent` **giữ khóa một bin** trong lúc chạy → phải **nhanh**, **không gọi lại `map`** đó (nguy cơ deadlock/treo).
+- `computeIfAbsent` + `merge` là cách "đọc-sửa-ghi trên một key" an toàn — thay cho `if (containsKey) ... else ...`.
+
+Các cấu trúc concurrent khác cùng họ: `CopyOnWriteArrayList` (ghi hiếm, đọc nhiều, iterator không CME), `ConcurrentLinkedQueue` (không bound, lock-free), `ConcurrentSkipListMap` (sắp xếp, thay `TreeMap`).
+
+---
+
+## 13. Tổng kết — Bảng ghi nhớ nhanh
+
+| Công cụ | Dùng khi |
+|---|---|
+| `ExecutorService` | Luôn thay cho `new Thread()`. `submit` → exception nằm trong `Future` (phải `get()`); `execute` → `stderr`. |
+| Đóng pool | `shutdown()` → `awaitTermination()` → `shutdownNow()` (hai pha). Java 19+: try-with-resources. Quên `shutdown` → JVM không thoát. |
+| `newFixedThreadPool` | Queue **không bound** → OOM khi tải cao. Chỉ dùng khi tải chắc chắn ổn định. |
+| `newCachedThreadPool` | Không trần thread → cạn tài nguyên khi bùng task. |
+| `ThreadPoolExecutor` | **Loại queue quyết định `max` có tác dụng không**: unbounded `LinkedBlockingQueue` → `max` bị bỏ qua; bounded queue → cấu hình đúng cho backend. |
+| Rejection Policy | `AbortPolicy` (ném), `CallerRunsPolicy` (backpressure), `Discard*` (⚠️ mất việc). |
+| `scheduleAtFixedRate` vs `WithFixedDelay` | Theo mốc thời gian cố định vs nghỉ cố định sau mỗi lần. Task ném exception → **lịch dừng im lặng** → luôn bọc try/catch. |
+| Starvation deadlock | Task không được submit vào **cùng pool** rồi block chờ. |
+| `BlockingQueue` | Producer/consumer không cần `wait`/`notify`. `put`/`take` chặn; `offer`/`poll` có timeout. |
+| `Future` | `get()` blocking, ném `ExecutionException` (unwrap `getCause()`). Không callback, không compose. |
+| `CompletableFuture` | `supplyAsync` không executor → **commonPool** (nguy hiểm cho I/O). `thenApply`=map, `thenCompose`=flatMap, `thenCombine`=zip. Lỗi bọc `CompletionException`. `allOf` + `join` để thu kết quả. `orTimeout`. |
+| `CountDownLatch` | 1 thread chờ N thao tác (một lần). Mẫu start/end gate cho benchmark. |
+| `CyclicBarrier` / `Phaser` | N thread chờ nhau, tái dùng (barrier) / số bên động (phaser). |
+| `Semaphore` | Giới hạn N thread đồng thời. Không owner-bound, không reentrant. `tryAcquire(timeout)`. |
+| `Atomic*` | CAS, không lock. `updateAndGet`/CAS loop cho check-then-act. **ABA** → `AtomicStampedReference`. |
+| `LongAdder` | Đếm/thống kê dưới tranh chấp cao — nhanh hơn `AtomicLong`; `sum()` không nhất quán tức thời. |
+| `ReentrantLock` | Khi cần `tryLock`/timeout/interruptible/fairness/nhiều `Condition`. Phải `unlock()` trong `finally`. Mặc định vẫn ưu tiên `synchronized`. |
+| `ReadWriteLock` | Đọc >> ghi. |
+| `ConcurrentHashMap` | `merge`/`compute*` atomic; không `null`; `size()` ước lượng; hàm trong `compute` phải nhanh, không gọi lại map. |
+
+---
+
+## 14. Bài tập luyện tập
 
 ### Phần A — Trắc nghiệm nhận định (giải thích lý do)
 
-**Câu 1.** Đoạn code sau có vấn đề gì? (Gợi ý: điều gì xảy ra với JVM sau khi chạy xong đoạn này)
+**Câu 1.** Đoạn này có vấn đề gì? Điều gì xảy ra với JVM sau khi chạy xong?
 ```java
-ExecutorService executor = Executors.newFixedThreadPool(4);
-executor.submit(() -> System.out.println("Task done"));
-// không có dòng nào khác
+ExecutorService pool = Executors.newFixedThreadPool(4);
+pool.submit(() -> System.out.println("done"));
 ```
 
-**Câu 2.** So sánh `future.get()` và `completableFuture.thenAccept(...)` — điểm khác biệt cốt lõi là gì về mặt hành vi của thread hiện tại?
-
-**Câu 3.** `newCachedThreadPool()` tiềm ẩn rủi ro gì mà `newFixedThreadPool(n)` không có? Giải thích bằng tình huống thực tế cụ thể.
-
-**Câu 4.** Đoạn code sau có đảm bảo an toàn đa luồng không? Giải thích.
+**Câu 2.** Đoạn này in gì? Vì sao? Sửa thế nào để không "mất" lỗi.
 ```java
-private AtomicInteger balance = new AtomicInteger(1000);
-public void transfer(int amount) {
-    if (balance.get() >= amount) { // (1)
-        balance.addAndGet(-amount); // (2)
+ExecutorService pool = Executors.newFixedThreadPool(2);
+pool.submit(() -> { throw new IllegalStateException("nổ"); });
+pool.shutdown();
+```
+
+**Câu 3.** `new ThreadPoolExecutor(2, 10, 60, SECONDS, new LinkedBlockingQueue<>())` — dưới tải 5000 task/giây kéo dài, pool có bao giờ chạy tới 10 thread không? Chuyện gì xảy ra với bộ nhớ? Sửa thế nào?
+
+**Câu 4.** Đoạn `AtomicInteger` sau có an toàn đa luồng không? Giải thích điều xảy ra giữa (1) và (2). Sửa lại.
+```java
+private final AtomicInteger stock = new AtomicInteger(100);
+public boolean buy(int qty) {
+    if (stock.get() >= qty) {          // (1)
+        stock.addAndGet(-qty);          // (2)
+        return true;
     }
+    return false;
 }
 ```
-*(Gợi ý: xem xét kỹ điều gì có thể xảy ra GIỮA bước (1) và (2) nếu nhiều thread gọi `transfer()` cùng lúc.)*
 
-**Câu 5.** Khi nào nên dùng `Semaphore` thay vì `synchronized`? Cho 1 ví dụ tình huống thực tế cụ thể.
+**Câu 5.** `future.get()` và `completableFuture.thenApply(...)` khác nhau cốt lõi ở điểm nào về hành vi của **thread hiện tại**?
+
+**Câu 6.** `scheduleAtFixedRate(job, 0, 1, SECONDS)` với `job` thỉnh thoảng ném `RuntimeException` (không catch). Sau vài giờ, job "ngừng chạy" mà không có log lỗi. Vì sao? Sửa thế nào?
+
+**Câu 7.** Hai task cùng submit vào `newFixedThreadPool(2)`; mỗi task lại `pool.submit(...)` một task con rồi `.get()` chờ. Chuyện gì xảy ra? Tên hiện tượng?
+
+**Câu 8.** `ConcurrentHashMap`: vì sao `map.computeIfAbsent(k, ...).add(x)` an toàn còn `if (!map.containsKey(k)) map.put(k, new ArrayList<>()); map.get(k).add(x);` thì không?
 
 ---
 
 ### Phần B — Bài tập viết code
 
-**Bài 1 — Xử lý song song với ExecutorService.**
-Viết chương trình mô phỏng gọi 5 "API bên ngoài" (mỗi API giả lập bằng `Thread.sleep()` ngẫu nhiên 500-2000ms rồi trả về 1 số nguyên). Dùng `ExecutorService` với `newFixedThreadPool(5)` để gọi **song song cả 5**, dùng `Future` thu thập kết quả, tính tổng. So sánh thời gian chạy với cách gọi **tuần tự** (không dùng Thread Pool) để thấy rõ lợi ích của xử lý song song.
+**Bài 1 — Song song vs tuần tự.**
+Mô phỏng gọi 5 "API" (mỗi cái `sleep` ngẫu nhiên 500–2000 ms rồi trả `int`). Gọi song song bằng `newFixedThreadPool(5)` + `invokeAll`, cộng tổng; đo thời gian và so với gọi tuần tự. Đóng pool bằng mẫu hai pha. Giải thích vì sao thời gian song song ≈ API chậm nhất.
 
-**Bài 2 — CompletableFuture chaining thực tế.**
-Mô phỏng pipeline xử lý đơn hàng bất đồng bộ gồm 3 bước nối tiếp: `validateOrder()` → `calculateTotal()` → `sendConfirmationEmail()`, mỗi bước giả lập bằng `Thread.sleep(500)` và trả về giá trị cho bước sau dùng. Viết bằng `CompletableFuture` với `thenApply`/`thenAccept`, thêm `exceptionally()` để xử lý trường hợp `validateOrder()` ném exception (giả lập đơn hàng không hợp lệ).
+**Bài 2 — CompletableFuture pipeline + xử lý lỗi.**
+Pipeline đơn hàng bất đồng bộ: `validate()` → `calcTotal()` → `charge()` → `sendEmail()`, mỗi bước `sleep(300)` và truyền giá trị cho bước sau. Dùng `thenApply`/`thenCompose` (một bước trả `CompletableFuture`). Thêm `exceptionally` xử lý `validate()` ném (đơn không hợp lệ) → trả kết quả "đã hủy". Chạy trên executor **riêng**, không dùng commonPool.
 
-**Bài 3 — CountDownLatch mô phỏng "chờ khởi động xong mới bắt đầu".**
-Viết chương trình mô phỏng 3 "service" con (Database, Cache, MessageQueue) cần khởi động song song, mỗi service tốn thời gian ngẫu nhiên (1-3 giây) để sẵn sàng. Dùng `CountDownLatch(3)` để main thread **chờ CẢ 3 service khởi động xong** trước khi in ra `"Hệ thống đã sẵn sàng nhận request!"`.
+**Bài 3 — allOf thu kết quả.**
+Cho danh sách 10 `id`. `fetchAsync(id)` trả `CompletableFuture<Integer>` (`sleep` ngẫu nhiên). Gọi cả 10 song song, dùng `allOf(...).thenApply(v -> ...join...)` để thu về `List<Integer>` đúng thứ tự, tính tổng. Thêm `orTimeout(3, SECONDS)` cho từng future và xử lý phần tử timeout bằng giá trị 0.
 
-**Bài 4 — Semaphore giới hạn kết nối đồng thời.**
-Viết chương trình mô phỏng 20 thread cùng cố gắng "gọi API bên thứ ba" (giả lập bằng in log + `Thread.sleep(1000)`), nhưng dùng `Semaphore(3)` để đảm bảo **tối đa 3 lời gọi được thực hiện đồng thời** tại bất kỳ thời điểm nào (các thread còn lại phải chờ đến lượt). In log kèm timestamp để quan sát rõ tại một thời điểm không bao giờ có quá 3 "cuộc gọi" diễn ra cùng lúc.
+**Bài 4 — start/end gate benchmark.**
+Đo throughput của `AtomicLong.incrementAndGet()` vs `LongAdder.increment()` vs `synchronized` counter, mỗi cái 8 thread × 1_000_000 lần. Dùng `CountDownLatch` start gate (thả đồng loạt) + end gate (chờ xong) để đo công bằng. In bảng ns/op, giải thích vì sao `LongAdder` thắng khi tranh chấp cao.
 
-**Bài 5 — Bài toán tổng hợp: Sửa lại hệ thống đặt vé (Module 05.1 Bài 5) bằng ExecutorService + AtomicInteger.**
-Lấy lại bài toán `TicketBooth` ở Module 05.1 (Bài 5), nhưng lần này:
-- Thay vì tự tạo 200 `Thread` thủ công, dùng `ExecutorService` với `newFixedThreadPool(20)` để submit 200 task đặt vé.
-- Thay `synchronized` bằng `AtomicInteger` cho biến `availableTickets` — nhưng **cẩn thận**: phép kiểm tra "còn vé không" và "giảm số vé" phải là **1 thao tác nguyên tử duy nhất** (gợi ý: tìm hiểu method `updateAndGet()` hoặc dùng vòng lặp `compareAndSet()` thủ công, vì `get()` rồi `decrementAndGet()` riêng lẻ vẫn có thể xảy ra race condition tương tự Câu 4 Phần A).
-- Dùng `CountDownLatch` để main thread biết khi nào toàn bộ 200 yêu cầu đặt vé đã được xử lý xong, rồi in ra tổng số vé đã bán thành công (phải luôn đúng, không vượt quá số vé có sẵn).
+**Bài 5 — Semaphore rate-limit.**
+20 thread cùng "gọi API đối tác" (`sleep(1000)`), nhưng `Semaphore(3)` đảm bảo tối đa 3 lời gọi song song. Dùng thêm một `AtomicInteger` đếm số cuộc gọi đang active, in ngay sau `acquire()` và trước `release()` — chứng minh không bao giờ vượt 3. Thêm `tryAcquire(200, MILLISECONDS)`: thread không xin được permit trong 200 ms thì bỏ cuộc và log "bận".
+
+**Bài 6 — BlockingQueue producer/consumer.**
+1 producer đẩy 100 "job" vào `ArrayBlockingQueue(10)`; 4 consumer `take()` và xử lý (`sleep` ngẫu nhiên). Dùng "poison pill" (job đặc biệt) để báo consumer dừng. `CountDownLatch` để main biết cả 4 consumer đã kết thúc. Không dùng `wait`/`notify` tay.
+
+**Bài 7 — Bài toán tổng hợp: phòng vé bằng ExecutorService + CAS loop (chuẩn bị capstone).**
+`TicketBooth` với `AtomicInteger available = new AtomicInteger(100)`. `boolean book()` dùng **CAS loop** (`compareAndSet`) để "kiểm tra còn vé + giảm 1" thành một thao tác nguyên tử. Submit 500 task `book()` vào `newFixedThreadPool(50)`; đếm số `true` bằng `AtomicInteger`/`LongAdder`; `CountDownLatch(500)` để main chờ; in tổng vé bán — **luôn đúng 100, không oversold**. Ghi chú vì sao `get()` rồi `decrementAndGet()` riêng lẻ vẫn sai, và backend nhiều instance cần thêm distributed lock / `SELECT … FOR UPDATE` / `@Version` (Module 14, 18).
 
 ---
 
-### Phần C — Gợi ý đáp án (tự chấm)
+### Phần C — Nâng cao
+
+**Câu 1.** Phân biệt hành vi khi task ném exception với `execute(Runnable)` vs `submit(Callable)`. Vì sao "submit rồi không bao giờ `get()`" là một class bug âm thầm nguy hiểm? Nêu ba cách đảm bảo mọi lỗi task đều được ghi log.
+
+**Câu 2.** Với `ThreadPoolExecutor`, chứng minh bằng lập luận: `LinkedBlockingQueue` **không bound** khiến `maximumPoolSize` trở nên vô nghĩa. `SynchronousQueue` khác thế nào? Viết một cấu hình `ThreadPoolExecutor` "đúng cho backend" cho tác vụ I/O 8 nhân, gọi API ~100 ms, và giải thích từng tham số.
+
+**Câu 3.** `CompletableFuture.supplyAsync(task)` (không executor) chạy trên `ForkJoinPool.commonPool()`. Nêu ba hệ quả trong một service Spring Boot nhiều request đồng thời khi `task` là I/O (gọi DB/HTTP). Vì sao `thenApply` vs `thenApplyAsync` cho kết quả "chạy trên thread nào" khác nhau, và khi nào phải dùng bản `Async`?
+
+**Câu 4.** CAS loop cho "còn vé thì giảm": viết bản `compareAndSet` tường minh và bản `updateAndGet`, chỉ ra chúng tương đương. Giải thích **ABA problem** bằng ví dụ một lock-free stack (push/pop trỏ `head`), và vì sao `AtomicStampedReference` khắc phục. Bài toán vé có bị ABA không — vì sao?
+
+**Câu 5.** `LongAdder` vs `AtomicLong` dưới tranh chấp cao: giải thích cơ chế "striping" (nhiều cell). Vì sao `LongAdder.sum()` **không** phải ảnh chụp nguyên tử, và điều đó chấp nhận được cho metric nhưng **không** cho "số dư tài khoản"? Khi nào `AtomicLong` vẫn là lựa chọn đúng?
+
+**Câu 6.** `ReentrantLock` với hai `Condition` (`notFull`/`notEmpty`) so với một monitor `wait`/`notifyAll` (Module 05.1): giải thích vì sao `signal()` đúng `Condition` tránh được "đánh thức nhầm" mà `notify()` một phòng gặp phải. Cái giá phải trả của `ReentrantLock` so với `synchronized` là gì, và vì sao `unlock()` **bắt buộc** trong `finally`?
+
+**Câu 7.** `ConcurrentHashMap.compute(key, remappingFn)` giữ khóa một bin trong lúc chạy `remappingFn`. Nêu ba điều `remappingFn` **không được làm** và hậu quả từng cái. Vì sao `size()` chỉ là ước lượng, và `map.forEach` không ném `ConcurrentModificationException` (khác `HashMap`) nhưng cũng không đảm bảo thấy gì?
+
+---
+
+### Phần D — Gợi ý đáp án (tự chấm)
 
 <details>
 <summary>Bấm để xem gợi ý đáp án Phần A</summary>
 
-1. **Quên gọi `executor.shutdown()`** — các thread trong pool mặc định không phải daemon thread, nên JVM sẽ **không bao giờ tự thoát** dù task đã chạy xong từ lâu, chương trình bị "treo" vô thời hạn (phải tự tắt thủ công, ví dụ Ctrl+C khi chạy từ terminal).
-2. `future.get()` là **blocking** — thread gọi nó phải **dừng lại chờ** cho đến khi có kết quả mới tiếp tục được. `completableFuture.thenAccept(...)` đăng ký 1 **callback** — thread hiện tại **tiếp tục chạy ngay**, callback sẽ tự động được gọi (trên 1 thread khác, thường từ Thread Pool) khi kết quả đã sẵn sàng, không cần chờ đợi ở đây.
-3. `newCachedThreadPool()` **không có giới hạn số thread tối đa** — nếu có 1 lượng lớn task đến đột ngột (ví dụ traffic tăng đột biến, hoặc do bug khiến task được submit liên tục trong vòng lặp), pool có thể tạo ra **hàng nghìn/hàng chục nghìn thread**, dẫn đến cạn kiệt bộ nhớ (`OutOfMemoryError`) hoặc hệ thống bị "đơ" do quá tải context-switching — trong khi `newFixedThreadPool(n)` luôn giới hạn cứng số thread tối đa là `n`, các task thừa chỉ xếp hàng đợi chứ không tạo thêm thread vô hạn.
-4. **KHÔNG đảm bảo an toàn** — dù `balance` là `AtomicInteger` (từng thao tác riêng lẻ như `get()` hay `addAndGet()` là atomic), nhưng **sự kết hợp của 2 thao tác riêng biệt** (`get()` rồi sau đó mới `addAndGet()`) **không phải** là 1 khối atomic duy nhất. Giữa bước (1) và (2), 1 thread khác hoàn toàn có thể "chen vào" và thay đổi `balance`, dẫn đến kết quả kiểm tra ở bước (1) đã "lỗi thời" khi thực hiện bước (2) — đây là bug tinh vi rất dễ bị bỏ sót ngay cả khi đã "dùng Atomic cho có". Cách sửa đúng: dùng `updateAndGet()` hoặc vòng lặp `compareAndSet()` để gộp CẢ 2 bước kiểm tra và cập nhật thành 1 thao tác nguyên tử thực sự.
-5. Dùng `Semaphore` khi cần giới hạn **số lượng luồng truy cập đồng thời lớn hơn 1** vào 1 tài nguyên có hạn — ví dụ: hệ thống backend gọi đến 1 API thanh toán bên thứ ba chỉ cho phép tối đa 5 kết nối đồng thời (theo hợp đồng SLA với nhà cung cấp) — dùng `Semaphore(5)` đảm bảo dù có 100 request nội bộ cùng lúc cần gọi API đó, chỉ tối đa 5 request thực sự được gửi đi tại 1 thời điểm, phần còn lại tự động xếp hàng chờ.
+1. Quên `pool.shutdown()`. Thread trong pool **không phải daemon** → JVM không tự thoát dù task đã xong; chương trình treo tới khi bị tắt thủ công.
+2. **Không in gì.** `submit` bọc exception vào `Future`; không ai gọi `get()` nên `IllegalStateException` biến mất, không log. Sửa: dùng `execute(...)` (đi tới `stderr`/`UncaughtExceptionHandler`), hoặc bọc `try/catch` trong task, hoặc giữ `Future` và gọi `get()`, hoặc `afterExecute` hook.
+3. **Không bao giờ tới 10 thread.** `LinkedBlockingQueue` không bound → mọi task xếp được vào queue → bước "tạo thread vượt core" không kích hoạt → pool đứng ở 2 thread, queue phình vô hạn → `OutOfMemoryError`. Sửa: dùng `new ArrayBlockingQueue<>(N)` (bound) + `CallerRunsPolicy` → queue đầy mới tạo thread tới 10, max đầy mới đẩy ngược lại caller (backpressure).
+4. **Không an toàn.** `get()` và `addAndGet()` mỗi cái atomic riêng, nhưng **cặp** không nguyên tử. Giữa (1) và (2), thread khác có thể mua hết stock → (1) đã "lỗi thời" khi (2) chạy → bán âm. Sửa bằng CAS loop: `while(true){ int c=stock.get(); if(c<qty) return false; if(stock.compareAndSet(c, c-qty)) return true; }`.
+5. `future.get()` **blocking** — thread hiện tại dừng chờ. `thenApply(...)` đăng ký callback — thread hiện tại **chạy tiếp ngay**, callback tự chạy sau (trên thread hoàn thành bước trước hoặc pool) khi có kết quả.
+6. Task định kỳ ném exception không catch → `ScheduledExecutorService` coi task đó "thất bại" và **hủy lịch lặp**, không ném ra đâu cả (nằm trong `Future` không ai đọc). Sửa: bọc **toàn bộ** thân task trong `try/catch(Throwable)` + log, để exception không bao giờ thoát ra ngoài `run()`.
+7. **Thread starvation deadlock:** 2 task cha chiếm cả 2 thread của pool, cùng block ở `.get()` chờ task con; task con nằm trong queue không có thread nào rảnh để chạy → treo vĩnh viễn. Task không được submit-rồi-block vào cùng pool.
+8. `computeIfAbsent` thực hiện "kiểm tra vắng + đặt" **atomic trên một key** (giữ khóa bin). Bản `containsKey`/`put`/`get` là ba thao tác rời — hai thread cùng qua `!containsKey` → cả hai `put` list mới → một list (kèm phần tử vừa `add`) bị ghi đè mất.
 
 </details>
 
 <details>
 <summary>Bấm để xem gợi ý đáp án Phần B</summary>
 
-- **Bài 1:** Kết quả mong đợi: gọi song song bằng Thread Pool sẽ mất khoảng thời gian **gần bằng thời gian của API chậm nhất** (vì 5 API chạy đồng thời), trong khi gọi tuần tự sẽ mất **tổng thời gian của cả 5 API cộng lại** — chênh lệch có thể lên tới vài lần, minh họa rất trực quan lợi ích thực tế của xử lý bất đồng bộ/song song trong backend (ví dụ khi 1 API cần tổng hợp dữ liệu từ nhiều microservice khác nhau).
-- **Bài 2:** Đây là mô phỏng chính xác pattern sẽ gặp lại khi học `@Async` trong Spring Boot (Module 13) và khi thiết kế microservice giao tiếp bất đồng bộ (Module 19) — chuỗi `thenApply` nối tiếp giúp code đọc tuần tự, dễ hiểu, dù bản chất đang chạy bất đồng bộ phía dưới.
-- **Bài 4:** Có thể quan sát rõ bằng cách in `System.currentTimeMillis()` hoặc đếm số "cuộc gọi" đang hoạt động tại từng thời điểm (dùng thêm 1 `AtomicInteger` đếm số lượng đang active, in ra ngay sau `acquire()` và ngay trước `release()`) — con số này **không bao giờ vượt quá 3** nếu implement đúng.
-- **Bài 5:** Đây là bài tập **quan trọng nhất và khó nhất** của cả module — chính là bản nháp gần hoàn chỉnh nhất (trong phạm vi kiến thức Java thuần, chưa động đến database/Redis) cho bài toán cốt lõi của capstone Flash-Sale. Gợi ý cách viết đúng cho phần kiểm tra-và-giảm vé nguyên tử:
-```java
-public boolean bookTicket() {
-    int updated = availableTickets.updateAndGet(current -> current > 0 ? current - 1 : current);
-    // Nếu updated < giá trị TRƯỚC updateAndGet(), nghĩa là đã giảm thành công — nhưng cách CHẮC CHẮN hơn:
-    // Cách rõ ràng hơn, dùng vòng lặp CAS thủ công:
-    while (true) {
-        int current = availableTickets.get();
-        if (current <= 0) return false; // hết vé
-        if (availableTickets.compareAndSet(current, current - 1)) {
-            return true; // đặt vé thành công, ĐÚNG 1 thread "thắng" trong tình huống tranh chấp
-        }
-        // nếu compareAndSet thất bại (thread khác đã thay đổi giá trị trước), vòng lặp THỬ LẠI với giá trị mới nhất
-    }
-}
-```
-Đây chính là kỹ thuật **CAS Loop (Compare-And-Swap Loop)** — nền tảng của hầu hết các cấu trúc dữ liệu "lock-free" hiệu năng cao trong Java, và là kiến thức nâng cao rất đáng tự hào nếu nắm vững trước khi bắt đầu capstone.
+- **Bài 1:** `List<Future<Integer>> fs = pool.invokeAll(tasks); int sum = 0; for (var f : fs) sum += f.get();`. Song song ≈ max(thời gian 5 API) vì cả 5 chạy đồng thời trên 5 thread; tuần tự = tổng 5 thời gian.
+- **Bài 2:** `validate(order).thenCompose(o -> calcTotal(o)).thenApply(this::charge).thenCompose(this::sendEmail).exceptionally(ex -> "đã hủy: " + ex.getCause().getMessage())` — tất cả với executor thứ hai truyền vào mỗi `*Async`.
+- **Bài 3:** `var fs = ids.stream().map(id -> fetchAsync(id).completeOnTimeout(0, 3, SECONDS)).toList(); CompletableFuture.allOf(fs.toArray(CompletableFuture[]::new)).thenApply(v -> fs.stream().map(CompletableFuture::join).toList()).join()`.
+- **Bài 4:** `AtomicLong` ~15–40 ns/op dưới 8 thread; `LongAdder` ~3–8 ns/op; `synchronized` ~30–80 ns/op (tùy CPU). `LongAdder` thắng vì mỗi thread cập nhật cell riêng → gần như không CAS-retry; `AtomicLong` mọi thread đập vào một ô → CAS thất bại và lặp liên tục.
+- **Bài 5:** `AtomicInteger active`; sau `acquire()`: `int now = active.incrementAndGet(); assert now <= 3;` ; trước `release()`: `active.decrementAndGet()`. `if (!sem.tryAcquire(200, MILLISECONDS)) { log("bận"); return; }`.
+- **Bài 6:** Producer đẩy 100 job rồi đẩy 4 poison pill; consumer `while(true){ Job j = q.take(); if (j == POISON) break; process(j); }` rồi `latch.countDown()`. Main: `latch.await()`.
+- **Bài 7:** `boolean book(){ while(true){ int c=available.get(); if(c<=0) return false; if(available.compareAndSet(c,c-1)) return true; } }`. `get()`+`decrementAndGet()` rời nhau: hai thread cùng đọc `c==1`, cả hai giảm → `-1` (oversold). Tổng `true` = 100 chính xác vì mỗi lần giảm thành công là một CAS "thắng" duy nhất.
+
+</details>
+
+<details>
+<summary>Bấm để xem gợi ý đáp án Phần C</summary>
+
+1. `execute`: exception lan tới `Thread.UncaughtExceptionHandler` (mặc định in stack trace ra `stderr`, thread worker chết rồi pool tạo thread thay thế). `submit`: exception bị "bắt" và lưu trong `Future`; chỉ ném ra (bọc `ExecutionException`) khi gọi `get()`. "Submit rồi không `get()`" nguy hiểm vì lỗi **hoàn toàn im lặng** — không log, không metric, không stack trace; bug (dữ liệu không được xử lý) chỉ lộ ra rất muộn qua hậu quả. Ba cách: (i) `try/catch(Throwable)` + log bao trọn thân mỗi task; (ii) override `ThreadPoolExecutor.afterExecute(r, t)` để log `t` (và unwrap `Future` nếu `r instanceof Future`); (iii) dùng `CompletableFuture` với `.whenComplete((v, ex) -> if (ex != null) log...)` bắt buộc ở cuối chuỗi.
+2. `LinkedBlockingQueue` không bound: `offer()` **luôn thành công** → `ThreadPoolExecutor` không bao giờ tới nhánh "số thread < max thì tạo thêm" → pool đứng ở `corePoolSize`, `maximumPoolSize`/`keepAliveTime` thành số trang trí; queue phình → OOM. `SynchronousQueue`: sức chứa 0, `offer()` chỉ thành công nếu có thread đang `poll` chờ → task mới luôn buộc tạo thread tới `max`, hết `max` → reject ngay (không tích lũy). Cấu hình I/O 8 nhân, ~100 ms/call: `core = 16`, `max = 64` (≈ `8 × (1 + 90/10)`, làm tròn), `keepAlive = 60s`, queue = `ArrayBlockingQueue(200)` (trần bộ nhớ ~200 task chờ), `CallerRunsPolicy` (khi quá tải, đẩy việc về caller → tự giảm nhịp nhận request). Đo p99 rồi chỉnh.
+3. (i) `commonPool` dùng chung toàn JVM, kích thước ≈ nhân − 1 → vài chục request I/O song song là cạn, mọi `parallelStream`/`CompletableFuture` khác trong tiến trình đứng hình. (ii) Thread `commonPool` bị **block** trong `read()` mạng — fork/join thiết kế cho tác vụ CPU ngắn, không co giãn theo tải I/O. (iii) Không cách ly lỗi/tài nguyên giữa các request. `thenApply` chạy callback **trên thread vừa hoàn thành stage trước** (hoặc thread gọi nếu future đã xong) — nếu stage trước xong trên thread I/O đang cần giải phóng, callback nặng sẽ giữ thread đó; `thenApplyAsync(fn, pool)` đẩy callback sang `pool` chỉ định. Dùng `Async` khi callback tốn CPU/thời gian hoặc cần tách khỏi pool hoàn thành.
+4. `compareAndSet`: `while(true){ int c=t.get(); if(c<=0) return false; if(t.compareAndSet(c,c-1)) return true; }`. `updateAndGet`: `int left = t.updateAndGet(n -> n>0 ? n-1 : n); return left < /*snapshot?*/ ...` — thực ra `updateAndGet` nội bộ **chính là** CAS loop trên, nên tương đương; chỉ cần biết "có giảm được không" thì bản `compareAndSet` tường minh rõ hơn. ABA (lock-free stack): T1 đọc `head = A` (định `pop`, `next` của A là B). T2 `pop` A, `pop` B, `push` A lại → `head = A` nhưng giờ `A.next` khác. T1 `compareAndSet(head, A, B)` **thành công** dù B đã không còn trong stack → hỏng. `AtomicStampedReference` gắn tem version: CAS so cả `(ref, stamp)` → T2 đã tăng stamp nên T1 CAS trượt, phải đọc lại. Bài toán vé **không** bị ABA vì giá trị là số đếm giảm đơn điệu (`int`), không "quay lại giá trị cũ theo cách có ý nghĩa khác" — và kể cả trùng giá trị thì ngữ nghĩa vẫn đúng (còn n vé là còn n vé).
+5. `LongAdder` giữ một mảng `Cell`; mỗi thread hash vào một cell riêng, `increment()` chỉ CAS cell của mình → gần như không đụng độ. `AtomicLong` mọi thread CAS **một** ô → dưới N thread, tỉ lệ CAS-fail-retry tăng theo N. `sum()` cộng dồn các cell **không khóa** → trong lúc cộng, cell đã cộng có thể lại thay đổi → kết quả là "giá trị tại một thời điểm mờ", đủ tốt cho đếm request/hit-rate nhưng sai cho "số dư" (cần đọc-ghi nhất quán, dùng lock hoặc `AtomicLong`). `AtomicLong` đúng khi: cần `get()` chính xác thường xuyên, hoặc cần `compareAndSet`/`updateAndGet` (CAS loop) — `LongAdder` không có.
+6. Một monitor + `notify()`: chỉ đánh thức **một** thread chờ ngẫu nhiên trong tập chờ chung; nếu tập đó lẫn cả "thread chờ chưa-đầy" và "thread chờ chưa-rỗng", `notify()` sau một `take()` có thể trúng một thread `take()` khác (điều kiện của nó vẫn sai → ngủ lại) trong khi thread `put()` cần được báo thì không → kẹt; phải `notifyAll()` (đánh thức tất cả, tốn hơn). Hai `Condition` tách tập chờ: `notEmpty.signal()` chỉ đụng đúng nhóm chờ "có phần tử". Cái giá của `ReentrantLock`: dài dòng hơn, và **quên `unlock()` = lock kẹt vĩnh viễn** (không có cơ chế tự nhả như `synchronized` khi thoát khối/exception) → bắt buộc `try { ... } finally { lock.unlock(); }`.
+7. `remappingFn` **không được**: (i) gọi lại `map.compute`/`put`/`computeIfAbsent` trên **cùng** map — có thể deadlock/`IllegalStateException` (đang giữ khóa bin đó). (ii) chạy lâu / block I/O — giữ khóa bin làm nghẽn mọi thao tác khác trên các key cùng bin. (iii) có side-effect không idempotent — `compute` có thể (hiếm) chạy lại hàm. `size()` ước lượng vì `ConcurrentHashMap` không giữ một biến đếm có khóa toàn cục (sẽ thành điểm nghẽn) — nó cộng các bộ đếm phân tán (`CounterCell`) không khóa. `forEach`/iterator **weakly-consistent**: duyệt trên trạng thái tại/sau lúc tạo iterator, phản ánh **một số** thay đổi đồng thời nhưng không đảm bảo thấy hết; đổi lại không bao giờ ném `ConcurrentModificationException`.
 
 </details>
 
