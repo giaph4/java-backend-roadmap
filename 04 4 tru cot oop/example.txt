@@ -1,0 +1,44 @@
+--1 tính đóng gói - Encapsulation:
+    gói dữ liệu (fields) và các hành vi thao tác trên dữ liệu đó vào cùng một class,
+    ẩn chi tiết nội bộ, và chỉ cho tương tác qua một giao diện được kiểm soát. mục tiêu
+    quan trọng nhất:Object luôn ở trạng thái hợp lệ (bảo toàn invariant)
+
+    Một class chỉ có field private + getter/setter phơi bày 1-1 mọi field ra ngoài (
+    gọi là anemic model — mô hình thiếu máu) thì về bản chất không đóng gói gì —
+    bất kỳ ai vẫn đặt được trạng thái bất kỳ.
+
+    "Tell, Don't Ask": thay vì lấy dữ liệu ra ngoài rồi tự xử lý
+    (if (acc.getBalance() >= x) acc.setBalance(acc.getBalance() - x)),
+    hãy bảo object làm (acc.withdraw(x)) — logic nghiệp vụ nằm cùng chỗ với dữ liệu.
+    Cân nhắc không viết setter cho field không được phép đổi sau khi tạo → dùng final
+    + gán trong constructor (immutability).
+
+--2 tính kế thừa - Inheritance:
+    một clas (subclass) thừa hưởng filed và method (ko private) từ một class khác (superclass),
+    biểu diễn quan hệ is-a
+
+    cách dùng super:
+    - super(...)	Gọi constructor lớp cha — phải là câu lệnh đầu tiên của constructor con
+    - super.method()	Gọi phiên bản method của lớp cha, kể cả khi con đã override
+    - super.field	Truy cập field lớp cha khi con có field trùng tên (xem §6 — shadowing)
+
+    đơn kế thừa với class
+    class Car extends Vehicle { }              // OK
+    // class Car extends Vehicle, Machine { }  // ❌ Java không cho đa kế thừa class
+    Java né Diamond Problem (hai lớp cha cùng method, con không biết chọn bản nào) bằng cách chỉ cho
+    extends một class, và cho implements nhiều interface (Module 01.5).
+
+    Java né Diamond Problem (hai lớp cha cùng method, con không biết chọn bản nào)
+    bằng cách chỉ cho extends một class, và cho implements nhiều interface (Module 01.5).
+
+    Class không extends gì thì ngầm extends Object -> mọi object có sẵn
+    toString(), equals(), hashCode(), clone()...
+
+    Chặn kế thừa
+    public final class Money { }     // không class nào extends được (như String, Integer...)
+    public sealed class Shape permits Circle, Square { }   // Java 17 — CHỈ Circle, Square được kế thừa
+    final class Circle extends Shape { }
+    non-sealed class Square extends Shape { }              // "mở lại" cho kế thừa tự do
+
+    Upcasting, Downcasting và instanceof
+    Upcaseting - cha -> con, ngần định, luôn an toàn
