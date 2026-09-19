@@ -32,6 +32,20 @@
 
 **ORM (Object-Relational Mapping)** là kỹ thuật ánh xạ giữa mô hình hướng đối tượng (Java objects) và mô hình quan hệ (bảng SQL), giúp lập trình viên thao tác database bằng object thay vì viết SQL thủ công.
 
+### "Object-Relational Impedance Mismatch" — gốc rễ vấn đề ORM giải quyết
+
+Thuật ngữ chính xác cho "sự lệch pha" giữa 2 mô hình là **Object-Relational Impedance Mismatch**. Hai thế giới không khớp nhau tự nhiên ở nhiều điểm:
+
+| Khác biệt | Mô hình hướng đối tượng (Java) | Mô hình quan hệ (SQL) |
+|---|---|---|
+| **Kế thừa** | Có (`class Dog extends Animal`) | Không có khái niệm kế thừa bảng — phải giả lập (mục 6) |
+| **Định danh** | Định danh bằng object reference (`==`) | Định danh bằng giá trị khóa chính (Primary Key) |
+| **Cấu trúc đồ thị** | Object trỏ qua lại tự do (đồ thị, có thể vòng lặp `A→B→A`) | Bảng phẳng, liên kết một chiều qua khóa ngoại, JOIN mới "đi" được quan hệ |
+| **Đóng gói** | Field `private`, chỉ lộ ra qua method | Cột luôn "phẳng", không có khái niệm truy cập/ẩn |
+| **Kiểu dữ liệu** | Kiểu phong phú (`List`, `Optional`, enum, record...) | Kiểu SQL giới hạn hơn (`INT`, `VARCHAR`, `DATE`...) |
+
+ORM không "xóa bỏ" được sự lệch pha này — nó chỉ **tự động hóa phần dịch qua lại** (mapping) để lập trình viên không phải tự tay viết đi viết lại logic dịch đó ở mọi nơi trong code.
+
 ### Vấn đề khi không có ORM (JDBC thuần)
 
 ```java
@@ -276,6 +290,29 @@ public class Post {
 | **Managed (Persistent)** | Đã được `persist()`/`find()` — đang nằm trong Persistence Context | **Dirty Checking**: mọi thay đổi field tự động sync xuống DB khi transaction commit |
 | **Detached** | Từng Managed nhưng session đã đóng, hoặc gọi `detach()` | Thay đổi field **không** tự động lưu, cần `merge()` lại |
 | **Removed** | Đã gọi `remove()`, sẽ bị xóa khỏi DB khi flush/commit | Vẫn là object Java bình thường tới khi transaction kết thúc |
+
+### Bốn method cốt lõi của `EntityManager` — dễ nhầm nhất là `merge()`
+
+| Method | Input | Output | Ý nghĩa |
+|---|---|---|---|
+| `persist(e)` | Transient entity | `void` | Đưa entity **chính nó** vào Persistence Context, entity trở thành Managed ngay tại chỗ |
+| `find(Class, id)` | Class + khóa chính | Entity Managed (hoặc `null`) | Tìm trong Persistence Context trước, không có mới query DB |
+| `remove(e)` | Managed entity | `void` | Đánh dấu xóa, sinh `DELETE` khi flush |
+| `merge(e)` | Entity Transient/Detached | **Entity Managed MỚI** (reference khác) | Sao chép dữ liệu từ `e` sang 1 entity Managed khác lấy/tạo trong Persistence Context, **rồi trả về entity Managed đó** |
+
+⚠️ **Bẫy kinh điển với `merge()`:** entity truyền vào **không** tự nhiên trở thành Managed — nó vẫn Detached (hoặc Transient) sau khi gọi xong. Phải dùng **giá trị trả về**, không dùng biến gốc:
+
+```java
+User detachedUser = ...; // đến từ tầng ngoài, ví dụ deserialize từ JSON request
+detachedUser.setFullName("Tên mới");
+
+entityManager.merge(detachedUser);         // ❌ SAI — bỏ quên giá trị trả về, detachedUser VẪN Detached,
+                                            //    thay đổi field sau dòng này sẽ KHÔNG được Dirty Checking theo dõi
+User managedUser = entityManager.merge(detachedUser); // ✅ ĐÚNG
+managedUser.setStatus(Status.ACTIVE);      // chỉ managedUser mới được Hibernate tự động đồng bộ xuống DB
+```
+
+Đây là lý do `merge()` hay gây bug khó hiểu nhất trong 4 trạng thái entity: người mới học thường tưởng `merge()` "biến" object cũ thành Managed tại chỗ (giống `persist()`), nhưng thực chất nó tạo và trả về **một object khác** — object cũ truyền vào chỉ đóng vai trò "nguồn dữ liệu" để sao chép.
 
 ### Dirty Checking — "phép màu" của Hibernate
 

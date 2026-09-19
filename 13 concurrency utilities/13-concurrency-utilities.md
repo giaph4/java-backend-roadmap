@@ -20,8 +20,9 @@
 10. [Atomic — CAS, ABA, LongAdder](#10-atomic--cas-aba-longadder)
 11. [Lock, ReadWriteLock, Condition](#11-lock-readwritelock-condition)
 12. [ConcurrentHashMap](#12-concurrenthashmap)
-13. [Tổng kết — Bảng ghi nhớ nhanh](#13-tổng-kết--bảng-ghi-nhớ-nhanh)
-14. [Bài tập luyện tập](#14-bài-tập-luyện-tập)
+13. [ThreadLocal — biến riêng theo từng thread](#13-threadlocal--biến-riêng-theo-từng-thread)
+14. [Tổng kết — Bảng ghi nhớ nhanh](#14-tổng-kết--bảng-ghi-nhớ-nhanh)
+15. [Bài tập luyện tập](#15-bài-tập-luyện-tập)
 
 ---
 
@@ -159,6 +160,44 @@ Executors.newWorkStealingPool();       // ForkJoinPool, mỗi thread một deque
 
 Executors.newVirtualThreadPerTaskExecutor();   // Java 21 — mỗi task một VIRTUAL thread
 ```
+
+### `ForkJoinPool` & work-stealing — nền tảng của `parallelStream()`
+
+Thread pool thường (mục 4) có **một** hàng đợi dùng chung — mọi thread tranh nhau lấy task từ đó. `ForkJoinPool` cho **mỗi worker thread một deque (double-ended queue) riêng**: thread tự lấy task của mình từ **đầu** deque; khi deque của mình rỗng, nó "trộm" (steal) task từ **đuôi** deque của thread khác. Thiết kế này giảm tranh chấp và tận dụng CPU tốt cho bài toán **chia nhỏ đệ quy** (divide-and-conquer) — mỗi lần chia sinh ra nhiều task con nhỏ.
+
+```java
+class SumTask extends RecursiveTask<Long> {
+    private final int[] arr; private final int lo, hi;
+    SumTask(int[] arr, int lo, int hi) { this.arr = arr; this.lo = lo; this.hi = hi; }
+
+    @Override protected Long compute() {
+        if (hi - lo <= 1000) {                       // đủ nhỏ → tính thẳng (ngưỡng "threshold")
+            long sum = 0;
+            for (int i = lo; i < hi; i++) sum += arr[i];
+            return sum;
+        }
+        int mid = (lo + hi) / 2;
+        SumTask left  = new SumTask(arr, lo, mid);
+        SumTask right = new SumTask(arr, mid, hi);
+        left.fork();                                  // giao nửa trái cho pool (chạy song song / có thể bị trộm)
+        long rightResult = right.compute();            // tự tính nửa phải trên thread hiện tại
+        long leftResult = left.join();                 // chờ nửa trái xong (join, không phải Thread.join)
+        return leftResult + rightResult;
+    }
+}
+
+long total = ForkJoinPool.commonPool().invoke(new SumTask(bigArray, 0, bigArray.length));
+```
+
+| Khái niệm | Ý nghĩa |
+|---|---|
+| `RecursiveTask<V>` | Task đệ quy **có** trả về kết quả — override `compute()` |
+| `RecursiveAction` | Task đệ quy **không** trả về gì (`compute()` trả `void`) |
+| `fork()` | Đẩy task con vào deque của thread hiện tại để pool chạy (có thể bị thread khác trộm) — **không block** |
+| `join()` | Chờ kết quả của task đã `fork()` — nếu chưa xong, thread hiện tại **tranh thủ giúp chạy task khác** trong lúc chờ (khác hẳn `Thread.join()` chỉ biết ngồi chờ) |
+| `ForkJoinPool.commonPool()` | Pool dùng chung toàn JVM, kích thước mặc định = `availableProcessors() - 1`; đây chính là pool mà `parallelStream()` (Module 03.3) dùng ngầm bên dưới |
+
+> **Liên hệ trực tiếp:** `list.parallelStream().map(...)` thực chất tách dữ liệu qua `Spliterator` rồi chạy trên `ForkJoinPool.commonPool()` theo đúng mô hình fork/join này. Hiểu `ForkJoinPool` ở đây giải thích vì sao nhiều `parallelStream()` và nhiều `CompletableFuture.supplyAsync()` không truyền executor riêng có thể **tranh giành cùng một pool**, làm nghẽn lẫn nhau trong ứng dụng thực tế.
 
 ### `ScheduledExecutorService` — `scheduleAtFixedRate` vs `scheduleWithFixedDelay`
 
@@ -582,7 +621,42 @@ T read()  { rw.readLock().lock();  try { return data; } finally { rw.readLock().
 void write(T v) { rw.writeLock().lock(); try { data = v; } finally { rw.writeLock().unlock(); } }
 ```
 
-Dùng khi **đọc >> ghi** (cache, bảng cấu hình). `StampedLock` (Java 8) — nhanh hơn nữa với "optimistic read" nhưng không reentrant, dễ dùng sai.
+Dùng khi **đọc >> ghi** (cache, bảng cấu hình).
+
+### `StampedLock` (Java 8) — optimistic read, nhanh hơn `ReadWriteLock`
+
+`ReentrantReadWriteLock` vẫn phải cập nhật trạng thái nội bộ (bộ đếm reader) mỗi lần `readLock().lock()` — dưới tải đọc cực cao, riêng việc "đăng ký mình đang đọc" đã gây tranh chấp CAS giữa các reader. `StampedLock` thêm chế độ **optimistic read**: không khóa gì cả, chỉ lấy một "tem" (stamp) rồi đọc dữ liệu ngay; đọc xong mới **kiểm tra lại** xem trong lúc đó có ai ghi chen vào không.
+
+```java
+private final StampedLock sl = new StampedLock();
+private double x, y;
+
+double distanceFromOrigin() {
+    long stamp = sl.tryOptimisticRead();        // KHÔNG khóa, chỉ lấy tem
+    double curX = x, curY = y;                   // đọc "lạc quan" — có thể đang bị ghi giữa chừng
+    if (!sl.validate(stamp)) {                    // có ai ghi xen vào từ lúc lấy tem tới giờ?
+        stamp = sl.readLock();                    // CÓ → fallback về khóa đọc thật sự
+        try { curX = x; curY = y; }
+        finally { sl.unlockRead(stamp); }
+    }
+    return Math.sqrt(curX * curX + curY * curY);
+}
+
+void move(double dx, double dy) {
+    long stamp = sl.writeLock();
+    try { x += dx; y += dy; }
+    finally { sl.unlockWrite(stamp); }
+}
+```
+
+| | `ReentrantReadWriteLock` | `StampedLock` |
+|---|---|---|
+| Reader có tranh chấp CAS khi vào | Có (đăng ký reader count) | **Không** ở chế độ optimistic (không khóa gì) |
+| Reentrant | Có | **Không** — gọi lồng `readLock()` trong chính thread đang giữ nó dễ deadlock |
+| Hỗ trợ `Condition` | Có | Không |
+| Rủi ro dùng sai | Thấp | Cao hơn — phải tự nhớ `validate()`/fallback, quên là bug âm thầm |
+
+> Chỉ chuyển sang `StampedLock` khi đã đo và xác nhận `ReadWriteLock` là điểm nghẽn thật sự — mặc định vẫn nên dùng `ReentrantReadWriteLock` vì an toàn và dễ đọc hơn.
 
 ---
 
@@ -605,11 +679,92 @@ long total = counts.reduceValues(1000, Long::sum);         // duyệt song song
 - Hàm trong `compute`/`merge`/`computeIfAbsent` **giữ khóa một bin** trong lúc chạy → phải **nhanh**, **không gọi lại `map`** đó (nguy cơ deadlock/treo).
 - `computeIfAbsent` + `merge` là cách "đọc-sửa-ghi trên một key" an toàn — thay cho `if (containsKey) ... else ...`.
 
-Các cấu trúc concurrent khác cùng họ: `CopyOnWriteArrayList` (ghi hiếm, đọc nhiều, iterator không CME), `ConcurrentLinkedQueue` (không bound, lock-free), `ConcurrentSkipListMap` (sắp xếp, thay `TreeMap`).
+Các cấu trúc concurrent khác cùng họ: `CopyOnWriteArrayList` (chi tiết dưới), `ConcurrentLinkedQueue` (không bound, lock-free), `ConcurrentSkipListMap` (sắp xếp, thay `TreeMap`).
+
+### `CopyOnWriteArrayList` — đọc lock-free, ghi sao chép toàn bộ mảng
+
+```java
+List<Listener> listeners = new CopyOnWriteArrayList<>();
+listeners.add(l);          // ghi: TẠO MẢNG MỚI, copy toàn bộ phần tử cũ + phần tử mới, rồi đổi tham chiếu mảng gốc
+for (Listener l : listeners) l.onEvent(e);   // đọc: duyệt thẳng trên mảng snapshot, KHÔNG khóa, KHÔNG CME dù có thread khác đang add/remove
+```
+
+- Mọi thao tác ghi (`add`/`remove`/`set`) đều **cấp phát mảng mới** kích thước `n±1` rồi copy toàn bộ — chi phí ghi là **O(n)**, rất đắt nếu list lớn hoặc ghi thường xuyên.
+- Đọc không cần lock/CAS gì cả — chỉ đọc tham chiếu mảng hiện tại — **cực nhanh** và tuyệt đối không có `ConcurrentModificationException`, vì `Iterator` trả về hoạt động trên "ảnh chụp" (snapshot) mảng tại thời điểm tạo iterator, không thấy các thay đổi xảy ra sau đó.
+- **Chỉ hợp** khi: danh sách nhỏ, số lần ghi cực hiếm so với số lần đọc — ví dụ điển hình: danh sách listener/observer đăng ký một lần lúc khởi động, đọc (duyệt gọi) liên tục khi có event. **Không** dùng cho danh sách lớn hay ghi thường xuyên (ngược lại hoàn toàn với `synchronized`/`ConcurrentHashMap` vốn tối ưu cho ghi thường xuyên).
 
 ---
 
-## 13. Tổng kết — Bảng ghi nhớ nhanh
+## 13. ThreadLocal — biến riêng theo từng thread
+
+`ThreadLocal<T>` cho **mỗi thread một bản sao riêng** của cùng một biến — không phải cơ chế đồng bộ hóa (không có lock, không chặn), mà là cơ chế **tránh phải chia sẻ** dữ liệu giữa các thread ngay từ đầu. Mỗi `Thread` object có một map nội bộ (`ThreadLocalMap`) ánh xạ `ThreadLocal` instance → giá trị của riêng nó.
+
+```java
+private static final ThreadLocal<SimpleDateFormat> FORMATTER =
+    ThreadLocal.withInitial(() -> new SimpleDateFormat("yyyy-MM-dd"));
+
+String format(Date d) {
+    return FORMATTER.get().format(d);   // mỗi thread thấy một SimpleDateFormat riêng, không đụng nhau
+}
+```
+
+### Vì sao cần — ví dụ `SimpleDateFormat` không thread-safe
+
+`SimpleDateFormat` giữ trạng thái `Calendar` **nội bộ, mutable** — hai thread cùng `format()` trên **một** instance dùng chung có thể trả kết quả sai hoặc ném exception, nhưng tạo mới mỗi lần gọi lại tốn kém. `ThreadLocal` dung hòa: mỗi thread tự có **một** instance, tái sử dụng qua nhiều lần gọi, không cần đồng bộ hóa vì không ai chia sẻ với ai. (Từ Java 8, ưu tiên `DateTimeFormatter` — immutable, thread-safe sẵn, không cần `ThreadLocal` nữa; ví dụ trên minh họa mẫu hình, không phải khuyến nghị dùng `SimpleDateFormat` trong code mới.)
+
+### Use case thứ hai — truyền "ngữ cảnh" xuyên method mà không sửa chữ ký
+
+```java
+public final class RequestContext {
+    private static final ThreadLocal<String> CURRENT_USER = new ThreadLocal<>();
+
+    public static void set(String userId) { CURRENT_USER.set(userId); }
+    public static String get()            { return CURRENT_USER.get(); }
+    public static void clear()            { CURRENT_USER.remove(); }
+}
+
+// Filter/Interceptor lúc đầu request:
+RequestContext.set(userIdFromToken);
+try {
+    handleRequest();   // mọi tầng service/repository bên trong gọi RequestContext.get() mà KHÔNG cần truyền userId qua từng tham số
+} finally {
+    RequestContext.clear();   // BẮT BUỘC — xem cảnh báo dưới
+}
+```
+
+Đây chính là cơ chế đứng sau `SecurityContextHolder` của Spring Security (Module 25) và MDC của các logging framework (gắn `traceId`/`requestId` vào mọi dòng log của một request mà không cần truyền tham số qua từng lớp).
+
+### ⚠️ Rò rỉ bộ nhớ khi dùng chung với Thread Pool
+
+Thread trong `ExecutorService` **được tái sử dụng** cho nhiều task khác nhau — nó **không bị hủy** sau mỗi task. Nếu một task `set()` giá trị vào `ThreadLocal` mà không `remove()`, giá trị đó **tồn tại mãi** trong `ThreadLocalMap` của thread đó, chờ sẵn cho task tiếp theo:
+
+```java
+// ❌ Rò rỉ + lộ dữ liệu chéo giữa các request:
+RequestContext.set(userId);
+handleRequest();
+// quên clear() → thread trong pool sau khi xử lý xong request này, được tái dùng cho request KHÁC
+// → request khác lỡ gọi get() sẽ nhận nhầm userId của request cũ!
+```
+
+Hậu quả kép: (1) **memory leak** — object bị `ThreadLocal` giữ tham chiếu sống mãi theo vòng đời thread pool (có thể là suốt vòng đời ứng dụng), GC không thu hồi được dù logic đã "dùng xong"; (2) **rò rỉ dữ liệu giữa các request/task** — nguy cơ bảo mật nghiêm trọng nếu context chứa thông tin người dùng. **Luôn `remove()` trong `finally`** ngay khi task/request kết thúc.
+
+### `InheritableThreadLocal` — truyền giá trị cho thread con
+
+```java
+ThreadLocal<String> ctx = new InheritableThreadLocal<>();
+ctx.set("parent-value");
+new Thread(() -> System.out.println(ctx.get())).start();   // in "parent-value" — con kế thừa giá trị tại thời điểm được tạo
+```
+
+Chỉ **sao chép giá trị tại thời điểm** thread con được tạo (`new Thread(...)`), không đồng bộ hai chiều sau đó. ⚠️ Trong thread pool, thread con (worker) được tạo **một lần rồi tái sử dụng** — `InheritableThreadLocal` **không** tự động "theo" từng task mới submit vào pool (khác hẳn kỳ vọng "context tự trôi theo task"); Spring xử lý bài toán này qua `TaskDecorator` (Module 21+), không dùng `InheritableThreadLocal` trực tiếp cho web request context.
+
+### `WeakReference` bên trong `ThreadLocalMap` — vì sao vẫn cần `remove()` dù đã có
+
+`ThreadLocalMap` dùng **weak reference** tới chính `ThreadLocal` instance (key), giúp GC thu hồi `ThreadLocal` object khi không còn tham chiếu mạnh nào khác. Nhưng **value** (giá trị bạn `set()`) vẫn là **strong reference** — chừng nào thread còn sống (trong pool: gần như mãi mãi) và entry còn trong map, value không bao giờ bị thu hồi, bất kể `ThreadLocal` key đã trở thành weakly-reachable. Đây là lý do "có weak reference" **không** miễn trừ việc phải gọi `remove()` tường minh.
+
+---
+
+## 14. Tổng kết — Bảng ghi nhớ nhanh
 
 | Công cụ | Dùng khi |
 |---|---|
@@ -631,11 +786,15 @@ Các cấu trúc concurrent khác cùng họ: `CopyOnWriteArrayList` (ghi hiếm
 | `LongAdder` | Đếm/thống kê dưới tranh chấp cao — nhanh hơn `AtomicLong`; `sum()` không nhất quán tức thời. |
 | `ReentrantLock` | Khi cần `tryLock`/timeout/interruptible/fairness/nhiều `Condition`. Phải `unlock()` trong `finally`. Mặc định vẫn ưu tiên `synchronized`. |
 | `ReadWriteLock` | Đọc >> ghi. |
+| `StampedLock` | Nhanh hơn `ReadWriteLock` nhờ optimistic read (không khóa, `validate()` sau khi đọc); không reentrant, rủi ro dùng sai cao hơn — chỉ đổi khi đã đo nghẽn thật. |
+| `ForkJoinPool` / `RecursiveTask` | Work-stealing — mỗi worker một deque, trộm task rảnh của nhau. `fork()`/`join()` cho chia nhỏ đệ quy. Nền tảng của `parallelStream()` (`commonPool()` dùng chung). |
 | `ConcurrentHashMap` | `merge`/`compute*` atomic; không `null`; `size()` ước lượng; hàm trong `compute` phải nhanh, không gọi lại map. |
+| `CopyOnWriteArrayList` | Ghi = copy toàn mảng (O(n), đắt); đọc lock-free, không CME. Chỉ hợp danh sách nhỏ, ghi hiếm (listener/observer). |
+| `ThreadLocal` | Mỗi thread một bản sao riêng, không cần lock. **Bắt buộc `remove()` trong `finally`** khi dùng chung với thread pool (thread tái sử dụng) — quên → memory leak + rò rỉ dữ liệu chéo giữa các task/request. `InheritableThreadLocal` chỉ sao chép **tại thời điểm tạo** thread con, không tự "theo" task mới trong pool. |
 
 ---
 
-## 14. Bài tập luyện tập
+## 15. Bài tập luyện tập
 
 ### Phần A — Trắc nghiệm nhận định (giải thích lý do)
 

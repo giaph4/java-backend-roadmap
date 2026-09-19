@@ -61,6 +61,43 @@ SOLID không phải thước đo kiểu “càng nhiều class/interface càng t
 
 Strategy có thể giúp đạt OCP; constructor injection có thể giúp đạt DIP. Dùng pattern hoặc kỹ thuật chưa tự động bảo đảm nguyên lý.
 
+### Bảng đối chiếu Pattern ↔ Nguyên lý
+
+Design Pattern (học sâu ở Bài 16) thường là **cách hiện thực** một hoặc nhiều nguyên lý SOLID cho một ngữ cảnh cụ thể — nguyên lý là tiêu chí, pattern là công cụ đạt tiêu chí đó:
+
+| Pattern | Nguyên lý chính được phục vụ | Cách phục vụ |
+|---|---|---|
+| **Strategy** | OCP | Thêm biến thể thuật toán bằng class mới cài `interface`, không sửa lớp điều phối |
+| **Decorator** | OCP, SRP | Thêm hành vi bằng cách bọc object, tách trách nhiệm "lõi" và "phụ trợ" |
+| **Adapter** | DIP | Cho phép nghiệp vụ phụ thuộc abstraction của mình trong khi chi tiết kỹ thuật "khoác" theo hình dạng đó |
+| **Facade** | ISP (gián tiếp) | Gom nhiều subsystem phức tạp sau một mặt tiền đơn giản cho một nhóm client cụ thể |
+| **Template Method** | LSP, OCP | Định nghĩa khung thuật toán cố định, subclass chỉ override bước biến thiên — khung vẫn đúng với mọi subclass |
+| **Observer** | DIP, OCP | Chủ thể không biết cụ thể ai lắng nghe, chỉ phụ thuộc `interface Listener` |
+| **Factory Method / Abstract Factory** | DIP, OCP | Nơi tạo object cụ thể tách khỏi nơi dùng, cho phép đổi implementation mà không sửa client |
+| **Composite** | LSP | Node lá và node nhánh cùng cài một `interface`, client duyệt cây mà không phân biệt loại |
+
+> Dùng đúng pattern **không tự động** đảm bảo nguyên lý — một `Strategy` mà các implementation không tôn trọng cùng hợp đồng (khác precondition/postcondition) vẫn vi phạm LSP dù đã "theo pattern".
+
+### Coupling và Cohesion — thước đo nền tảng đằng sau SOLID
+
+SOLID không phải mục tiêu cuối; hai chỉ số **coupling** (độ kết dính giữa các module) và **cohesion** (độ gắn kết bên trong một module) mới là mục tiêu thật, SOLID chỉ là công cụ đạt chúng.
+
+- **Cohesion (độ gắn kết nội bộ):** các phần tử bên trong một class/module có cùng phục vụ một mục đích không? Cohesion cao nghĩa là field và method của class liên quan chặt tới nhau — thay đổi field này thường kéo theo sửa các method dùng nó. `BankAccount` (mục 2) có cohesion cao: mọi method đều thao tác trên `balance`/`frozen`.
+- **Coupling (độ phụ thuộc lẫn nhau):** một module cần biết bao nhiêu về "ruột" của module khác để hoạt động đúng?
+  - **Tight coupling:** `CheckoutService` `new StripeClient()` trực tiếp — biết cả cách khởi tạo, cả kiểu cụ thể.
+  - **Loose coupling:** `CheckoutService` chỉ biết `interface PaymentGateway` — không biết Stripe tồn tại.
+
+Cách "đo" định tính (không cần công cụ, chỉ cần đọc code):
+
+| Câu hỏi | Cohesion thấp / Coupling cao nếu... |
+|---|---|
+| Field nào được bao nhiêu method dùng? | Nhiều field chỉ được 1-2 method riêng lẻ dùng → có thể tách class (dấu hiệu kinh điển của low cohesion) |
+| Sửa method A có buộc đọc lại method B không liên quan? | Có → cohesion thấp, các method đang "mượn" trạng thái của nhau không rõ ràng |
+| Đổi thư viện/nhà cung cấp bên ngoài có sửa nhiều file nghiệp vụ không? | Có → coupling cao với chi tiết kỹ thuật (vi phạm DIP) |
+| Import ở đầu file có bao nhiêu package không cùng tầng (domain lẫn hạ tầng)? | Càng nhiều càng chứng tỏ coupling cao |
+
+> Mục tiêu lý tưởng: **high cohesion, low coupling** — mỗi module làm tốt một việc (cohesion cao) và các module giao tiếp qua bề mặt hẹp, ổn định (coupling thấp). SRP nhắm trực tiếp vào cohesion; DIP và ISP nhắm trực tiếp vào coupling.
+
 ---
 
 ## 2. S — Single Responsibility Principle
@@ -725,6 +762,35 @@ Robert C. Martin mô tả các triệu chứng của thiết kế kém — thư�
 | **Needless complexity** | Abstraction cho biến thiên chưa từng xảy ra | OCP (lạm dụng) |
 | **Needless repetition** | Cùng một logic sao chép nhiều nơi | SRP |
 | **Opacity** | Đọc code không hiểu ý định | SRP |
+
+### Các code smell cụ thể thường gặp trong thực chiến
+
+Ngoài bảy triệu chứng tổng quát ở trên, ba code smell sau **luôn xuất hiện khi vi phạm SRP/cohesion** và có tên riêng phổ biến trong giới refactor (Martin Fowler):
+
+- **God Class (God Object):** một class ôm quá nhiều trách nhiệm — thường có hàng chục field, hàng trăm dòng, và tên mơ hồ kiểu `SystemManager`. Đây chính là vi phạm SRP ở mức cực đoan: gần như *mọi* thay đổi trong hệ thống đều chạm vào class này.
+  ```java
+  // Dấu hiệu God Class: field từ nhiều tầng nghiệp vụ khác nhau trong một class
+  public class OrderManager {
+      private DataSource dataSource;      // tầng persistence
+      private SmtpClient smtpClient;      // tầng notification
+      private PdfGenerator pdfGenerator;  // tầng rendering
+      private TaxRuleEngine taxEngine;    // tầng nghiệp vụ
+      private AuditLogger auditLogger;    // tầng cross-cutting
+      // ... 30 method dùng các field trên theo từng nhóm rời rạc
+  }
+  ```
+- **Shotgun Surgery:** một thay đổi nghiệp vụ nhỏ (ví dụ "thêm loại phí vận chuyển mới") buộc phải sửa rải rác ở rất nhiều class/file không tập trung. Đây là dấu hiệu **thiếu OCP** — không có một điểm mở rộng duy nhất, nên biến thiên phải "bắn" vào nhiều nơi. Đối lập với **Divergent Change** (một class bị sửa vì nhiều lý do khác nhau — chính là SRP bị vi phạm theo chiều ngược lại).
+- **Feature Envy:** một method của class A liên tục gọi getter của class B nhiều hơn dùng dữ liệu của chính A — dấu hiệu logic đang "ghen tị" với dữ liệu của class khác, nên đặt sai chỗ (vi phạm cohesion, thường kèm vi phạm Tell-Don't-Ask):
+  ```java
+  // Feature Envy: InvoicePrinter quan tâm tới nội bộ Invoice nhiều hơn của chính nó
+  class InvoicePrinter {
+      String format(Invoice invoice) {
+          return invoice.getCustomer().getAddress().getCity()
+                  + " - " + invoice.getTotal() + " - " + invoice.getCustomer().getName();
+      }
+  }
+  // Sửa: đưa logic format lại gần dữ liệu nó dùng nhiều nhất — thêm invoice.summary()
+  ```
 
 ### Quy trình refactor an toàn
 

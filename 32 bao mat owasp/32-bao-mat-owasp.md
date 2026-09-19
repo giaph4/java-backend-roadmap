@@ -20,10 +20,11 @@
 9. [A06: Vulnerable and Outdated Components](#9-a06-vulnerable-and-outdated-components)
 10. [A09: Security Logging & Monitoring Failures](#10-a09-security-logging--monitoring-failures)
 11. [A10: Server-Side Request Forgery (SSRF)](#11-a10-server-side-request-forgery-ssrf)
-12. [Checklist bảo mật cho Backend Developer](#12-checklist-bảo-mật-cho-backend-developer)
-13. [⚠️ Các bẫy hay gặp](#13-các-bẫy-hay-gặp)
-14. [Tổng kết — Bảng ghi nhớ nhanh](#14-tổng-kết--bảng-ghi-nhớ-nhanh)
-15. [Bài tập luyện tập](#15-bài-tập-luyện-tập)
+12. [A04: Insecure Design & Nguyên tắc "Security by Design"](#12-a04-insecure-design--nguyên-tắc-security-by-design)
+13. [Checklist bảo mật cho Backend Developer](#13-checklist-bảo-mật-cho-backend-developer)
+14. [⚠️ Các bẫy hay gặp](#14-các-bẫy-hay-gặp)
+15. [Tổng kết — Bảng ghi nhớ nhanh](#15-tổng-kết--bảng-ghi-nhớ-nhanh)
+16. [Bài tập luyện tập](#16-bài-tập-luyện-tập)
 
 ---
 
@@ -621,7 +622,92 @@ public class SsrfProtectionValidator {
 
 ---
 
-## 12. Checklist bảo mật cho Backend Developer
+## 12. A04: Insecure Design & Nguyên tắc "Security by Design"
+
+Khác với 9 mục trên (đều là **lỗ hổng kỹ thuật cụ thể** có thể demo bằng 1 đoạn code sai), **A04 Insecure Design** là lớp lỗi **ở tầng kiến trúc/tư duy thiết kế** — hệ thống vẫn có thể "code đúng, chạy đúng" nhưng vẫn **mất an toàn từ trong bản chất thiết kế**, vì không ai đặt câu hỏi "nếu kẻ xấu dùng tính năng này thì sao?" ngay từ đầu.
+
+### Threat Modeling — đặt câu hỏi bảo mật TRƯỚC KHI viết code
+
+**Threat Modeling** là quy trình hệ thống hóa việc trả lời 4 câu hỏi cho MỖI tính năng mới, làm NGAY ở bước thiết kế (trước khi code), không phải "để security review soi sau":
+
+```
+1. Chúng ta đang xây dựng cái gì?        -> Vẽ luồng dữ liệu (data flow) của tính năng
+2. Cái gì có thể sai?                     -> Liệt kê kịch bản lạm dụng (abuse case), không chỉ use case
+3. Chúng ta sẽ làm gì với rủi ro đó?      -> Thiết kế biện pháp phòng thủ tương ứng
+4. Chúng ta đã làm đủ tốt chưa?           -> Review lại sau khi implement
+```
+
+**Ví dụ thực tế:** Tính năng "Quên mật khẩu" (Forgot Password) — nếu chỉ nghĩ theo *use case* ("user quên mật khẩu → nhập email → nhận link reset"), rất dễ bỏ sót các *abuse case*:
+- Kẻ tấn công có thể **dò email tồn tại** trong hệ thống không? (response khác nhau giữa "email tồn tại" và "email không tồn tại" → lộ thông tin — User Enumeration)
+- Link reset password có **hết hạn** không? Có dùng lại được (**replay**) nhiều lần không?
+- Có **giới hạn số lần** gửi yêu cầu reset không? (nếu không → có thể bị lợi dụng để **spam email** nạn nhân)
+
+> **Điểm khác biệt cốt lõi với A03 Injection/A01 Broken Access Control:** Những lỗ hổng đó có thể **sửa bằng cách đổi vài dòng code** (dùng PreparedStatement, thêm Ownership Check). Insecure Design thì **không thể vá bằng code** nếu kiến trúc gốc đã sai — phải **thiết kế lại** luồng nghiệp vụ. Đây là lý do A04 được xếp riêng, và vì sao Threat Modeling cần làm ở giai đoạn thiết kế, không phải lúc code review.
+
+### Ba nguyên tắc nền tảng của "Security by Design"
+
+Ba nguyên tắc dưới đây không phải lỗ hổng cụ thể, mà là **tư duy nền** xuyên suốt mọi mục A01-A10 đã học ở trên — khi phân vân "nên thiết kế API/hệ thống này thế nào cho an toàn", luôn quay về 3 câu hỏi này:
+
+| Nguyên tắc | Ý nghĩa | Ví dụ đã gặp ở các mục trên |
+|---|---|---|
+| **Defense in Depth** (Phòng thủ nhiều lớp) | KHÔNG dựa vào 1 lớp bảo vệ duy nhất — nếu 1 lớp bị vượt qua, vẫn còn lớp khác chặn lại | Validate Input **VÀ** Escape Output (mục 3) cùng lúc, không chỉ 1 trong 2; `SameSite=Lax` **VÀ** vẫn dùng CSRF Token cho thao tác nhạy cảm (mục 4) |
+| **Least Privilege** (Đặc quyền tối thiểu) | Mỗi user/service/component chỉ được cấp ĐÚNG quyền cần thiết để hoạt động, không hơn | Database user của ứng dụng không có quyền `DROP TABLE` (mục 6); Ownership Check đảm bảo user chỉ truy cập ĐÚNG dữ liệu của mình (mục 5) |
+| **Fail Securely** (Thất bại một cách an toàn) | Khi có lỗi/exception xảy ra, hệ thống nên **TỪ CHỐI truy cập theo mặc định**, không nên "mở toang" | Nếu logic kiểm tra quyền ném exception ngoài ý muốn, phải trả về **403 Forbidden** (an toàn), tuyệt đối KHÔNG được coi lỗi = "bỏ qua check, cho qua luôn" |
+
+```java
+// ❌ VI PHẠM "Fail Securely" - nếu roleService lỗi (throw exception), catch rồi CHO QUA -> cực kỳ nguy hiểm
+public boolean canAccess(User user, Resource resource) {
+    try {
+        return roleService.hasPermission(user, resource);
+    } catch (Exception e) {
+        return true; // ❌ "Lỡ lỗi thì cho qua luôn cho chắc" - SAI HOÀN TOÀN về triết lý bảo mật!
+    }
+}
+
+// ✅ ĐÚNG "Fail Securely" - mặc định TỪ CHỐI khi không chắc chắn, dù nguyên nhân là lỗi hệ thống
+public boolean canAccess(User user, Resource resource) {
+    try {
+        return roleService.hasPermission(user, resource);
+    } catch (Exception e) {
+        log.error("Lỗi khi kiểm tra quyền truy cập, mặc định TỪ CHỐI", e);
+        return false; // ✅ Không chắc chắn -> luôn từ chối, không bao giờ "cho qua vì tiện"
+    }
+}
+```
+
+### Brute-Force Protection — Rate Limiting cho Authentication
+
+Một khía cạnh của Insecure Design hay bị bỏ sót: tính năng đăng nhập **không giới hạn số lần thử** cho phép kẻ tấn công thử hàng triệu mật khẩu tự động (brute-force) hoặc dùng danh sách mật khẩu rò rỉ từ nơi khác để dò trên diện rộng (**credential stuffing**).
+
+```java
+@Service
+public class LoginAttemptService {
+
+    private final Map<String, Integer> attemptsCache = new ConcurrentHashMap<>(); // Thực tế nên dùng Redis (Module 19)
+
+    private static final int MAX_ATTEMPTS = 5;
+
+    public void loginFailed(String username) {
+        attemptsCache.merge(username, 1, Integer::sum);
+    }
+
+    public void loginSucceeded(String username) {
+        attemptsCache.remove(username); // Đăng nhập thành công -> reset bộ đếm
+    }
+
+    public boolean isBlocked(String username) {
+        return attemptsCache.getOrDefault(username, 0) >= MAX_ATTEMPTS;
+        // Khi bị block: nên áp dụng Exponential Backoff (thời gian khóa tăng dần sau mỗi lần vi phạm)
+        // hoặc yêu cầu CAPTCHA thay vì khóa cứng vĩnh viễn (tránh bị lợi dụng để khóa tài khoản người khác - Account Lockout DoS)
+    }
+}
+```
+
+⚠️ **Bẫy khi implement khóa tài khoản:** Nếu khóa **cứng và vô thời hạn** sau N lần sai, kẻ tấn công có thể lợi dụng ngược lại để **cố tình khóa tài khoản của người khác** (chỉ cần biết username, nhập sai password liên tục) — đây gọi là **Account Lockout Denial of Service**. Giải pháp cân bằng: khóa có **thời hạn** (VD: 15 phút, tăng dần theo cấp số nhân nếu tiếp tục vi phạm), kết hợp **CAPTCHA** sau vài lần sai thay vì khóa cứng ngay từ lần thứ N.
+
+---
+
+## 13. Checklist bảo mật cho Backend Developer
 
 Danh sách kiểm tra thực chiến trước khi đưa API/tính năng mới lên production:
 
@@ -662,7 +748,7 @@ Danh sách kiểm tra thực chiến trước khi đưa API/tính năng mới l�
 
 ---
 
-## 13. ⚠️ Các bẫy hay gặp
+## 14. ⚠️ Các bẫy hay gặp
 
 1. **Tin tưởng tuyệt đối vào JPA/Hibernate "tự động an toàn"** — quên rằng Native Query nối chuỗi thủ công vẫn có thể SQL Injection dù đang dùng Spring Data JPA.
 
@@ -690,7 +776,7 @@ Danh sách kiểm tra thực chiến trước khi đưa API/tính năng mới l�
 
 ---
 
-## 14. Tổng kết — Bảng ghi nhớ nhanh
+## 15. Tổng kết — Bảng ghi nhớ nhanh
 
 | Khái niệm | Ghi nhớ nhanh |
 |---|---|
@@ -706,10 +792,13 @@ Danh sách kiểm tra thực chiến trước khi đưa API/tính năng mới l�
 | Vulnerable Components | Quét CVE định kỳ (OWASP Dependency-Check), cập nhật thư viện thường xuyên |
 | Security Logging | Log sự kiện bảo mật (login fail, access denied) + Alert chủ động |
 | SSRF | Server tự gọi URL do user cung cấp — whitelist domain + chặn IP nội bộ, cẩn thận DNS Rebinding |
+| Insecure Design (A04) | Threat Modeling ngay lúc thiết kế — không thể vá bằng code nếu kiến trúc gốc sai |
+| Security by Design | Defense in Depth (nhiều lớp) + Least Privilege (quyền tối thiểu) + Fail Securely (lỗi thì từ chối) |
+| Brute-Force Protection | Giới hạn số lần đăng nhập sai, khóa CÓ THỜI HẠN + CAPTCHA — tránh Account Lockout DoS |
 
 ---
 
-## 15. Bài tập luyện tập
+## 16. Bài tập luyện tập
 
 ### Phần A — Trắc nghiệm nhận định (Đúng/Sai + giải thích)
 

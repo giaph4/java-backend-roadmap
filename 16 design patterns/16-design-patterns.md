@@ -259,6 +259,19 @@ Pizza p = Pizza.builder("L").cheese(true).mushroom(true).build();
 - **Khi KHÔNG nên dùng:** 2–3 field bắt buộc → constructor hoặc `record` là đủ, builder chỉ thêm nghi thức thừa.
 - **Bẫy:** quên validate trong `build()`; builder cho phép object nửa vời thoát ra ngoài; builder **mutable** bị chia sẻ giữa nhiều luồng; "required" mà để ở method chaining thì compiler không ép được — đưa vào constructor của builder hoặc của `builder(...)`.
 
+#### Phân biệt nhanh 4 pattern hay bị nhầm — câu hỏi phỏng vấn kinh điển
+
+Cả bốn đều "tạo object", nhưng giải quyết **vấn đề khác nhau**; nhầm lẫn thường đến từ việc chỉ nhìn cấu trúc code mà quên hỏi "nó nhắm giải quyết cái gì":
+
+| Pattern | Câu hỏi nó trả lời | Trục biến thiên | Khi client gọi |
+|---|---|---|---|
+| **Simple Factory** (không phải GoF) | "Cho tôi X theo tham số này" | Không có trục — chỉ gom `switch`/`if` chọn class vào một chỗ | `Shape s = ShapeFactory.create("circle");` |
+| **Factory Method** | "Bước tạo object nằm trong một quy trình lớn hơn — ai quyết định tạo *loại nào*?" | **Lớp con** quyết định sản phẩm, khung xử lý cố định ở lớp cha | Gọi qua đa hình: `dialog.render()` → tự gọi `createButton()` bên trong |
+| **Abstract Factory** | "Làm sao đảm bảo một *bộ* nhiều object đi cùng nhau không bị trộn lẫn?" | Cả **họ sản phẩm** đổi cùng lúc theo một factory | `GuiFactory f = new MacFactory(); f.createButton(); f.createCheckbox();` — cả hai luôn cùng hãng |
+| **Builder** | "Làm sao tạo *một* object có quá nhiều tham số tùy chọn mà không nhầm thứ tự?" | **Cách lắp ráp từng bước** của MỘT sản phẩm, không phải chọn loại sản phẩm | `Pizza.builder("L").cheese(true).build();` |
+
+> Mẹo phân biệt Factory Method vs Abstract Factory: Factory Method là **một method ảo** trả về **một sản phẩm**; Abstract Factory là **một object** gom **nhiều method** trả về **nhiều sản phẩm liên quan**. Trong thực tế, Abstract Factory thường được hiện thực bằng cách mỗi method bên trong nó lại là một Factory Method — hai pattern kết hợp, không loại trừ nhau.
+
 ### 2.5 Prototype
 
 > **Ý định:** tạo object mới bằng cách **sao chép một mẫu có sẵn**, thay vì khởi tạo lại từ đầu (hữu ích khi khởi tạo tốn kém hoặc cấu hình phức tạp).

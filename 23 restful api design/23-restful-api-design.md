@@ -22,9 +22,10 @@
 11. [Request/Response Body Design & DTO](#11-requestresponse-body-design)
 12. [Bulk Operations & Long-running Operations](#12-bulk-operations--long-running-operations)
 13. [Tài liệu hóa API — OpenAPI/Swagger](#13-tài-liệu-hóa-api--openapiswagger)
-14. [⚠️ Các bẫy hay gặp](#14-các-bẫy-hay-gặp)
-15. [Tổng kết — Bảng ghi nhớ nhanh](#15-tổng-kết--bảng-ghi-nhớ-nhanh)
-16. [Bài tập luyện tập](#16-bài-tập-luyện-tập)
+14. [CORS — Cross-Origin Resource Sharing](#14-cors--cross-origin-resource-sharing)
+15. [⚠️ Các bẫy hay gặp](#15-các-bẫy-hay-gặp)
+16. [Tổng kết — Bảng ghi nhớ nhanh](#16-tổng-kết--bảng-ghi-nhớ-nhanh)
+17. [Bài tập luyện tập](#17-bài-tập-luyện-tập)
 
 ---
 
@@ -905,7 +906,68 @@ Thêm dependency trên là đã có sẵn Swagger UI tại `/swagger-ui.html` �
 
 ---
 
-## 14. ⚠️ Các bẫy hay gặp
+## 14. CORS — Cross-Origin Resource Sharing
+
+Khi Frontend (VD: chạy ở `https://app.example.com`) gọi API ở domain/port khác (VD: `https://api.example.com`), trình duyệt áp dụng **Same-Origin Policy**: mặc định **chặn** JavaScript đọc response từ 1 "origin" (kết hợp scheme + host + port) khác với origin đang chạy trang web — đây là cơ chế bảo mật của trình duyệt, không phải giới hạn của HTTP hay server.
+
+> **Origin** được coi là khác nhau nếu KHÁC bất kỳ 1 trong 3 thành phần: scheme (`http` vs `https`), host (`app.example.com` vs `api.example.com`), hoặc port (`:3000` vs `:8080`). `https://app.example.com` và `https://app.example.com:8443` là **khác origin** (khác port).
+
+**CORS (Cross-Origin Resource Sharing)** là cơ chế HTTP cho phép server **khai báo tường minh** những origin nào được phép gọi tới nó — nới lỏng Same-Origin Policy 1 cách có kiểm soát, thay vì tắt hoàn toàn (rất nguy hiểm).
+
+### Simple Request vs Preflight Request
+
+Trình duyệt phân loại request cross-origin thành 2 nhóm:
+
+- **Simple Request** — gửi thẳng, không cần hỏi trước. Chỉ áp dụng khi: method là `GET`/`HEAD`/`POST`, và header/Content-Type nằm trong danh sách "an toàn" (`application/x-www-form-urlencoded`, `multipart/form-data`, `text/plain`).
+- **Preflight Request** — với `PUT`/`DELETE`/`PATCH`, hoặc `Content-Type: application/json` (tức **gần như mọi REST API JSON thông thường**), trình duyệt **tự động** gửi 1 request `OPTIONS` "dò hỏi" trước, KHÔNG chứa dữ liệu thật, chỉ để hỏi server "tôi có được phép gọi method này với header này không?" — chỉ khi server trả lời "được" (qua các header `Access-Control-Allow-*`), trình duyệt mới gửi tiếp request thật.
+
+```http
+// 1. Trình duyệt tự động gửi Preflight trước (KHÔNG phải do code Frontend gọi tường minh)
+OPTIONS /api/v1/users
+Origin: https://app.example.com
+Access-Control-Request-Method: POST
+Access-Control-Request-Headers: content-type, authorization
+
+// 2. Server phản hồi cho phép
+HTTP/1.1 204 No Content
+Access-Control-Allow-Origin: https://app.example.com
+Access-Control-Allow-Methods: GET, POST, PUT, DELETE
+Access-Control-Allow-Headers: Content-Type, Authorization
+Access-Control-Max-Age: 3600   // cache kết quả preflight 1 giờ, đỡ phải hỏi lại mỗi request
+
+// 3. Chỉ khi bước 2 hợp lệ, trình duyệt mới gửi request thật
+POST /api/v1/users
+Origin: https://app.example.com
+Content-Type: application/json
+{ "fullName": "Pho" }
+```
+
+⚠️ **Hiểu lầm phổ biến nhất:** CORS **không** phải cơ chế bảo vệ server — request thật (bước 3) **vẫn được server nhận và xử lý bình thường** dù thiếu header CORS đúng; CORS chỉ khiến **trình duyệt chặn JavaScript đọc response** ở phía client. Test bằng `curl`/Postman (không phải trình duyệt) sẽ luôn thấy API "hoạt động bình thường" dù cấu hình CORS sai — vì `curl` không tuân theo Same-Origin Policy. Do đó **không nên coi CORS là biện pháp bảo mật/authorization** — nó chỉ kiểm soát trình duyệt nào được đọc response, không ngăn được request giả mạo gửi trực tiếp từ server khác hay công cụ dòng lệnh.
+
+### Cấu hình CORS trong Spring Boot
+
+```java
+@Configuration
+public class CorsConfig implements WebMvcConfigurer {
+    @Override
+    public void addCorsMappings(CorsRegistry registry) {
+        registry.addMapping("/api/**")
+                .allowedOrigins("https://app.example.com")   // ⚠️ liệt kê rõ domain, KHÔNG dùng "*" nếu allowCredentials=true
+                .allowedMethods("GET", "POST", "PUT", "PATCH", "DELETE")
+                .allowedHeaders("*")
+                .allowCredentials(true)   // cho phép gửi kèm cookie/Authorization header
+                .maxAge(3600);
+    }
+}
+```
+
+⚠️ **Bẫy bảo mật:** `Access-Control-Allow-Origin: *` (cho phép MỌI origin) kết hợp với `Access-Control-Allow-Credentials: true` là **cấu hình không hợp lệ** và bị trình duyệt hiện đại từ chối thẳng — vì kết hợp này đồng nghĩa "bất kỳ website nào cũng đọc được response kèm cookie/session của user", một lỗ hổng bảo mật nghiêm trọng. Khi cần `allowCredentials(true)`, bắt buộc phải liệt kê origin cụ thể, không được dùng wildcard.
+
+> **Liên hệ:** Chi tiết về bảo mật API (authentication/authorization, CSRF, token) thuộc Module Spring Security (25) và Module Bảo mật OWASP (32) — ở đây chỉ cần hiểu đúng **bản chất CORS là gì và không phải là gì**, vì đây là 1 trong những khái niệm bị hiểu sai nhiều nhất khi mới làm việc với API (dev hay nhầm lỗi CORS trên console trình duyệt là "server bị lỗi", trong khi thực chất server đã xử lý xong, chỉ là trình duyệt chặn đọc kết quả).
+
+---
+
+## 15. ⚠️ Các bẫy hay gặp
 
 1. **Dùng `GET` để thực hiện thao tác thay đổi dữ liệu** (VD: `GET /users/5/delete`) — vi phạm nghiêm trọng ngữ nghĩa HTTP, nguy hiểm vì trình duyệt/proxy có thể tự động cache/prefetch GET request → xóa dữ liệu ngoài ý muốn.
 
@@ -933,7 +995,7 @@ Thêm dependency trên là đã có sẵn Swagger UI tại `/swagger-ui.html` �
 
 ---
 
-## 15. Tổng kết — Bảng ghi nhớ nhanh
+## 16. Tổng kết — Bảng ghi nhớ nhanh
 
 | Khái niệm | Ghi nhớ nhanh |
 |---|---|
@@ -951,10 +1013,11 @@ Thêm dependency trên là đã có sẵn Swagger UI tại `/swagger-ui.html` �
 | DTO | Luôn dùng DTO cho Request/Response, không bao giờ trả Entity trực tiếp |
 | Bulk/Async | Bulk → `207 Multi-Status`; thao tác chậm → `202 Accepted` + polling |
 | Tài liệu hóa | springdoc-openapi sinh Swagger UI tự động từ Controller/DTO có sẵn |
+| CORS | Cơ chế trình duyệt (Same-Origin Policy), không phải bảo mật server — `PUT`/`PATCH`/JSON kích hoạt Preflight `OPTIONS` tự động; `Allow-Origin: *` + `Allow-Credentials: true` bị chặn |
 
 ---
 
-## 16. Bài tập luyện tập
+## 17. Bài tập luyện tập
 
 ### Phần A — Trắc nghiệm nhận định (Đúng/Sai + giải thích)
 

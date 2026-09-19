@@ -21,9 +21,10 @@
 10. [Testcontainers — test với DB thật trong Docker](#10-testcontainers)
 11. [Test Coverage & các chỉ số liên quan](#11-test-coverage)
 12. [Mutation Testing — đo lường THẬT chất lượng test](#12-mutation-testing)
-13. [⚠️ Các bẫy hay gặp](#13-các-bẫy-hay-gặp)
-14. [Tổng kết — Bảng ghi nhớ nhanh](#14-tổng-kết--bảng-ghi-nhớ-nhanh)
-15. [Bài tập luyện tập](#15-bài-tập-luyện-tập)
+13. [Flaky Test — test "lúc pass lúc fail"](#13-flaky-test--test-lúc-pass-lúc-fail)
+14. [⚠️ Các bẫy hay gặp](#14-các-bẫy-hay-gặp)
+15. [Tổng kết — Bảng ghi nhớ nhanh](#15-tổng-kết--bảng-ghi-nhớ-nhanh)
+16. [Bài tập luyện tập](#16-bài-tập-luyện-tập)
 
 ---
 
@@ -69,6 +70,67 @@ Chu trình **Red-Green-Refactor**: viết test trước (fail vì chưa có code
 ```
 
 > **Thực tế:** TDD không bắt buộc áp dụng cho mọi dòng code, nhưng là kỹ thuật hiệu quả cho logic nghiệp vụ phức tạp (tính toán, validation nhiều rule) — buộc bạn nghĩ rõ **input/output mong đợi** trước khi viết implementation, thường dẫn tới thiết kế code dễ test hơn (ít coupling, single responsibility) một cách tự nhiên.
+
+### FIRST Principles — 5 tiêu chuẩn của 1 Unit Test tốt
+
+Trước khi viết test, tự hỏi test đó có đạt 5 tiêu chí này không — đây là "định nghĩa xong" (definition of done) không chính thức cho Unit Test:
+
+| Chữ cái | Ý nghĩa | Vi phạm trông như thế nào |
+|---|---|---|
+| **F**ast | Chạy trong mili-giây, không gọi network/DB/file thật | Test gọi API thật qua internet — chạy hàng giây, CI chậm |
+| **I**ndependent | Không phụ thuộc test khác, chạy được theo BẤT KỲ thứ tự nào, kể cả song song | Test B chỉ pass nếu Test A chạy trước (A tạo sẵn dữ liệu mà B dùng lại) |
+| **R**epeatable | Chạy 100 lần cho kết quả GIỐNG NHAU, ở mọi môi trường (máy dev, CI server) | Test dùng `new Date()`/`LocalDateTime.now()` trực tiếp trong assertion — có thể fail vào đúng thời điểm giao ngày |
+| **S**elf-validating | Tự động biết PASS/FAIL qua assertion, không cần người đọc log để kết luận | Test chỉ `System.out.println(result)` rồi người chạy tự nhìn console để "đoán" đúng/sai |
+| **T**imely | Viết **kịp thời** — cùng lúc hoặc trước khi viết code sản phẩm, không để dồn viết sau cùng | Viết xong cả tính năng, để dí deadline mới cuống cuồng viết test cho có |
+
+> Test Pyramid (đã học ở trên) và FIRST Principles bổ trợ nhau: Pyramid nói **nên có bao nhiêu** loại test ở tầng nào, FIRST nói **1 Unit Test đơn lẻ tốt trông ra sao**.
+
+### BDD (Behavior-Driven Development) — khác TDD ở điểm nào?
+
+TDD tập trung vào **thiết kế code** (unit nhỏ, input/output kỹ thuật). **BDD** là một nhánh phát triển từ TDD nhưng dịch chuyển trọng tâm sang **mô tả hành vi nghiệp vụ** bằng ngôn ngữ tự nhiên, để cả người không rành code (Product Owner, QA, Business Analyst) cũng đọc hiểu và tham gia định nghĩa "thế nào là đúng":
+
+```gherkin
+# File .feature viết bằng cú pháp Gherkin — ngôn ngữ tự nhiên có cấu trúc
+Feature: Giảm giá đơn hàng
+
+  Scenario: Đơn hàng đạt ngưỡng 500.000đ được giảm 5%
+    Given khách hàng có đơn hàng trị giá 500000 đồng
+    When hệ thống tính toán giảm giá
+    Then số tiền giảm giá phải là 25000 đồng
+```
+
+Công cụ phổ biến nhất cho Java là **Cucumber** — mỗi dòng Gherkin (`Given`/`When`/`Then`) được nối với 1 method Java tương ứng (gọi là "step definition") bằng annotation regex/expression, method đó gọi lại đúng code nghiệp vụ và assert như JUnit bình thường ở phía sau:
+
+```java
+public class DiscountSteps {
+    private Order order;
+    private BigDecimal discount;
+
+    @Given("khách hàng có đơn hàng trị giá {int} đồng")
+    public void createOrder(int amount) {
+        order = new Order(BigDecimal.valueOf(amount));
+    }
+
+    @When("hệ thống tính toán giảm giá")
+    public void calculateDiscount() {
+        discount = discountService.calculate(order);
+    }
+
+    @Then("số tiền giảm giá phải là {int} đồng")
+    public void verifyDiscount(int expected) {
+        assertThat(discount).isEqualByComparingTo(BigDecimal.valueOf(expected));
+    }
+}
+```
+
+| | TDD | BDD |
+|---|---|---|
+| Trọng tâm | Thiết kế code, đơn vị kỹ thuật (method/class) | Hành vi nghiệp vụ, góc nhìn người dùng cuối |
+| Ngôn ngữ viết test | Code thuần (Java) | Ngôn ngữ tự nhiên có cấu trúc (Gherkin) + step definition bằng code |
+| Ai đọc được | Chủ yếu lập trình viên | Cả lập trình viên lẫn stakeholder không rành code |
+| Công cụ Java phổ biến | JUnit 5 | Cucumber (chạy trên nền JUnit) |
+
+> **Thực tế:** BDD không thay thế TDD/Unit Test — 1 dự án thường dùng Cucumber cho vài kịch bản nghiệp vụ **quan trọng nhất** (đóng vai trò tài liệu sống — "living documentation" luôn khớp với hành vi thật vì chính nó là test), còn phần lớn logic chi tiết vẫn test bằng JUnit/Mockito thuần như các mục dưới.
 
 ---
 
@@ -201,6 +263,28 @@ void canCancel_PendingOrConfirmedStatus_ReturnsTrue(OrderStatus status) {
 ```
 
 ⚠️ **Mặc định, JUnit 5 tạo 1 instance MỚI cho mỗi test method** (`PER_METHOD` lifecycle) — đây là lý do `@BeforeAll`/`@AfterAll` phải `static` (không có instance cố định để gọi non-static method), và cũng là lý do mỗi test hoàn toàn độc lập, không chia sẻ state qua lại.
+
+### Test Fixture — thuật ngữ chính xác cho phần "chuẩn bị" của test
+
+**Test Fixture** là tên gọi chuẩn cho **trạng thái cố định** cần thiết lập trước khi test chạy — object, dữ liệu, kết nối... mà nhiều test case dùng chung. Trong ví dụ `CalculatorTest` ở trên, biến `calculator` được khởi tạo lại trong `@BeforeEach` chính là 1 Test Fixture.
+
+```java
+class OrderServiceTest {
+    // Đây là "fixture" - trạng thái nền tảng mà nhiều test dùng chung
+    private OrderRepository orderRepository;
+    private OrderService orderService;
+    private User existingUser;
+
+    @BeforeEach
+    void setUpFixture() {
+        orderRepository = mock(OrderRepository.class);
+        orderService = new OrderService(orderRepository);
+        existingUser = new User(1L, "pho@example.com"); // dữ liệu fixture dùng lại ở nhiều test
+    }
+}
+```
+
+> Việc tách fixture ra `@BeforeEach` (thay vì lặp lại code khởi tạo trong từng `@Test`) giúp mỗi test method chỉ còn tập trung vào phần **khác biệt** (input/hành vi cụ thể đang kiểm tra) — giảm trùng lặp, dễ đọc, và khi fixture cần đổi cách khởi tạo chỉ cần sửa 1 chỗ.
 
 ---
 
@@ -813,7 +897,26 @@ void testEligibility() {
 
 ---
 
-## 13. ⚠️ Các bẫy hay gặp
+## 13. Flaky Test — test "lúc pass lúc fail"
+
+**Flaky Test** là test cho kết quả **không nhất quán** dù code không hề thay đổi — lần chạy này PASS, lần khác FAIL, gây mất niềm tin vào cả test suite (team dần có thói quen "chạy lại vài lần cho qua" thay vì tìm nguyên nhân thật, cực kỳ nguy hiểm vì có thể che giấu bug thật).
+
+### Nguyên nhân thường gặp
+
+| Nguyên nhân | Ví dụ | Cách khắc phục |
+|---|---|---|
+| **Phụ thuộc thời gian thực** | `assertEquals(LocalDate.now(), result.getDate())` — fail nếu test chạy đúng lúc giao ngày | Inject `Clock` giả lập (`Clock.fixed(...)`) thay vì gọi `now()` trực tiếp trong code nghiệp vụ |
+| **Phụ thuộc thứ tự chạy** | Test B dùng lại dữ liệu Test A để lại, JUnit 5 mặc định KHÔNG đảm bảo thứ tự chạy method | Mỗi test tự tạo dữ liệu riêng trong `@BeforeEach`, không chia sẻ state qua field static |
+| **Side-effect giữa các test (DB/file chung)** | 2 test cùng ghi vào 1 file tạm có tên cố định, chạy song song đè lên nhau | Dùng `@TempDir` (JUnit 5 tự tạo thư mục tạm riêng mỗi test), `@Transactional` để tự rollback DB |
+| **Race condition trong code async/thread** | Test không đợi đủ thời gian cho thread nền hoàn thành trước khi assert | Dùng `CompletableFuture.get()`/`CountDownLatch.await()` để đợi đúng, tránh `Thread.sleep()` "đoán mò" |
+| **Phụ thuộc network/service ngoài thật** | Test gọi thẳng API bên thứ 3 — mạng chậm/service down làm test fail dù code đúng | Mock dependency ngoài (Mockito) hoặc dùng Testcontainers thay vì gọi thật |
+| **Random không seed cố định** | `new Random().nextInt()` cho kết quả khác nhau mỗi lần chạy | Dùng `new Random(FIXED_SEED)` trong test, hoặc mock nguồn random |
+
+> **Nguyên tắc xử lý:** Không bao giờ nên "im lặng" bỏ qua flaky test (`@Disabled` không kèm lý do) hay chỉ retry cho tới khi pass — cả hai đều che giấu vấn đề thật thay vì giải quyết. Ưu tiên xác định đúng nguyên nhân theo bảng trên; nếu chưa thể sửa ngay, nên `@Disabled("Flaky - JIRA-1234, do phụ thuộc thời gian thực")` kèm ticket theo dõi rõ ràng để không quên.
+
+---
+
+## 14. ⚠️ Các bẫy hay gặp
 
 1. **Viết test không có assertion** (hoặc assertion vô nghĩa như `assertTrue(true)`) — chỉ để "tăng coverage" mà không thực sự kiểm tra logic.
 
@@ -841,13 +944,16 @@ void testEligibility() {
 
 ---
 
-## 14. Tổng kết — Bảng ghi nhớ nhanh
+## 15. Tổng kết — Bảng ghi nhớ nhanh
 
 | Khái niệm | Ghi nhớ nhanh |
 |---|---|
 | Test Pyramid | Unit nhiều nhất (nhanh, rẻ) → Integration vừa → E2E ít nhất (chậm, đắt) |
 | TDD | Red (viết test fail) → Green (code tối thiểu để pass) → Refactor |
+| FIRST Principles | Fast, Independent, Repeatable, Self-validating, Timely — 5 tiêu chuẩn Unit Test tốt |
+| BDD/Cucumber | Gherkin (Given/When/Then) mô tả hành vi nghiệp vụ, dễ đọc cho non-technical stakeholder |
 | Given-When-Then | Cấu trúc chuẩn: chuẩn bị → thực thi → kiểm tra |
+| Test Fixture | Trạng thái/dữ liệu nền chuẩn bị sẵn trong `@BeforeEach`, nhiều test case dùng chung |
 | Test Doubles | Dummy/Stub/Fake/Spy/Mock — 5 loại "đóng thế" khác nhau, không chỉ có "Mock" |
 | Mockito `@Mock`/`@InjectMocks` | Cô lập class đang test khỏi dependency thật, chạy cực nhanh |
 | AssertJ | Cú pháp fluent `assertThat(x).isEqualTo(y)` — khuyến nghị hơn Assertions thuần |
@@ -860,10 +966,11 @@ void testEligibility() {
 | `@Mock` vs `@MockBean` | `@Mock` (Mockito thuần, không vào Spring Context) vs `@MockBean` (đăng ký vào Spring Context) |
 | Test Coverage | Chỉ đo dòng code được chạy qua — không đảm bảo test có ý nghĩa |
 | Mutation Testing (PIT) | Đo test có THỰC SỰ phát hiện thay đổi logic hay không — chậm, chạy định kỳ |
+| Flaky Test | Lúc pass lúc fail dù code không đổi — thường do time/order/race condition/network thật |
 
 ---
 
-## 15. Bài tập luyện tập
+## 16. Bài tập luyện tập
 
 ### Phần A — Trắc nghiệm nhận định (Đúng/Sai + giải thích)
 

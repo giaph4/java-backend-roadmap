@@ -17,6 +17,7 @@
 7. [Hậu quả khi vi phạm Contract — minh họa bằng HashMap thực tế](#7-hậu-quả-khi-vi-phạm-contract--minh-họa-bằng-hashmap-thực-tế)
 8. [Field số thực, mảng, và field mutable trong equals/hashCode](#8-field-số-thực-mảng-và-field-mutable-trong-equalshashcode)
 9. [`record` (Java 16+) — tự động sinh & các cạm bẫy](#9-record-java-16--tự-động-sinh--các-cạm-bẫy)
+   - 9.5. [`equals()`/`hashCode()` của chính các Collection chuẩn](#95-equalshashcode-của-chính-các-collection-chuẩn)
 10. [Comparable vs Comparator](#10-comparable-vs-comparator)
 11. [Contract của `compareTo` & quy tắc "nhất quán với equals"](#11-contract-của-compareto--quy-tắc-nhất-quán-với-equals)
 12. [equals/hashCode cho Entity JPA/Hibernate — nhìn trước](#12-equalshashcode-cho-entity-jpahibernate--nhìn-trước)
@@ -109,6 +110,15 @@ System.out.println(s1.equals(s2));  // false! — chưa override, equals() mặc
   ```java
   @Override public boolean equals(Object o) { throw new AssertionError(); }
   ```
+- **`enum`.** JVM đảm bảo **mỗi hằng số enum là một object duy nhất trong toàn bộ ứng dụng** (kể cả sau deserialize — `enum` có cơ chế serialize đặc biệt bảo toàn singleton). Vì vậy `equals()`/`hashCode()` **mặc định** (dựa trên identity, kế thừa từ `Object`) đã hoàn toàn chính xác và **tương đương** với `==`:
+  ```java
+  enum Status { PENDING, ACTIVE, CLOSED }
+  Status a = Status.ACTIVE;
+  Status b = Status.valueOf("ACTIVE");
+  a == b;          // true — cùng một object duy nhất
+  a.equals(b);      // true — mặc định, không cần override
+  ```
+  > ⚠️ **Không bao giờ override `equals()`/`hashCode()` cho `enum`** (thực ra Java còn khai báo chúng là `final` trong `java.lang.Enum` nên **không thể** override). Dùng `==` để so `enum` là **an toàn và được khuyến khích** — khác hẳn `String`/wrapper number, nơi `==` là cạm bẫy (Module 02.1).
 
 ### Override `equals()` đúng chuẩn — công thức chuẩn (Effective Java, Item 10)
 
@@ -515,6 +525,62 @@ public record Tags(String name, String[] values) {
 
 ---
 
+## 9.5. `equals()`/`hashCode()` của chính các Collection chuẩn
+
+Không chỉ object do bạn viết — `List`, `Set`, `Map` trong JDK **cũng** override `equals()`/`hashCode()`, và chúng làm điều đó dựa trên **nội dung phần tử**, tuân thủ đúng contract ở mục 6. Quan trọng vì bạn sẽ thường xuyên so sánh hai collection, hoặc dùng `List<T>`/`Set<T>` làm field trong `equals()` của chính bạn.
+
+### `List.equals()` — quan tâm cả **thứ tự**
+
+```java
+List<Integer> a = List.of(1, 2, 3);
+List<Integer> b = new ArrayList<>(List.of(1, 2, 3));
+List<Integer> c = List.of(3, 2, 1);
+
+a.equals(b); // true  — cùng phần tử, cùng thứ tự, dù khác implementation (List.of vs ArrayList)
+a.equals(c); // false — khác thứ tự
+```
+
+Contract (`AbstractList.equals`): hai `List` bằng nhau ⇔ cùng kích thước và `get(i)` từng cặp phần tử bằng nhau (`Objects.equals`) theo **đúng thứ tự**. `hashCode()` (`AbstractList.hashCode`) là `31*result + (e==null ? 0 : e.hashCode())` gộp dồn qua **từng phần tử theo thứ tự** — nên `a.hashCode() == b.hashCode()` nhưng `a.hashCode() != c.hashCode()`.
+
+### `Set.equals()` — **bỏ qua** thứ tự, mọi implementation trộn lẫn được
+
+```java
+Set<Integer> hs = new HashSet<>(List.of(1, 2, 3));
+Set<Integer> ts = new TreeSet<>(List.of(3, 1, 2));
+Set<Integer> lhs = new LinkedHashSet<>(List.of(2, 3, 1));
+
+hs.equals(ts);  // true — Set chỉ quan tâm "tập phần tử", HashSet/TreeSet/LinkedHashSet đều là Set
+hs.equals(lhs); // true
+```
+
+Contract (`AbstractSet.equals`): cùng kích thước và mọi phần tử của set này `containsAll` ở set kia — **không quan tâm implementation hay thứ tự duyệt**. `hashCode()` = **tổng** (`+`, không phải `31*`) hashCode của từng phần tử — phép cộng giao hoán nên không phụ thuộc thứ tự, khớp với việc `equals()` không phân biệt thứ tự.
+
+### `Map.equals()` — so theo cặp key-value, bỏ qua thứ tự
+
+```java
+Map<String,Integer> hm = new HashMap<>(Map.of("a", 1, "b", 2));
+Map<String,Integer> tm = new TreeMap<>(Map.of("b", 2, "a", 1));
+
+hm.equals(tm); // true — cùng tập entry (key,value), thứ tự không quan trọng
+```
+
+Tương tự `Set`: `AbstractMap.equals` so `entrySet()` như hai `Set` (không thứ tự); `hashCode()` là **tổng** `hashCode()` của từng `Entry` (chính nó là `keyHash ^ valueHash`).
+
+### Hệ quả thực tế — vì sao điều này quan trọng
+
+1. **Không nên "khóa cứng" implementation trong test.** `assertEquals(List.of(1,2), someArrayList)` hoạt động đúng dù hai bên khác class — vì so theo *interface contract*, không theo `getClass()`.
+2. **Field kiểu `List<T>`/`Set<T>`/`Map<K,V>` dùng được trực tiếp trong `equals()`/`hashCode()` của bạn** mà không cần `Arrays.equals` như mảng — vì Collection (khác mảng!) đã override đúng chuẩn:
+   ```java
+   public record Cart(String userId, List<String> itemIds) { }
+   // equals() sinh sẵn của record gọi List.equals() → so đúng nội dung, không phải reference — an toàn, khác bẫy mảng ở mục 9
+   ```
+3. **Đổi từ `List` sang `Set`** (hoặc ngược lại) làm field trong `equals()` sẽ **đổi ngữ nghĩa** "bằng nhau" (có phân biệt thứ tự/trùng lặp hay không) — một quyết định thiết kế, không phải chi tiết cài đặt.
+4. **`Collections.unmodifiableList(list)` / `Collections.synchronizedList(list)`** chỉ là *wrapper* (Decorator pattern) — `equals()`/`hashCode()` của chúng ủy quyền (delegate) thẳng cho `list` gốc, nên so sánh vẫn đúng theo nội dung.
+
+> **Liên hệ mục 8.2:** đây chính là lý do khuyến nghị "đổi `String[]` thành `List<String>`" trong `record` — không phải chỉ vì bất biến hơn, mà vì `List` đã có `equals()`/`hashCode()` đúng chuẩn theo nội dung, còn mảng thì không.
+
+---
+
 ## 10. Comparable vs Comparator
 
 Cả hai xác định **thứ tự sắp xếp** cho object, nhưng khác vai trò.
@@ -610,6 +676,17 @@ Nhà máy & tổ hợp hay dùng của `Comparator`:
 2. **Bắc cầu:** `x.compareTo(y) > 0` và `y.compareTo(z) > 0` ⇒ `x.compareTo(z) > 0`.
 3. **Nhất quán trên lớp bằng nhau:** `x.compareTo(y) == 0` ⇒ `sgn(x.compareTo(z)) == sgn(y.compareTo(z))` với mọi `z`.
 4. **Khuyến nghị mạnh (không bắt buộc):** `(x.compareTo(y) == 0) == x.equals(y)` — gọi là *"consistent with equals"*.
+
+### Giá trị trả về không nhất thiết là `-1`/`0`/`1`
+
+Một ngộ nhận phổ biến: `compareTo`/`compare` phải trả đúng ba giá trị `-1`, `0`, `1`. **Sai** — Javadoc chỉ yêu cầu **dấu** (âm / không / dương), độ lớn tuyệt đối không mang ý nghĩa gì. `Integer.compare(5, 2)` có thể trả `3` (cài đặt thật là `(x < y) ? -1 : (x == y ? 0 : 1)` nên thực ra JDK trả đúng -1/0/1, nhưng một số comparator tối ưu bằng phép trừ trực tiếp — *khi không có nguy cơ tràn số* — trả về độ lớn bất kỳ cùng dấu, và điều đó hoàn toàn hợp lệ):
+
+```java
+Comparator<Short> byValue = (a, b) -> a - b; // an toàn vì short không thể tràn khi ép sang int
+// kết quả có thể là -30000, 5, 12000... miễn đúng DẤU là hợp lệ
+```
+
+> Điều **bắt buộc** không phải "chỉ trả -1/0/1" mà là: cùng dấu với "thứ tự thực sự", không tràn số (mục trên), và tuân thủ contract phản đối xứng/bắc cầu ở đầu mục này.
 
 ### Không dùng phép trừ để so sánh số
 
@@ -747,6 +824,8 @@ public class Account {
 | Field mảng | `Arrays.equals` + `Arrays.hashCode` (không `Objects.equals`/`.hashCode()`). |
 | Field mutable | Không nên tham gia `equals`/`hashCode` nếu object dùng làm key/phần tử Set — đổi field = "bóng ma" trong Set. |
 | `record` (Java 16+) | Tự sinh cả 3 method trên **mọi** component, kiểu `instanceof`, xử lý `float`/`double` đúng. Bẫy: component **mảng** so theo reference; không chọn được tập field. |
+| `enum` | Không bao giờ override `equals`/`hashCode` (thực ra `final`, không override được) — identity mặc định đã đúng vì mỗi hằng số là singleton. `==` an toàn cho `enum`. |
+| Collection chuẩn (`List`/`Set`/`Map`) | Đều override `equals`/`hashCode` theo **nội dung**. `List` phân biệt thứ tự (`31*result+e.hashCode()`); `Set`/`Map` không phân biệt thứ tự (cộng dồn hashCode). Field kiểu Collection dùng trực tiếp trong `equals()` tự viết là an toàn, khác mảng. |
 | `Comparable` | Một thứ tự "tự nhiên", `compareTo` trong class. `TreeSet`/`TreeMap` cần nó. Dùng `Integer.compare`, không dùng phép trừ. |
 | `Comparator` | Nhiều thứ tự, ngoài class; `comparing`/`thenComparing`/`reversed`/`nullsLast`. Bẫy: `reversed()` đảo **cả chuỗi**. |
 | `compareTo` vs `equals` | Nên "nhất quán với equals". `BigDecimal` thì không → `HashSet` và `TreeSet` cho kết quả khác nhau. `TreeSet`/`TreeMap` chỉ nhìn `compareTo`. |

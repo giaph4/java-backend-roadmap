@@ -18,8 +18,9 @@
 8. [File I/O với `java.nio.file`](#8-file-io-với-javaniofile)
 9. [`java.io` — luồng byte vs luồng ký tự](#9-javaio--luồng-byte-vs-luồng-ký-tự)
 10. [Serialization](#10-serialization)
-11. [Tổng kết — Bảng ghi nhớ nhanh](#11-tổng-kết--bảng-ghi-nhớ-nhanh)
-12. [Bài tập luyện tập](#12-bài-tập-luyện-tập)
+11. [Java Networking cơ bản — Socket, TCP, UDP](#11-java-networking-cơ-bản--socket-tcp-udp)
+12. [Tổng kết — Bảng ghi nhớ nhanh](#12-tổng-kết--bảng-ghi-nhớ-nhanh)
+13. [Bài tập luyện tập](#13-bài-tập-luyện-tập)
 
 ---
 
@@ -69,6 +70,23 @@ catch (Exception e) {
 
 `ExceptionInInitializerError` → khi static initializer ném exception; kéo theo `NoClassDefFoundError` ở lần dùng class sau đó (Module 01.3). `StackOverflowError` → đệ quy không điểm dừng / không có tối ưu đuôi (Module 01.2).
 
+### Exception ném ra từ constructor, static block, finalizer/cleaner
+
+```java
+public class Connection {
+    private final Socket socket;
+    public Connection(String host, int port) throws IOException {
+        this.socket = new Socket(host, port);   // nếu ném ở đây, object KHÔNG BAO GIỜ tồn tại
+        socket.setSoTimeout(5000);               // nếu dòng này ném, socket đã mở nhưng object vẫn không "sinh ra"
+    }
+}
+```
+
+- **Constructor ném exception → object coi như chưa từng được tạo.** Không có tham chiếu nào trỏ tới nó (biến nhận `new Connection(...)` chưa từng được gán). Nhưng nếu constructor đã **mở** tài nguyên (socket, file handle) ở dòng trước dòng ném lỗi, tài nguyên đó **rò rỉ** vì không ai gọi `close()` được nữa — không có `this` để try-with-resources. Cách phòng: bọc phần mở tài nguyên trong `try { ... } catch (Exception e) { đóng những gì đã mở; throw e; }` ngay trong constructor, hoặc tách việc "mở" ra static factory method trả `AutoCloseable`.
+- **`this`-escape trước khi constructor ném exception** là một bẫy tinh vi: nếu constructor đăng ký `this` vào một listener/callback *trước* dòng có thể ném lỗi, phần code ngoài đã cầm tham chiếu tới một object "chưa hoàn thiện" — dù constructor sau đó ném exception. Nguyên tắc: không bao giờ để `this` thoát ra ngoài (qua listener, thread, static collection...) trước khi constructor chạy xong hoàn toàn.
+- **Static initializer block ném exception** → JVM bọc thành `ExceptionInInitializerError` (một `Error`, không phải exception gốc), và **class bị đánh dấu lỗi vĩnh viễn**: mọi lần dùng class đó sau này (kể cả ở method khác, lần gọi khác) đều ném `NoClassDefFoundError`, không chạy lại static block. Không có cách "thử lại" trong cùng JVM instance — phải sửa nguyên nhân và khởi động lại ứng dụng.
+- **`finalize()` (deprecated từ Java 9, bị xóa dần)** — nếu ném exception, JVM **âm thầm nuốt** exception đó, không log gì cả, rồi tiếp tục GC bình thường. Đây là một trong nhiều lý do `finalize()` bị coi là thiết kế thất bại. Thay thế hiện đại: `java.lang.ref.Cleaner` (Java 9+) hoặc đơn giản nhất — `try-with-resources`/`AutoCloseable` tường minh, không phụ thuộc GC.
+
 ---
 
 ## 2. Checked vs Unchecked Exception
@@ -116,6 +134,18 @@ try {
 ```
 
 > Tranh luận thực tế: nhiều người thấy checked exception gây "mệt mỏi" (`throws Exception` lan truyền, xung đột với lambda/Stream — Module 03.3). Nguyên tắc dung hòa: dùng checked khi caller **thật sự** có phương án xử lý; ngoài ra dùng unchecked và **dịch (translate)** lỗi tầng dưới thành lỗi hợp với tầng của mình (mục 6).
+
+### Checked exception — đặc sản riêng của Java, và vì sao gây tranh cãi
+
+Checked exception là một quyết định thiết kế gần như **chỉ Java có** ở quy mô lớn. C#, Kotlin, Scala, Python, JavaScript... đều không ép compiler kiểm tra exception — mọi exception coi như unchecked. Lý do lịch sử: Java ra đời năm 1995 với triết lý "buộc lập trình viên phải nghĩ tới lỗi I/O/mạng ngay từ lúc viết code, không để sót". Nhưng thực tế hai thập kỷ sau cho thấy hệ quả tiêu cực:
+
+| Vấn đề thực tế | Hệ quả |
+|---|---|
+| `throws Exception` lan truyền | Method gọi method khác ném checked exception buộc phải `throws` tiếp hoặc `catch` — dây chuyền kéo dài tới tận `main`, nhiều khi chẳng ai xử lý được gì ở giữa. |
+| Không tương thích functional interface | `Runnable.run()`, `Function.apply()`... không khai báo `throws` → không thể ném checked exception trong lambda truyền cho `Stream`/`Comparator` mà không bọc thủ công thành unchecked (Module 03.3). |
+| `catch (Exception e) {}` rỗng để "cho qua compile" | Lập trình viên bị ép xử lý nhưng không biết xử lý gì → nuốt lỗi (mục 7) — chính checked exception, thứ sinh ra để buộc xử lý cẩn thận, lại **gây ra** anti-pattern nguy hiểm nhất. |
+
+Kết luận thực dụng mà phần lớn codebase Java hiện đại (Spring, Guava...) áp dụng: **unchecked là mặc định**; chỉ dùng checked cho những lỗi **cực kỳ hiếm, cực kỳ cụ thể** mà bạn chắc chắn muốn compiler nhắc caller xử lý ngay tại chỗ (ví dụ thư viện crypto có `InvalidKeyException`). Đây là lý do Spring bọc gần như mọi exception tầng thấp (`SQLException`, `IOException` của template...) thành `RuntimeException` con cháu.
 
 ---
 
@@ -523,6 +553,38 @@ try (BufferedReader in = new BufferedReader(
 
 > `System.out` / `System.err` là `PrintStream` (luồng byte); `System.in` là `InputStream`.
 
+### `Scanner` — tiện cho input nhỏ, KHÔNG hợp file lớn
+
+```java
+Scanner sc = new Scanner(System.in);
+System.out.print("Tuổi: ");
+int age = sc.nextInt();          // tự parse số, ném InputMismatchException nếu sai định dạng
+sc.nextLine();                   // "nuốt" ký tự xuống dòng còn sót sau nextInt()
+
+Scanner fileSc = new Scanner(Path.of("data.txt"), StandardCharsets.UTF_8);  // Java 10+, ném IOException
+while (fileSc.hasNextLine()) {
+    String line = fileSc.nextLine();
+}
+```
+
+- Mạnh ở chỗ **tự parse token** (`nextInt`, `nextDouble`, `nextBoolean`) và tách theo delimiter tuỳ chỉnh (`useDelimiter(",")` — hữu ích đọc CSV đơn giản), thứ mà `BufferedReader.readLine()` không có sẵn (phải tự `Integer.parseInt` sau khi `split`).
+- **Bẫy kinh điển:** trộn `nextInt()`/`next()` với `nextLine()` — các phương thức `next*` (trừ `nextLine`) không "ăn" ký tự xuống dòng ở cuối token, nên `nextLine()` gọi ngay sau đó trả về chuỗi **rỗng** thay vì dòng tiếp theo. Cách sửa: luôn gọi thêm một `sc.nextLine()` để "dọn" buffer, hoặc đọc toàn bộ bằng `nextLine()` rồi tự parse.
+- **Hiệu năng:** `Scanner` dùng regex nội bộ để tách token → chậm hơn đáng kể so với `BufferedReader.readLine()` khi đọc file lớn (hàng trăm nghìn dòng). Quy tắc: `Scanner` cho input tương tác từ console hoặc file nhỏ cần parse kiểu dữ liệu tiện lợi; `BufferedReader`/`Files.lines()` cho xử lý file lớn.
+
+### `PrintWriter` — ghi văn bản tiện lợi, có `printf`
+
+```java
+try (PrintWriter pw = new PrintWriter(
+        Files.newBufferedWriter(Path.of("report.txt"), StandardCharsets.UTF_8))) {
+    pw.println("Báo cáo doanh thu");
+    pw.printf("Tổng: %,.2f VNĐ%n", 1234567.891);   // format kiểu C, giống String.format (Module 01.1)
+}
+```
+
+- Khác `BufferedWriter` (chỉ có `write(String)`), `PrintWriter` thêm `println`/`printf`/`format` và **không bao giờ ném checked `IOException`** từ các method ghi — lỗi được nuốt nội bộ, kiểm tra bằng `pw.checkError()` (trả `true` nếu có lỗi xảy ra). Đây là lựa chọn thiết kế cũ (giống `System.out` cũng là `PrintStream` với hành vi tương tự) để code ghi log/console không phải `try/catch` ở mọi dòng `println`.
+- Mặc định **không tự động flush** sau mỗi `println` (trừ khi tạo bằng constructor `new PrintWriter(writer, /*autoFlush*/ true)` hoặc bọc `OutputStream` với autoFlush theo `\n`). Trong try-with-resources thì không thành vấn đề vì `close()` tự flush; nhưng nếu quên đóng, dữ liệu có thể còn kẹt trong buffer chưa ra đĩa.
+- Bọc `BufferedWriter` bên trong (như ví dụ trên) để có đệm ghi — nếu bọc trực tiếp `FileWriter` không qua buffer, mỗi `println` có thể là một lần ghi xuống đĩa, chậm hơn nhiều khi ghi lặp lại.
+
 ---
 
 ## 10. Serialization
@@ -575,7 +637,186 @@ private void readObject(ObjectInputStream in) throws IOException, ClassNotFoundE
 
 ---
 
-## 11. Tổng kết — Bảng ghi nhớ nhanh
+## 11. Java Networking cơ bản — Socket, TCP, UDP
+
+Mọi API cấp cao dùng hằng ngày (REST client, `RestTemplate`/`WebClient`, driver JDBC kết nối database, Redis client...) cuối cùng đều chạy **trên nền** Socket. Hiểu Socket giúp đọc hiểu đúng nghĩa các khái niệm "connection pool", "connection timeout", "keep-alive" gặp lại ở Module 12 (JDBC) và Module 23+ (Spring Web/RESTful).
+
+### 11.1. Mô hình mạng cơ bản — địa chỉ IP, Port, Client-Server
+
+- **IP address**: định danh một máy trên mạng (ví dụ `192.168.1.10`, hoặc `127.0.0.1` — localhost, chính máy đang chạy).
+- **Port**: một số 0–65535 định danh **ứng dụng cụ thể** đang chạy trên máy đó (một máy có 1 IP nhưng chạy được hàng chục server trên nhiều port khác nhau — HTTP thường 80/8080, HTTPS 443, PostgreSQL 5432, MySQL 3306). Port 0–1023 là "well-known port", cần quyền root/admin để bind trên hầu hết hệ điều hành.
+- **Client–Server**: server mở một port, **lắng nghe** (listen) kết nối tới; client **chủ động kết nối** tới `IP:port` của server. Sau khi kết nối thiết lập, dữ liệu chạy **hai chiều**.
+- **Tầng Transport trong TCP/IP stack**: tầng Application (HTTP, FTP, DNS...) nằm trên tầng Transport, và tầng Transport chỉ có **hai lựa chọn chính**: **TCP** hoặc **UDP**. Toàn bộ mục này chỉ nói về tầng Transport — không đi sâu tầng Network (IP routing) hay Data Link (Ethernet).
+
+### 11.2. TCP — Transmission Control Protocol
+
+**Đặc điểm cốt lõi:**
+- **Connection-oriented**: phải "bắt tay" thiết lập kết nối trước khi truyền dữ liệu (3-way handshake: client gửi `SYN` → server đáp `SYN-ACK` → client đáp `ACK` → kết nối sẵn sàng).
+- **Tin cậy (reliable)**: đảm bảo dữ liệu đến **đủ**, **đúng thứ tự**, **không trùng lặp** — nếu gói tin bị mất, TCP tự động gửi lại (retransmit); nếu đến sai thứ tự, TCP tự sắp xếp lại trước khi đưa lên ứng dụng.
+- **Chi phí**: header TCP nặng hơn (~20 byte), có overhead bắt tay + xác nhận (ACK) liên tục → chậm hơn UDP nhưng đổi lại độ tin cậy.
+
+#### `ServerSocket` & `Socket` — API cơ bản
+
+```java
+// ===== Server =====
+try (ServerSocket serverSocket = new ServerSocket(5000)) {   // mở & lắng nghe port 5000
+    System.out.println("Server đang chờ kết nối...");
+    while (true) {
+        Socket clientSocket = serverSocket.accept();          // BLOCK ở đây cho tới khi có client kết nối
+        handleClient(clientSocket);                            // xử lý (nên giao cho thread khác — xem 11.2.2)
+    }
+}
+
+// Xử lý 1 client: đọc 1 dòng, echo lại — Socket cũng chỉ là InputStream/OutputStream,
+// bọc y hệt file I/O đã học ở mục 8-9 của module này
+static void handleClient(Socket socket) {
+    try (socket;   // Java 9+: biến resource có sẵn cũng dùng được trong try-with-resources
+         BufferedReader in = new BufferedReader(
+                 new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
+         PrintWriter out = new PrintWriter(
+                 new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8), true)) { // autoFlush=true
+        String line = in.readLine();
+        out.println("Echo: " + line);
+    } catch (IOException e) {
+        e.printStackTrace();
+    }
+}
+```
+
+```java
+// ===== Client =====
+try (Socket socket = new Socket("localhost", 5000);   // kết nối tới server — đây chính là bước 3-way handshake
+     BufferedReader in = new BufferedReader(
+             new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
+     PrintWriter out = new PrintWriter(
+             new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8), true)) {
+    out.println("Xin chào server!");
+    System.out.println("Server trả lời: " + in.readLine());
+}
+```
+
+> **Mấu chốt:** `Socket.getInputStream()`/`getOutputStream()` trả về đúng `InputStream`/`OutputStream` như đã học ở mục 9 — mọi kỹ thuật bọc `Buffered*`/`*Reader`/`*Writer` áp dụng y hệt. Socket cũng `implements Closeable` nên dùng try-with-resources (mục 4) để không rò rỉ kết nối.
+
+#### 11.2.1. Timeout & đóng kết nối
+
+```java
+Socket socket = new Socket();
+socket.connect(new InetSocketAddress("api.example.com", 443), 3000); // timeout kết nối 3s
+socket.setSoTimeout(5000);   // đọc dữ liệu mà quá 5s không có gì → ném SocketTimeoutException
+```
+
+- **Không set timeout** → `read()` có thể **block vô hạn** nếu phía kia không phản hồi (server treo, mạng đứt âm thầm) — một trong những bẫy sản xuất kinh điển nhất khi gọi service khác qua mạng.
+- `shutdownInput()`/`shutdownOutput()` — đóng **một chiều** của kết nối (half-close), hiếm dùng trực tiếp nhưng hữu ích khi giao thức yêu cầu báo hiệu "tôi gửi xong" mà vẫn còn đọc phản hồi.
+
+#### 11.2.2. Xử lý nhiều client đồng thời
+
+`accept()` chỉ trả về **một** kết nối mỗi lần gọi — muốn phục vụ nhiều client cùng lúc, vòng lặp `accept()` phải giao việc xử lý cho nơi khác, không tự xử lý ngay trên thread đang `accept()`:
+
+```java
+while (true) {
+    Socket clientSocket = serverSocket.accept();
+    new Thread(() -> handleClient(clientSocket)).start();   // Module 12 — mỗi kết nối 1 thread
+}
+```
+
+| Mô hình | Cách làm | Nhược điểm |
+|---|---|---|
+| 1 thread/connection (trên) | `new Thread(...).start()` mỗi lần `accept()` | Mỗi platform thread tốn ~1MB stack mặc định (Module 15) — hàng nghìn kết nối đồng thời sẽ cạn tài nguyên |
+| Thread pool | `ExecutorService` (Module 13) nhận task xử lý, tái dùng thread có sẵn | Vẫn giới hạn bởi số thread trong pool — client dư ra phải chờ |
+| Virtual Thread (Java 21+) | `Executors.newVirtualThreadPerTaskExecutor()` (Module 14) — mỗi kết nối 1 virtual thread cực nhẹ | Giải pháp hiện đại nhất cho I/O-bound server có hàng chục nghìn kết nối |
+| NIO non-blocking (xem 11.5) | 1 thread quản lý nhiều kết nối qua `Selector` | Code phức tạp hơn nhiều, thường dùng qua framework (Netty) chứ ít viết tay |
+
+### 11.3. UDP — User Datagram Protocol
+
+**Đặc điểm cốt lõi — đối lập hoàn toàn với TCP:**
+- **Connectionless**: không bắt tay, không có khái niệm "kết nối" — mỗi gói tin (datagram) độc lập, tự mang đủ địa chỉ đích.
+- **Không đảm bảo tin cậy**: gói tin có thể **mất** (không tự gửi lại), đến **sai thứ tự**, hoặc **trùng lặp** — tầng ứng dụng phải tự lo nếu cần.
+- **Nhanh hơn, overhead thấp** (header chỉ ~8 byte so với ~20 byte của TCP), không tốn round-trip bắt tay.
+
+```java
+// ===== UDP Sender =====
+try (DatagramSocket socket = new DatagramSocket()) {
+    byte[] data = "Hello UDP".getBytes(StandardCharsets.UTF_8);
+    DatagramPacket packet = new DatagramPacket(
+            data, data.length, InetAddress.getByName("localhost"), 6000);
+    socket.send(packet);
+}
+
+// ===== UDP Receiver =====
+try (DatagramSocket socket = new DatagramSocket(6000)) {   // bind vào port 6000
+    byte[] buffer = new byte[1024];                          // PHẢI cấp sẵn buffer đủ lớn
+    DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
+    socket.receive(packet);                                   // block chờ gói tin tới
+    String msg = new String(packet.getData(), 0, packet.getLength(), StandardCharsets.UTF_8);
+    System.out.println("Nhận: " + msg + " từ " + packet.getAddress());
+}
+```
+
+> ⚠️ Khác TCP (đọc theo stream, `read()` trả bao nhiêu byte tùy ý), UDP đọc theo **từng gói trọn vẹn** — nếu `buffer` nhỏ hơn gói tin gửi tới, phần dư bị **cắt bỏ âm thầm**, không ném exception.
+
+#### Bảng so sánh TCP vs UDP
+
+| Tiêu chí | TCP | UDP |
+|---|---|---|
+| Kết nối | Có (bắt tay 3 bước trước khi gửi) | Không — gửi thẳng |
+| Độ tin cậy | Đảm bảo đến đủ, đúng thứ tự, tự retransmit | Không đảm bảo — có thể mất/trùng/lệch thứ tự |
+| Overhead header | ~20 byte | ~8 byte |
+| Tốc độ | Chậm hơn (do ACK, retransmit, congestion control) | Nhanh hơn |
+| API Java | `Socket` / `ServerSocket` | `DatagramSocket` / `DatagramPacket` |
+| Dùng khi nào | HTTP/HTTPS, file transfer, email, database connection — mọi thứ cần **toàn vẹn dữ liệu** | Streaming video/audio real-time, game online, DNS query, service discovery — chấp nhận mất gói để đổi lấy độ trễ thấp |
+
+### 11.4. `InetAddress` — phân giải địa chỉ
+
+```java
+InetAddress addr = InetAddress.getByName("www.google.com");  // phân giải DNS → IP, có thể ném UnknownHostException
+System.out.println(addr.getHostAddress());                    // ví dụ 142.250.x.x
+InetAddress local = InetAddress.getLocalHost();                // IP của chính máy đang chạy
+```
+
+### 11.5. Blocking I/O vs Non-blocking I/O (`java.nio.channels`)
+
+Mô hình `Socket`/`ServerSocket` ở trên là **blocking**: `accept()`, `read()` đều **treo thread** cho tới khi có dữ liệu. Với hàng nghìn kết nối đồng thời, mô hình "1 thread/connection" (kể cả với thread pool) bắt đầu tốn kém.
+
+`java.nio.channels` cung cấp mô hình **non-blocking**: `SocketChannel`, `ServerSocketChannel`, và `Selector` — một `Selector` có thể theo dõi hàng nghìn channel cùng lúc trên **một thread**, chỉ "đánh thức" khi channel nào đó thực sự sẵn sàng đọc/ghi (tương tự cơ chế `epoll` của Linux).
+
+```java
+Selector selector = Selector.open();
+ServerSocketChannel serverChannel = ServerSocketChannel.open();
+serverChannel.bind(new InetSocketAddress(5000));
+serverChannel.configureBlocking(false);
+serverChannel.register(selector, SelectionKey.OP_ACCEPT);
+
+while (true) {
+    selector.select();   // block cho tới khi ÍT NHẤT MỘT channel sẵn sàng (không phải mỗi channel 1 thread riêng)
+    // duyệt selector.selectedKeys(), xử lý từng key theo loại sự kiện (OP_ACCEPT/OP_READ/OP_WRITE)
+}
+```
+
+> Code NIO thuần viết tay khá phức tạp (quản lý trạng thái đọc dở dang, buffer thủ công) — trong thực tế, các framework như **Netty** hoặc chính **Spring WebFlux** (Module sau) đã đóng gói mô hình non-blocking này lại, hiếm khi cần tự viết `Selector` từ đầu. Biết khái niệm để hiểu vì sao WebFlux/Netty "scale tốt hơn" với nhiều kết nối đồng thời là đủ ở giai đoạn này.
+
+### 11.6. Liên hệ với các API cấp cao hơn
+
+- **HTTP/HTTPS, REST API, WebSocket** — tất cả chạy **trên nền TCP** (một request HTTP thực chất là văn bản gửi qua một Socket TCP kết nối tới port 80/443).
+- **`java.net.http.HttpClient`** (Java 11+, đã nhắc ở Module 14) là API **cấp cao hơn Socket rất nhiều** — tự lo bắt tay, tự parse header/body HTTP, tự quản lý connection pool. Chỉ cần viết Socket tay khi tự thiết kế **giao thức riêng** (custom protocol) hoặc học nguyên lý bên dưới.
+- **JDBC** (kết nối database — sẽ gặp ở Module 12/20) và **Redis/RMI client** cũng đều dùng Socket TCP bên dưới lớp API tiện lợi.
+
+### 11.7. Bảo mật cơ bản — Socket thường vs SSLSocket/TLS
+
+`Socket` thường truyền dữ liệu **dạng plaintext** — ai chặn được gói tin trên đường truyền (man-in-the-middle) đều đọc được nội dung. `javax.net.ssl.SSLSocket`/`SSLServerSocket` mã hóa toàn bộ dữ liệu bằng TLS (giao thức đứng sau chữ "S" trong HTTPS) trước khi gửi đi — về API sử dụng gần giống `Socket` thường (cùng đọc/ghi qua `InputStream`/`OutputStream`), khác biệt nằm ở bước bắt tay TLS (trao đổi chứng chỉ, thỏa thuận khóa mã hóa) xảy ra ngầm bên dưới. Chi tiết chứng chỉ, TLS handshake, và các lỗ hổng liên quan thuộc Module 32 (Bảo mật OWASP).
+
+### 11.8. Bẫy thường gặp
+
+| Bẫy | Hậu quả | Cách tránh |
+|---|---|---|
+| Quên đóng `Socket`/`ServerSocket` | Rò rỉ file descriptor, dần dần server hết descriptor không `accept()` được nữa | Luôn try-with-resources (mục 4) — `Socket`/`ServerSocket`/`DatagramSocket` đều `implements Closeable` |
+| Không set `setSoTimeout` | `read()` treo vô hạn nếu phía kia im lặng (server chết, mạng đứt) — thread bị "khóa" mãi mãi | Luôn đặt timeout hợp lý cho socket client, đặc biệt khi gọi service bên ngoài |
+| Tưởng TCP giữ nguyên "ranh giới message" | Gửi 2 lần `write("A")` + `write("B")`, phía nhận `read()` một lần **có thể** nhận được `"AB"` gộp lại — TCP là **luồng byte liên tục (stream)**, không phải danh sách message rời rạc | Tự định nghĩa **message framing**: đọc theo dòng kết thúc bằng `\n` (như ví dụ Echo Server ở trên dùng `readLine()`), hoặc gửi kèm độ dài dữ liệu ở đầu mỗi message rồi đọc đúng số byte đó |
+| `accept()` xử lý luôn trên thread chính | Chỉ phục vụ được 1 client tại một thời điểm, các client khác phải xếp hàng chờ | Giao việc xử lý cho thread/thread pool/virtual thread khác như 11.2.2 |
+| UDP buffer quá nhỏ | Dữ liệu bị cắt bỏ âm thầm, không có exception cảnh báo | Cấp buffer đủ lớn theo MTU thực tế (thường an toàn với 1024–65507 byte tùy nhu cầu) |
+
+---
+
+## 12. Tổng kết — Bảng ghi nhớ nhanh
 
 | Khái niệm | Điểm mấu chốt |
 |---|---|
@@ -596,10 +837,14 @@ private void readObject(ObjectInputStream in) throws IOException, ClassNotFoundE
 | `readAllLines` vs `lines` | `lines()` lazy (file lớn); `readAllLines()` nạp hết RAM. |
 | `java.io` | byte (`InputStream`/`OutputStream`) vs ký tự (`Reader`/`Writer`, cần charset). Decorator: `Buffered(InputStreamReader(FileInputStream))`. |
 | Serialization | `Serializable` marker; `transient`/`static` không serialize; `serialVersionUID` lệch → `InvalidClassException`; `readObject` bỏ qua constructor; **RCE nếu dữ liệu không tin cậy** → `ObjectInputFilter`. Thực tế: dùng JSON. |
+| TCP | Connection-oriented, tin cậy, 3-way handshake. `Socket`/`ServerSocket`, `accept()` block, bọc `InputStream`/`OutputStream` y hệt file I/O. Là luồng byte liên tục — cần tự định nghĩa message framing. |
+| UDP | Connectionless, không đảm bảo tin cậy, nhanh & nhẹ hơn TCP. `DatagramSocket`/`DatagramPacket`, đọc theo từng gói trọn vẹn — buffer nhỏ bị cắt âm thầm. |
+| Nhiều client đồng thời | 1 thread/connection (tốn tài nguyên) → thread pool (`ExecutorService`) → Virtual Thread (Java 21+) → NIO non-blocking (`Selector`, thường qua Netty/WebFlux). |
+| Socket & timeout | Không `setSoTimeout` → `read()` treo vô hạn khi phía kia im lặng. Luôn đóng bằng try-with-resources (`Socket`/`ServerSocket`/`DatagramSocket` đều `Closeable`). |
 
 ---
 
-## 12. Bài tập luyện tập
+## 13. Bài tập luyện tập
 
 ### Phần A — Trắc nghiệm nhận định (giải thích lý do)
 

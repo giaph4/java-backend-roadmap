@@ -181,7 +181,40 @@ ALTER TABLE room_bookings ADD CONSTRAINT no_overlap
 | **Column-Family** | Lưu theo cột thay vì hàng, tối ưu ghi/đọc số lượng cực lớn | Cassandra, HBase | Big Data, time-series data, hệ thống ghi log khổng lồ |
 | **Graph** | Lưu dữ liệu dạng node-edge (đồ thị), tối ưu truy vấn quan hệ phức tạp | Neo4j | Mạng xã hội (bạn bè của bạn bè), hệ thống gợi ý (recommendation) |
 
-> Trong phạm vi lộ trình Java Backend cơ bản đến trung cấp, **MongoDB** và **Redis** là 2 loại NoSQL phổ biến nhất, đáng học sâu nhất — sẽ được trình bày chi tiết ở mục 5, 6, 7.
+> Trong phạm vi lộ trình Java Backend cơ bản đến trung cấp, **MongoDB** và **Redis** là 2 loại NoSQL phổ biến nhất, đáng học sâu nhất — sẽ được trình bày chi tiết ở mục 5, 6, 7. Hai loại còn lại (Column-Family, Graph) ít gặp hơn trong dự án backend cỡ vừa/nhỏ, nhưng vẫn cần hiểu **đúng vấn đề chúng giải quyết** — vì đây là câu hỏi phỏng vấn "phân biệt các loại NoSQL" rất hay gặp.
+
+### Column-Family Database — vì sao Cassandra/HBase lưu "theo cột"?
+
+RDBMS lưu dữ liệu **theo hàng (row-oriented)** — toàn bộ các cột của 1 row nằm liền nhau trên đĩa, tối ưu cho việc đọc/ghi **nguyên 1 bản ghi** (ví dụ lấy toàn bộ thông tin 1 user). Column-Family database lưu dữ liệu **theo cột (column-oriented)** — giá trị của CÙNG 1 cột, thuộc NHIỀU row khác nhau, được lưu gần nhau trên đĩa.
+
+```
+Row-oriented (RDBMS):  [user1: id,name,age] [user2: id,name,age] [user3: id,name,age] ...
+Column-oriented:       [id: user1,user2,user3...] [name: user1,user2,user3...] [age: user1,user2,user3...]
+```
+
+> **Vì sao điều này quan trọng:** rất nhiều bài toán Big Data (time-series, log, sensor data) chỉ cần đọc **một vài cột cụ thể** trên **hàng triệu row** (ví dụ: "lấy giá trị cảm biến nhiệt độ của TẤT CẢ thiết bị trong 1 giờ qua" — chỉ cần cột `temperature`, không cần đọc toàn bộ các cột khác của từng row). Với row-oriented, đĩa phải đọc lướt qua toàn bộ dữ liệu các cột không cần thiết; với column-oriented, chỉ cần đọc đúng khối dữ liệu của cột `temperature` — nhanh hơn rất nhiều lần cho loại truy vấn "aggregate trên ít cột, nhiều row" này.
+
+**Đặc trưng khác của Cassandra (đại diện tiêu biểu):**
+- **Không có "master"** — kiến trúc **masterless/peer-to-peer**, mọi node đều bình đẳng, ghi được vào bất kỳ node nào — khác hẳn MongoDB (có 1 primary trong Replica Set) hay MySQL Master-Slave. Đây là lý do Cassandra được xem là **AP** điển hình trong CAP Theorem (mục 8) — luôn ghi/đọc được kể cả khi vài node "mất liên lạc" với nhau, đổi lại có thể đọc phải dữ liệu chưa đồng bộ kịp (eventual consistency).
+- Tối ưu cực mạnh cho **ghi (write-heavy)** — phù hợp hệ thống log/sự kiện có tốc độ ghi cực lớn liên tục (IoT sensor, clickstream, audit log).
+- **Không hỗ trợ JOIN, không hỗ trợ transaction đa dòng phức tạp** như RDBMS — dữ liệu phải được thiết kế "phẳng hoá" (denormalize) ngay từ đầu theo đúng câu truy vấn sẽ dùng — triết lý thiết kế **ngược hẳn** với chuẩn hóa 3NF của RDBMS.
+
+### Graph Database — khi quan hệ MỚI LÀ dữ liệu quan trọng nhất
+
+Trong RDBMS, quan hệ giữa các bảng được biểu diễn gián tiếp qua khóa ngoại — muốn biết "bạn của bạn của A" phải `JOIN` bảng `friendships` với chính nó nhiều lần, chi phí tăng theo cấp số nhân khi số "bậc quan hệ" (hops) tăng lên. Graph Database (Neo4j) lưu dữ liệu trực tiếp dưới dạng **node** (thực thể — người, sản phẩm...) và **edge** (quan hệ có hướng, có thuộc tính riêng — "FOLLOWS", "MUA", "THÍCH") — việc "đi" từ node này sang node khác qua nhiều bậc quan hệ (graph traversal) được tối ưu ở tầng lưu trữ, không cần JOIN tính toán lại từ đầu mỗi lần.
+
+```
+(Pho:Person)-[:FOLLOWS]->(An:Person)-[:FOLLOWS]->(Binh:Person)
+// Truy vấn Cypher (ngôn ngữ query của Neo4j): tìm "bạn của bạn" của Pho
+MATCH (p:Person {name:"Pho"})-[:FOLLOWS]->()-[:FOLLOWS]->(fof)
+RETURN fof.name
+```
+
+> **Ứng dụng thực tế:** mạng xã hội (gợi ý kết bạn, "người bạn có thể biết"), hệ thống gợi ý sản phẩm (recommendation dựa trên hành vi mua chung), phát hiện gian lận (fraud detection — tìm các giao dịch/tài khoản có liên kết bất thường qua nhiều bước). Với các bài toán này, Graph DB có thể nhanh hơn RDBMS **hàng trăm lần** khi số bậc quan hệ cần truy vấn tăng lên (3-4 bậc trở lên), vì RDBMS phải JOIN lặp lại nhiều lần còn Graph DB chỉ "đi theo con trỏ" đã lưu sẵn.
+
+### NewSQL — cố "ăn cả 2 thế giới"
+
+**NewSQL** (Google Spanner, CockroachDB, TiDB) là nhóm database ra đời sau, cố gắng dung hòa mâu thuẫn: vẫn giữ **ACID đầy đủ + SQL chuẩn** như RDBMS truyền thống, nhưng vẫn **scale ngang (horizontal scaling)** được như NoSQL — điều mà RDBMS truyền thống rất khó làm (transaction/JOIN xuyên nhiều node phân tán vốn cực kỳ phức tạp để đảm bảo đúng đắn). Kỹ thuật cốt lõi thường dựa vào đồng hồ phân tán có độ chính xác cao (Spanner dùng "TrueTime" — đồng bộ bằng GPS/atomic clock) để các node xa nhau vẫn nhất trí được về thứ tự giao dịch mà không cần khóa chờ nhau quá lâu. **Không cần đi sâu ở giai đoạn học cơ bản này** — chỉ cần biết NewSQL tồn tại như một hướng đi thứ 3, cho các hệ thống cực lớn (quy mô toàn cầu) vừa cần ACID chặt vừa cần scale ngang mà cả RDBMS truyền thống lẫn NoSQL thuần túy đều khó đáp ứng trọn vẹn.
 
 ---
 
@@ -422,6 +455,29 @@ Ví dụ: ngay cả khi mạng ổn định hoàn toàn, một hệ thống mu�
 
 > **Không cần đi sâu quá vào lý thuyết CAP/PACELC ở giai đoạn học Backend cơ bản này** — chỉ cần hiểu **ý tưởng đánh đổi cốt lõi**: hệ thống SQL truyền thống thường ưu tiên **tính đúng đắn tuyệt đối** của dữ liệu (đặc biệt phù hợp nghiệp vụ tài chính), trong khi nhiều hệ thống NoSQL sẵn sàng "linh hoạt" hơn về tính nhất quán tức thời để đổi lấy khả năng phục vụ liên tục, độ trễ thấp và mở rộng dễ dàng hơn ở quy mô cực lớn.
 
+### BASE — triết lý đối lập trực tiếp với ACID
+
+Nếu ACID (Module 10) là "kim chỉ nam" thiết kế của RDBMS, thì nhiều hệ thống NoSQL theo đuổi triết lý ngược lại, gọi tắt là **BASE**:
+
+| Chữ cái | Ý nghĩa | Đối lập với ACID ở điểm nào |
+|---|---|---|
+| **BA** — Basically Available | Hệ thống LUÔN cố gắng phản hồi (ưu tiên Availability trong CAP) | Đối lập "Consistency" của ACID — chấp nhận đôi khi trả lời chưa hoàn toàn chính xác thay vì từ chối phục vụ |
+| **S** — Soft state | Trạng thái dữ liệu có thể **tự thay đổi theo thời gian** kể cả khi không có input mới (do đang trong quá trình đồng bộ giữa các node) | Đối lập "Consistency" tức thời — dữ liệu không "đứng yên" ngay sau khi ghi như RDBMS cam kết |
+| **E** — Eventual consistency | Dữ liệu **CUỐI CÙNG** rồi cũng sẽ nhất quán trên mọi node — nhưng không cam kết **NGAY LẬP TỨC** | Đối lập trực tiếp "Consistency" mạnh (strong consistency) của ACID — RDBMS cam kết đọc ngay sau khi ghi luôn thấy dữ liệu mới nhất |
+
+> **Ví dụ cụ thể Eventual Consistency:** khi ghi 1 giá trị vào Cassandra (có 3 bản sao/replica), hệ thống có thể trả lời "ghi thành công" ngay khi 1-2 replica xác nhận, mà **chưa cần chờ replica thứ 3 đồng bộ xong** — nếu ngay lập tức có request đọc tới đúng replica thứ 3 đó, có thể tạm thời nhận về dữ liệu **CŨ**. Sau một khoảng thời gian rất ngắn (thường vài mili-giây đến vài giây), tất cả replica sẽ đồng bộ và nhất quán — "eventual" (cuối cùng) là ở chỗ đó. Đây là đánh đổi CHẤP NHẬN ĐƯỢC cho dữ liệu như "số lượt like bài viết" (sai lệch tạm thời 1 giây không ai để ý), nhưng **KHÔNG chấp nhận được** cho dữ liệu như "số dư tài khoản ngân hàng" — đây chính là lý do nghiệp vụ tài chính hầu như luôn chọn RDBMS với ACID mạnh thay vì hệ thống theo triết lý BASE.
+
+### Vertical Scaling vs Horizontal Scaling — vì sao RDBMS truyền thống khó "scale ngang"
+
+| | Vertical Scaling (Scale Up) | Horizontal Scaling (Scale Out) |
+|---|---|---|
+| Cách làm | Nâng cấp 1 server duy nhất — thêm RAM, CPU mạnh hơn, ổ cứng nhanh hơn | Thêm NHIỀU server nhỏ hơn chạy song song, chia tải ra |
+| Giới hạn | Có **giới hạn vật lý** — 1 server dù mạnh đến đâu cũng có trần công suất, và chi phí tăng phi tuyến (server càng mạnh càng đắt bất tương xứng) | Về lý thuyết **gần như không giới hạn** — cần thêm công suất thì thêm server mới |
+| RDBMS truyền thống | Đây là hướng "dễ" và phổ biến nhất cho RDBMS trong nhiều năm | **Khó** — vì JOIN và Transaction ACID (đặc biệt Isolation, Module 10 mục 7) vốn được thiết kế giả định dữ liệu nằm trên **1 node duy nhất**; khi dữ liệu bị chia (sharding) ra nhiều server, JOIN xuyên server và giữ transaction nhất quán xuyên server trở thành bài toán phân tán cực kỳ phức tạp (2-phase commit, distributed transaction) |
+| NoSQL (đa số) | Vẫn hỗ trợ, nhưng không phải hướng chính | Đây là **điểm mạnh cốt lõi** — hầu hết NoSQL được thiết kế NGAY TỪ ĐẦU để chia dữ liệu (sharding/partitioning) dễ dàng ra nhiều node rẻ tiền, đánh đổi bằng việc bớt/bỏ các ràng buộc JOIN và transaction đa dòng phức tạp mà RDBMS cung cấp |
+
+> **Liên hệ:** đây chính là lý do gốc rễ vì sao bảng "khi nào chọn SQL, khi nào chọn NoSQL" ở mục 9 đặt tiêu chí "cần JOIN/Transaction chặt" lên hàng đầu — không phải NoSQL "kém" hơn ở khoản mở rộng, mà là RDBMS phải **đánh đổi** khả năng mở rộng ngang lấy sự chặt chẽ của quan hệ/transaction, trong khi NoSQL đánh đổi theo chiều ngược lại.
+
 ---
 
 ## 9. Khi nào chọn SQL, khi nào chọn NoSQL — cây quyết định thực tế
@@ -481,8 +537,13 @@ Trong thực tế, hệ thống backend **quy mô lớn hiếm khi chỉ dùng 1
 | MongoDB | Document DB, schema-less, phù hợp dữ liệu lồng nhau/cấu trúc linh hoạt; có Index + Aggregation Pipeline + Multi-Document Transaction (cần Replica Set); mở rộng bằng Sharding |
 | Redis | In-memory Key-Value Store, cực nhanh, dùng cho cache/session/rate limiting — KHÔNG phải database chính lưu trữ lâu dài; bền hóa qua RDB/AOF; loại bớt dữ liệu qua eviction policy (LRU) khi đầy RAM |
 | Redis cấu trúc nâng cao | List/Set/Sorted Set/Hash — tư duy giống Collections Framework (Module 03.1); HyperLogLog/Bitmap cho bài toán đếm/cờ hiệu tiết kiệm bộ nhớ |
+| Column-Family (Cassandra/HBase) | Lưu theo CỘT thay vì hàng — tối ưu aggregate trên ít cột/nhiều row; masterless/peer-to-peer → AP điển hình; không JOIN, phải denormalize từ đầu |
+| Graph DB (Neo4j) | Lưu trực tiếp node-edge, tối ưu truy vấn NHIỀU BẬC quan hệ (bạn của bạn) — nhanh hơn RDBMS nhiều lần khi JOIN lặp lại quá 3-4 bậc |
+| NewSQL | Hướng thứ 3: cố giữ ACID + SQL chuẩn NHƯNG vẫn scale ngang được (Spanner, CockroachDB) — dùng cho hệ thống cực lớn quy mô toàn cầu |
 | CAP Theorem | Chỉ đảm bảo 2/3 (Consistency, Availability, Partition Tolerance) trong hệ thống phân tán — SQL thường ưu tiên C, nhiều NoSQL ưu tiên A |
 | PACELC | Mở rộng CAP: kể cả KHÔNG có sự cố mạng, vẫn phải đánh đổi giữa Latency và Consistency |
+| BASE | Đối lập ACID: Basically Available, Soft state, Eventual consistency — dữ liệu "cuối cùng" mới nhất quán, không cam kết ngay lập tức |
+| Vertical vs Horizontal Scaling | Scale Up (nâng cấp 1 server, có trần vật lý) vs Scale Out (thêm nhiều server, gần như vô hạn) — RDBMS khó scale ngang vì JOIN/Transaction giả định dữ liệu ở 1 node |
 | Khi nào chọn SQL | Mặc định AN TOÀN cho đa số bài toán — quan hệ rõ ràng, cần Transaction chặt |
 | Khi nào chọn NoSQL | Bài toán CỤ THỂ: cấu trúc linh hoạt cực cao (MongoDB), cần tốc độ cực nhanh cho dữ liệu tạm (Redis) |
 | Polyglot Persistence | Hệ thống lớn thường dùng KẾT HỢP nhiều loại database, mỗi loại cho đúng mục đích |

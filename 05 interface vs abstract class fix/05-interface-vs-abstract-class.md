@@ -18,8 +18,12 @@
 8. [Constant Interface — anti-pattern](#8-constant-interface--anti-pattern)
 9. [So sánh toàn diện Interface vs Abstract Class](#9-so-sánh-toàn-diện-interface-vs-abstract-class)
 10. [Khi nào dùng cái nào — cây quyết định](#10-khi-nào-dùng-cái-nào--cây-quyết-định)
-11. [Tổng kết — Bảng ghi nhớ nhanh](#11-tổng-kết--bảng-ghi-nhớ-nhanh)
-12. [Bài tập luyện tập](#12-bài-tập-luyện-tập)
+11. [Xung đột chữ ký abstract không tương thích](#11-xung-đột-chữ-ký-abstract-không-tương-thích)
+12. [Lambda vs Anonymous Class khi cài Functional Interface](#12-lambda-vs-anonymous-class-khi-cài-functional-interface)
+13. [Dưới lớp bytecode: `invokeinterface` vs `invokevirtual`](#13-dưới-lớp-bytecode-invokeinterface-vs-invokevirtual)
+14. [Vì sao interface không có field instance — quyết định thiết kế](#14-vì-sao-interface-không-có-field-instance--quyết-định-thiết-kế)
+15. [Tổng kết — Bảng ghi nhớ nhanh](#15-tổng-kết--bảng-ghi-nhớ-nhanh)
+16. [Bài tập luyện tập](#16-bài-tập-luyện-tập)
 
 ---
 
@@ -397,7 +401,94 @@ public class Developer extends Employee {
 
 ---
 
-## 11. Tổng kết — Bảng ghi nhớ nhanh
+## 11. Xung đột chữ ký abstract không tương thích
+
+Ở §6 ta thấy hai `default` method cùng chữ ký từ hai interface không liên quan buộc phải override tường minh. Nhưng có một tình huống **không thể sửa bằng override**: hai interface khai cùng tên method với **kiểu trả về không tương thích** (không phải quan hệ cha–con, không phải covariant).
+
+```java
+interface Producer1 { String produce(); }
+interface Producer2 { Integer produce(); }
+
+class Impl implements Producer1, Producer2 { }
+// ❌ lỗi compile: "types Producer1 and Producer2 are incompatible;
+//    both define produce(), but with unrelated return types"
+```
+
+Đây **không** phải lỗi có thể vá bằng cách viết `@Override` trong `Impl`, vì bản thân hai *hợp đồng* đã mâu thuẫn về mặt kiểu — không tồn tại một method nào vừa trả `String` vừa trả `Integer`. Giải pháp duy nhất là thiết kế lại: đổi tên một trong hai method, hoặc dùng generic (`interface Producer<T> { T produce(); }`) để cả hai bên thống nhất kiểu.
+
+> ⚠️ Ngược lại, nếu kiểu trả về có quan hệ **covariant** (một kiểu là subtype của kiểu kia — ví dụ `Object` và `String`), Java cho phép và tự chọn bản có kiểu trả về **hẹp hơn** khi bạn override, tương tự covariant return type khi override method thông thường (Module 01.4 §Polymorphism). Nhưng giữa hai `default` method sẵn có (không override lẫn nhau) từ hai interface độc lập, quy tắc "không tương thích" bên trên vẫn áp dụng nếu trình biên dịch không thể tự suy ra một chữ ký hợp nhất — an toàn nhất là luôn coi đây là điều **cần tránh khi thiết kế API**, không phải thứ để "lách" bằng override.
+
+Tương tự, hai interface khai `throws` checked exception khác nhau cho cùng method không gây lỗi compile ở bản thân interface (checked exception chỉ ràng buộc ở phía *caller*), nhưng class implement phải khai `throws` giao (intersection) của các exception được phép — thực tế thường phải bỏ bớt/ bao (wrap) exception nếu muốn tương thích cả hai.
+
+---
+
+## 12. Lambda vs Anonymous Class khi cài Functional Interface
+
+Cả lambda expression lẫn anonymous class đều cài đặt được một functional interface, nhưng chúng **không hoàn toàn tương đương**:
+
+```java
+interface Greeter { void greet(); }
+
+Greeter g1 = () -> System.out.println("Lambda: " + this);          // lambda
+
+Greeter g2 = new Greeter() {                                        // anonymous class
+    @Override public void greet() { System.out.println("Anon: " + this); }
+};
+```
+
+| Khía cạnh | Lambda | Anonymous class |
+|---|---|---|
+| `this` bên trong thân | Tham chiếu tới **đối tượng bao ngoài** (lexical scoping — giống biến local) | Tham chiếu tới **chính instance anonymous** đó |
+| Có thể có field riêng / nhiều method? | Không — chỉ hiện thực đúng 1 abstract method, không state riêng ngoài biến "effectively final" bắt được từ scope ngoài | Có — có thể khai thêm field, method phụ, override nhiều hơn 1 method nếu interface/class cha cho phép |
+| Chỉ dùng cho | **Functional interface** (đúng 1 abstract method) | Bất kỳ interface hoặc (abstract) class nào, kể cả nhiều abstract method |
+| Biên dịch thành | `invokedynamic` + bootstrap method (`LambdaMetafactory`) sinh class ẩn lúc **runtime**, không tạo `.class` file riêng lúc compile | Một `.class` file thật sự được sinh lúc compile (`Outer$1.class`) |
+| Chi phí tạo instance | Nhẹ hơn — JVM có thể cache/tái sử dụng class sinh ra, đôi khi tối ưu thành singleton nếu lambda không capture biến nào | Luôn tạo object mới mỗi lần chạy tới biểu thức `new` |
+| Bắt biến ngoài (capture) | Chỉ bắt biến **effectively final** (không đổi sau khi gán), sao chép giá trị vào lúc tạo | Cũng chỉ bắt biến effectively final (cùng quy tắc), tương tự lambda |
+
+> Vì sự khác biệt then chốt là `this`: nếu một callback cần tham chiếu tới chính nó (ví dụ `Runnable` tự add/remove chính nó khỏi một danh sách listener), phải dùng anonymous class hoặc named class — lambda **không** làm được việc này một cách tự nhiên vì `this` trong lambda "xuyên qua" ra ngoài.
+
+---
+
+## 13. Dưới lớp bytecode: `invokeinterface` vs `invokevirtual`
+
+JVM dùng hai lệnh bytecode khác nhau để gọi method tùy nguồn khai báo tĩnh (kiểu biến, không phải kiểu object thực tại runtime):
+
+```java
+Vehicle v = new Car();
+v.accelerate();
+```
+
+- Nếu **kiểu khai báo** của biến (`Vehicle`) là `interface` → compiler phát ra lệnh **`invokeinterface`**.
+- Nếu kiểu khai báo là `class`/`abstract class` → compiler phát ra **`invokevirtual`**.
+
+Khác biệt về cơ chế tra cứu method tại runtime:
+
+| | `invokevirtual` (class) | `invokeinterface` (interface) |
+|---|---|---|
+| Cấu trúc tra cứu | **vtable** (virtual method table) — một mảng có **chỉ số cố định** cho từng method, được xác định ngay khi class được nạp vì class chỉ có **một** cha duy nhất (single inheritance) | **itable** (interface method table) hoặc tra cứu gián tiếp qua bảng ánh xạ interface→method, vì một class có thể `implements` **nhiều** interface không theo thứ tự cố định |
+| Tốc độ tra cứu (lý thuyết) | O(1) — chỉ số cố định, rất nhanh | Trước Java 6 chậm hơn do phải tìm interface phù hợp trong danh sách; JVM hiện đại (itable + inline caching của JIT) đã thu hẹp gần hết khoảng cách này |
+| Ảnh hưởng thực tế lên hiệu năng ứng dụng | Không đáng kể trong code thông thường | Không đáng kể — JIT compiler (Module 01.15 — JVM Internals) tối ưu hoá bằng *inline caching*, *devirtualization* khi có thể chứng minh chỉ một implementation cụ thể được dùng tại một call site |
+
+> Điểm mấu chốt cần nhớ: **đừng chọn `abstract class` thay vì `interface` vì lý do hiệu năng** — với JVM hiện đại (HotSpot) sự khác biệt gần như không đo được trong ứng dụng thực tế; JIT compiler đủ thông minh để tối ưu cả hai. Quyết định `interface` hay `abstract class` nên dựa hoàn toàn vào **thiết kế** (§10), không phải vi-tối-ưu hiệu năng.
+
+`default` method khi được gọi cũng qua `invokeinterface` (nó vẫn là method của interface); chỉ khi được **override** bởi class cụ thể thì lời gọi qua biến kiểu class sẽ dùng `invokevirtual` như bình thường.
+
+---
+
+## 14. Vì sao interface không có field instance — quyết định thiết kế
+
+Đây không phải giới hạn tùy tiện mà là một lựa chọn thiết kế có chủ đích của những người tạo ra Java:
+
+1. **Tránh "kim cương dữ liệu" (diamond of state).** Nếu interface có field instance và cho đa kế thừa, một class kế thừa cùng lúc 2 interface có field trùng tên sẽ gặp đúng vấn đề C++ multiple inheritance từng mắc: object nào "sở hữu" giá trị field đó? Cần 2 bản sao (virtual inheritance) hay 1 bản dùng chung? C++ giải quyết bằng cơ chế `virtual inheritance` phức tạp và dễ gây lỗi; Java né hoàn toàn vấn đề bằng cách cấm field instance trong interface.
+2. **Giữ interface là "hợp đồng thuần túy" (pure contract).** Một interface chỉ mô tả *class implement nó có thể làm gì* (behavior/capability), không mô tả *nó được cấu tạo từ gì* (state). Điều này giữ ranh giới rõ ràng giữa "là gì" (`abstract class`, có state) và "làm được gì" (`interface`, không state).
+3. **An toàn khi đa kế thừa.** Vì không có state để xung đột, đa kế thừa nhiều interface luôn an toàn về mặt bộ nhớ/khởi tạo — không cần quy tắc phức tạp để quyết định thứ tự khởi tạo field như khi đa kế thừa class.
+4. **`default` method vẫn có thể "trông như" dùng state** — nhưng thực chất luôn phải đi qua abstract getter/setter mà class cụ thể cung cấp (xem §2 "default method không có state để dựa vào") — bản thân interface never lưu trữ gì.
+
+> So sánh với Kotlin: Kotlin interface **cũng không có backing field thật sự** dù cho phép khai báo property (`val`/`var`) trong interface — property đó chỉ là các accessor method trừu tượng (giống getter/setter trong Java), đúng tinh thần triết lý "interface = hợp đồng, không phải state" giống Java.
+
+---
+
+## 15. Tổng kết — Bảng ghi nhớ nhanh
 
 | Chủ đề | Điểm mấu chốt |
 |---|---|
@@ -416,10 +507,14 @@ public class Developer extends Employee {
 | Marker interface | Interface rỗng tạo một *kiểu* để kiểm tra `instanceof` (`Serializable`) |
 | Chọn interface (mặc định) | capability, đa vai trò, lambda, hướng hợp đồng (Spring DI) |
 | Chọn abstract class | họ hàng gần + chia sẻ state/constructor + cần access modifier nội bộ |
+| Chữ ký abstract không tương thích | Hai interface cùng tên method, kiểu trả về không covariant → lỗi compile, **không** vá được bằng override, phải thiết kế lại (đổi tên/dùng generic) |
+| Lambda vs anonymous class | Lambda: `this` là scope ngoài, không state riêng, chỉ cho functional interface. Anonymous class: `this` là chính nó, có thể có field/method phụ, dùng được cho interface nhiều method hoặc abstract class |
+| Bytecode | Biến kiểu `interface` → `invokeinterface`; biến kiểu `class` → `invokevirtual`. JIT tối ưu cả hai, **đừng chọn theo hiệu năng** |
+| Vì sao interface không có field | Tránh "kim cương dữ liệu" khi đa kế thừa; giữ interface là hợp đồng thuần túy (behavior), tách bạch với `abstract class` (state) |
 
 ---
 
-## 12. Bài tập luyện tập
+## 16. Bài tập luyện tập
 
 ### Phần A — Trắc nghiệm nhận định (giải thích lý do)
 

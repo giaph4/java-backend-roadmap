@@ -341,6 +341,36 @@ public void increment() { count++; }   // ❌ VẪN race — volatile không là
 
 Object **bất biến** (mọi field `final`, `this` không thoát khỏi constructor) được nhìn thấy đúng ở mọi thread ngay cả khi chia sẻ qua data race. Đây là lý do `String`, `Integer`, `record` an toàn khi chia sẻ.
 
+### Double-Checked Locking — ví dụ đầy đủ vì sao `volatile` bắt buộc
+
+Mẫu kinh điển để khởi tạo lazy một singleton mà không phải `synchronized` mỗi lần gọi `getInstance()` (chỉ cần đồng bộ **lần đầu**):
+
+```java
+public class Config {
+    private static volatile Config instance;   // ⚠️ THIẾU volatile → lỗi tinh vi, khó tái hiện
+
+    public static Config getInstance() {
+        if (instance == null) {                 // check 1 — không lock, nhanh cho mọi lần gọi sau
+            synchronized (Config.class) {
+                if (instance == null) {          // check 2 — trong lock, chỉ thread đầu tiên thực sự tạo
+                    instance = new Config();
+                }
+            }
+        }
+        return instance;
+    }
+}
+```
+
+**Vì sao thiếu `volatile` là bug:** `instance = new Config()` KHÔNG phải một thao tác nguyên tử ở cấp bytecode — nó gồm 3 bước có thể bị **reordering**:
+1. Cấp phát vùng nhớ cho object.
+2. Chạy constructor, gán field.
+3. Gán địa chỉ vừa cấp phát cho biến `instance`.
+
+JIT/CPU được phép đổi thứ tự bước 2 và 3 (vì không phụ thuộc dữ liệu nhau ở góc nhìn compiler một luồng). Nếu bước 3 xảy ra **trước** bước 2, một thread khác chạy `check 1` giữa lúc đó sẽ thấy `instance != null` (đã có địa chỉ) nhưng object **chưa chạy xong constructor** — nhận về một `Config` nửa vời (field còn giá trị mặc định). `volatile` chặn đúng kiểu reordering này (mục 4.3) và đảm bảo happens-before giữa "gán xong instance" và "đọc thấy instance != null" ở thread khác.
+
+> Trong code Spring/Java hiện đại hầu như không tự viết Double-Checked Locking tay — Spring container hoặc `enum` singleton (`INSTANCE` — khởi tạo bởi class loader, vốn đã thread-safe) đảm nhiệm việc này. Nhưng hiểu ví dụ này là bài kiểm tra kinh điển về khả năng nắm bắt reordering.
+
 ---
 
 ## 8. `synchronized` vs `volatile` — khi nào dùng cái nào
@@ -480,7 +510,24 @@ Thread.currentThread();         // reference tới thread đang chạy đoạn n
 t.setName("worker-1");          // đặt tên — hiện trong log/thread dump
 t.setDaemon(true);              // trước start() — JVM không chờ daemon khi thoát
 t.setPriority(Thread.MAX_PRIORITY);  // gợi ý 1..10 cho scheduler — phụ thuộc OS, thường bỏ qua, đừng dựa vào
+Thread.yield();                 // static — GỢI Ý cho scheduler "tôi có thể nhường CPU cho thread khác cùng mức ưu tiên"
 ```
+
+### `Thread.yield()` — gợi ý, không phải lệnh
+
+`yield()` **không** làm thread chuyển sang trạng thái chờ (vẫn `RUNNABLE`), chỉ là một tín hiệu "gợi ý" gửi tới OS scheduler rằng thread hiện tại sẵn sàng nhường lượt CPU nếu có thread khác cùng mức ưu tiên đang chờ. JLS **không đảm bảo** scheduler phải làm theo — nhiều JVM/OS coi `yield()` gần như no-op. Không dùng `yield()` để đồng bộ hóa hay thay thế cho `wait`/`join`/lock — nó chỉ mang tính "tối ưu hoá lịch sự", gần như không xuất hiện trong code backend thực tế.
+
+### Sizing số lượng thread — `availableProcessors()`
+
+```java
+int cores = Runtime.getRuntime().availableProcessors();   // số core logic khả dụng cho JVM
+```
+
+Quy tắc kinh nghiệm khi định cỡ **thread pool** (chi tiết ở Module 05.2):
+- Tác vụ **CPU-bound** (tính toán thuần, không chờ I/O): số thread tối ưu ≈ `cores` (hoặc `cores + 1`) — nhiều hơn chỉ tốn context switch vô ích vì CPU đã bận 100%.
+- Tác vụ **I/O-bound** (gọi DB, HTTP, đọc file — phần lớn thời gian ở trạng thái `RUNNABLE`-chờ-syscall hoặc `WAITING`): số thread tối ưu có thể **lớn hơn nhiều lần** số core, vì thread đang chờ I/O không chiếm CPU — công thức tham khảo: `threads ≈ cores × (1 + thời_gian_chờ / thời_gian_tính_toán)`.
+
+> Đây là lý do virtual thread (mục 1) mạnh cho tác vụ I/O-bound (blocking nhiều) — JVM tự quản lý hàng triệu virtual thread trên một số ít carrier thread mà không cần tính toán sizing thủ công như trên.
 
 ### `interrupt` — cơ chế hủy hợp tác
 
@@ -524,6 +571,9 @@ Thread.interrupted();                      // đọc cờ của thread hiện t�
 | `synchronized` | Loại trừ lẫn nhau **+ visibility + reentrant**. Khóa `private final Object`, không khóa `this`/String/wrapper/field đổi. Static → khóa `.class`. Không timeout/interrupt/fairness. |
 | `volatile` | Visibility + chặn reordering, **không** atomicity. Cho cờ / công bố object bất biến / biến quan sát đơn lẻ. `count++` vẫn race. |
 | `final` field | Công bố an toàn không cần đồng bộ (nếu `this` không escape trong constructor). |
+| Double-Checked Locking | `instance = new X()` không nguyên tử (cấp phát → constructor → gán) — thiếu `volatile` thì reordering có thể lộ object "nửa vời". |
+| `Thread.yield()` | Chỉ là gợi ý cho scheduler, không đảm bảo, không dùng để đồng bộ. |
+| Sizing thread pool | CPU-bound ≈ số core; I/O-bound có thể nhiều hơn số core rất nhiều (`availableProcessors()`). |
 | `wait`/`notify` | Gọi khi giữ monitor; `wait()` **nhả lock**; luôn `wait()` trong `while`; ưu tiên `notifyAll()`. |
 | Deadlock | 4 điều kiện Coffman — phá 1 là hết. Thực tế: **lock ordering** theo id/hash cố định; `tryLock` timeout. Phát hiện bằng thread dump (`jstack`). |
 | Liveness khác | Livelock, starvation, contention. |

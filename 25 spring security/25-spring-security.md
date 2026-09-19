@@ -330,6 +330,69 @@ public class CustomUserDetailsService implements UserDetailsService {
 
 ⚠️ **Bẫy hay gặp:** Quên tiền tố `"ROLE_"` khi tạo `SimpleGrantedAuthority` — `hasRole("ADMIN")` trong `authorizeHttpRequests`/`@PreAuthorize` **ngầm tự thêm** tiền tố `"ROLE_"` khi so khớp, nên authority phải lưu là `"ROLE_ADMIN"`, không phải `"ADMIN"`. Nếu cố tình lưu authority không có tiền tố, phải dùng `hasAuthority("ADMIN")` thay vì `hasRole("ADMIN")`.
 
+### `AuthenticationManager` & `AuthenticationProvider` — cơ chế xác thực bên trong
+
+Ở `AuthController` (mục dưới), ta chỉ gọi `authenticationManager.authenticate(...)` — nhưng bên trong đó thực chất là một chuỗi ủy quyền, không phải "hộp đen":
+
+```
+authenticationManager.authenticate(UsernamePasswordAuthenticationToken)
+        │
+        ▼
+ProviderManager (implementation mặc định của AuthenticationManager)
+        │  Có 1 danh sách List<AuthenticationProvider> — thử LẦN LƯỢT từng provider
+        │  cho tới khi 1 provider trả về Authentication đã xác thực thành công
+        ▼
+DaoAuthenticationProvider (provider mặc định cho username/password)
+        │  1. Gọi UserDetailsService.loadUserByUsername(username)  -> lấy UserDetails
+        │  2. Gọi PasswordEncoder.matches(rawPassword, userDetails.getPassword())
+        │  3. Nếu khớp -> trả về Authentication ĐÃ xác thực (isAuthenticated() = true)
+        │     Nếu không khớp -> throw BadCredentialsException
+        ▼
+Authentication (đã xác thực) được trả về AuthController
+        │  AuthController tự set vào SecurityContext (hoặc bỏ qua nếu chỉ cần sinh JWT ngay)
+```
+
+- **`AuthenticationManager`** — interface, chỉ có 1 method `authenticate(Authentication)`. Bản thân nó KHÔNG biết xác thực bằng cách nào.
+- **`ProviderManager`** — implementation chuẩn của Spring, giữ `List<AuthenticationProvider>`. Hệ thống có thể có nhiều provider cùng lúc (VD: 1 provider cho username/password, 1 provider khác cho xác thực bằng API key) — mỗi provider tự khai báo `supports(Class<?> authenticationType)` để `ProviderManager` biết nên thử provider nào với loại `Authentication` nào.
+- **`DaoAuthenticationProvider`** — provider có sẵn của Spring Security, chuyên trách xác thực username/password: tự động gọi `UserDetailsService` + `PasswordEncoder` giúp bạn — đây là lý do bạn chỉ cần khai báo 2 Bean đó (`CustomUserDetailsService`, `passwordEncoder()`) mà KHÔNG cần tự viết logic so sánh password ở bất kỳ đâu.
+
+```java
+// Bean AuthenticationManager cần khai báo tường minh từ Spring Security 6+
+// (khác Spring Security 5 trở về trước tự cấu hình ngầm qua WebSecurityConfigurerAdapter)
+@Bean
+public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {
+    return config.getAuthenticationManager();
+    // Spring Boot tự lắp ráp ProviderManager + DaoAuthenticationProvider bên trong,
+    // dựa trên Bean UserDetailsService và PasswordEncoder đã khai báo sẵn trong context
+}
+```
+
+> **Vì sao cần hiểu luồng này:** Khi cần xác thực bằng cơ chế khác username/password thuần (VD: xác thực bằng OTP, xác thực 2 lớp, tích hợp LDAP) — chỉ cần viết thêm 1 `AuthenticationProvider` tùy chỉnh và đăng ký vào `AuthenticationManagerBuilder`, KHÔNG cần đụng vào Controller hay Filter đã có. Đây chính là điểm mở rộng (Strategy pattern) làm nên tính linh hoạt của Spring Security.
+
+### `PasswordEncoder` & `DelegatingPasswordEncoder` — vì sao hash có tiền tố `{bcrypt}`
+
+`PasswordEncoder` là interface chỉ 2 method: `encode(CharSequence rawPassword)` và `matches(CharSequence rawPassword, String encodedPassword)`. Từ Spring Security 5+, `PasswordEncoderFactories.createDelegatingPasswordEncoder()` (được dùng ngầm nếu bạn khai báo `new BCryptPasswordEncoder()` trực tiếp thì KHÔNG có tiền tố — nhưng nếu dùng `DelegatingPasswordEncoder` thì hash được lưu kèm tiền tố thuật toán):
+
+```java
+@Bean
+public PasswordEncoder passwordEncoder() {
+    // Cho phép hệ thống nhận diện NHIỀU thuật toán hash cùng lúc trong 1 database
+    // -> hữu ích khi migrate thuật toán (VD: từ BCrypt sang Argon2) mà không cần
+    //    rehash toàn bộ password cũ ngay lập tức
+    return PasswordEncoderFactories.createDelegatingPasswordEncoder();
+}
+```
+
+```
+{bcrypt}$2a$10$N9qo8uLOickgx2ZMRZoMye...   -> tiền tố "{bcrypt}" báo cho DelegatingPasswordEncoder
+                                              biết dùng BCryptPasswordEncoder để matches()
+{argon2}$argon2id$v=19$m=16384...          -> tương tự, dùng Argon2PasswordEncoder
+{noop}mypassword                            -> KHÔNG hash gì cả (chỉ dùng cho demo/test, TUYỆT ĐỐI
+                                              không dùng ở production)
+```
+
+⚠️ Nếu chỉ khai báo `new BCryptPasswordEncoder()` trực tiếp (như ví dụ ở đầu mục 3) thì hash lưu trong DB **không có tiền tố** `{bcrypt}` — vẫn hoạt động đúng, chỉ là không tận dụng được khả năng "đa thuật toán" của `DelegatingPasswordEncoder`. Với dự án mới không cần migrate thuật toán, dùng thẳng `BCryptPasswordEncoder` là đủ và phổ biến hơn trong thực tế.
+
 ### JwtService — tạo và verify token
 
 ```java

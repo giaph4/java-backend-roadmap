@@ -411,6 +411,26 @@ JVM dựa trên **"Weak Generational Hypothesis"**: *"đa số object chết r�
 
 > **Vì sao 2 tầng tốt hơn quét cả Heap mỗi lần?** Vì rác tập trung ở Young Gen. Minor GC chỉ đụng vùng nhỏ đó, rất thường xuyên nhưng rẻ; hiếm khi phải "động" tới Old Gen. Tổng thời gian GC giảm mạnh so với quét toàn Heap mỗi lần.
 
+### Card Table & Write Barrier — vì sao Minor GC không cần quét Old Gen
+
+Câu hỏi hóc: Minor GC chỉ tính "sống" cho object trong Young Gen dựa trên GC Roots — nhưng nếu một object **ở Old Gen** giữ tham chiếu trỏ **xuống** một object ở Young Gen (ví dụ `List` sống lâu trong Old Gen chứa phần tử vừa thêm ở Young Gen), làm sao Minor GC biết object Young đó vẫn "sống" mà **không phải quét toàn bộ Old Gen** để tìm mọi tham chiếu như vậy (việc đó sẽ triệt tiêu hoàn toàn lợi ích "chỉ động tới vùng nhỏ")?
+
+JVM giải quyết bằng **Card Table**: chia toàn bộ Heap thành các "card" nhỏ (thường 512 byte). Mỗi lần chương trình ghi một tham chiếu vào field/array (`obj.field = other;`), JIT chèn thêm một đoạn code cực nhỏ gọi là **write barrier** — nó đánh dấu "bẩn" (dirty) cái card chứa object vừa bị ghi, **chỉ khi** ghi từ Old Gen trỏ xuống Young Gen (post-write barrier, chi phí gần như 0 vì chỉ là một phép ghi byte).
+
+```
+Old Gen (đã ổn định, không quét toàn bộ)
+┌─────────────────────────────────────────┐
+│  [obj A] ...  [obj B]──ref──┐            │   card chứa B bị đánh dấu "dirty"
+│           card table: ...[clean][DIRTY]..│   khi B.field = youngObj được gán
+└───────────────────────────┼──────────────┘
+                              ▼
+Young Gen                youngObj  ← Minor GC coi đây là GC Root bổ sung
+```
+
+→ Khi Minor GC chạy, nó **chỉ cần quét những card đang "dirty"** (thường rất ít so với toàn bộ Old Gen) để tìm thêm GC Root nằm ở Old Gen trỏ xuống Young Gen, rồi coi các object Young được trỏ tới đó là "sống", thay vì phải duyệt lại toàn bộ Old Gen mỗi lần Minor GC. Đây là cơ chế then chốt khiến kiến trúc thế hệ (generational) thực sự nhanh trong thực tế, không chỉ nhanh "về lý thuyết".
+
+> Cái giá phải trả: mọi phép gán tham chiếu trong chương trình (không chỉ lúc GC) đều tốn thêm vài nano-giây cho write barrier — đây là một phần lý do vì sao JVM "chậm hơn C" ở micro-benchmark viết tham chiếu liên tục, đổi lại GC generational nhanh hơn rất nhiều so với không có card table.
+
 ---
 
 ## 9. Các GC collector (Serial → G1 → ZGC/Shenandoah)
@@ -705,6 +725,67 @@ Vài chục giây / vài nghìn–vạn lần gọi sau:  C2 tối ưu xong hot 
 
 > **`final` và JIT:** `final` giúp *người đọc* và giúp compiler `javac` với hằng số biên dịch, nhưng JIT chủ yếu dựa vào **profiling + class hierarchy analysis** chứ không phải từ khóa `final` trên method/field để quyết định inline/devirtualize. Bỏ `final` khỏi method **không** làm nó chậm đi trong thực tế (JIT tự devirtualize nếu chỉ có 1 cài đặt).
 
+### Đọc bytecode bằng `javap` — nhìn thấy những gì vừa nói ở trên bằng mắt
+
+File `.class` không phải "hộp đen". Có thể mở nó ra để thấy đúng những gì `javac` đã sinh:
+
+```
+javac Example.java
+javap -c -p Example.class        # -c: in bytecode; -p: cả method private
+javap -v Example.class           # -v: verbose — thêm constant pool, header, flags
+```
+
+```java
+public int add(int a, int b) {
+    return a + b;
+}
+```
+
+```
+public int add(int, int);
+    Code:
+       0: iload_1        // đẩy tham số a (slot 1) lên operand stack
+       1: iload_2        // đẩy tham số b (slot 2) lên operand stack
+       2: iadd            // cộng 2 giá trị đỉnh stack, đẩy kết quả trở lại
+       3: ireturn          // trả int đang ở đỉnh stack
+```
+
+Đây chính là **operand stack** và **local variable slot** đã nhắc ở mục 3 — mỗi stack frame vừa có mảng slot cho biến cục bộ, vừa có một stack riêng (operand stack) để tính toán trung gian. Bytecode là ngôn ngữ máy ảo dựa-trên-stack (stack-based), khác hẳn CPU thật (dựa trên thanh ghi) — đây là lý do JIT (mục ở trên) cần biên dịch lại thành mã máy dựa-trên-thanh-ghi mới chạy nhanh được.
+
+**Constant pool** (đã nhắc ở mục 2) là "bảng tra cứu" của class — tên class, tên method, chữ ký, literal chuỗi/số — mọi lệnh bytecode chỉ tham chiếu **index** vào bảng này thay vì nhúng thẳng giá trị, giúp `.class` nhỏ gọn và cho phép **resolution lười** (mục 11: symbolic reference → direct reference chỉ khi lần đầu dùng tới).
+
+### Bốn lệnh gọi method — vì sao JVM cần tới 4 opcode khác nhau
+
+| Opcode | Dùng khi gọi | Cơ chế dispatch |
+|---|---|---|
+| `invokestatic` | method `static` | **Tĩnh** — biết thẳng địa chỉ lúc link, không cần tra bảng ảo |
+| `invokespecial` | constructor, `private` method, `super.method()` | **Tĩnh** — không cần đa hình vì các trường hợp này luôn xác định đúng 1 cài đặt |
+| `invokevirtual` | method instance thường (`public`/`protected`/package của class) | **Động** — tra **vtable** của object thực tế lúc runtime (đa hình — Module 01.4) |
+| `invokeinterface` | method khai báo qua kiểu **interface** | **Động** — tra **itable** (chậm hơn `invokevirtual` một chút vì object có thể implement nhiều interface, tuy JIT devirtualize gần như triệt tiêu chênh lệch này — mục "Devirtualization" ở trên) |
+| `invokedynamic` | lambda, method reference, `String` concatenation (Java 9+), một số ngôn ngữ JVM khác (Groovy, Kotlin) | **Động, lười, có thể đổi target** — xem ngay dưới đây |
+
+### `invokedynamic` — lambda KHÔNG sinh ra anonymous class
+
+Một ngộ nhận rất phổ biến: `list.forEach(x -> System.out.println(x))` được compiler "biến thành" một anonymous inner class giống hệt kiểu cũ (`new Consumer() { ... }`). **Sai.** `javac` biên dịch lambda thành:
+
+1. Thân lambda → một **method riêng tư ẩn danh** ngay trong chính class chứa nó (xem bằng `javap -p`, tên dạng `lambda$main$0`) — **không** có class mới nào được sinh ra tại bước compile.
+2. Tại điểm gọi lambda, `javac` phát ra lệnh **`invokedynamic`** với một **bootstrap method** trỏ tới `java.lang.invoke.LambdaMetafactory`.
+3. **Lần đầu tiên** dòng code đó chạy, JVM gọi bootstrap method: `LambdaMetafactory` mới thật sự **sinh class hiện thực functional interface lúc runtime** (qua `ASM`/`MethodHandle`, ẩn, đặt tên dạng `Example$$Lambda$14/0x...`), rồi **liên kết** (link) `invokedynamic` đó với `CallSite` trỏ thẳng tới class vừa sinh.
+4. Những lần gọi **sau**, `invokedynamic` đã "nhớ" `CallSite` — chạy nhanh gần như lời gọi tĩnh, không phải sinh lại class.
+
+```
+Lambda x -> println(x)  ──javac──►  method ẩn "lambda$main$0" + 1 lệnh invokedynamic
+                                              │
+                                     (lần gọi đầu tiên, lúc CHẠY)
+                                              ▼
+                          LambdaMetafactory sinh 1 class ẩn hiện thực Consumer<T>
+                          (dùng MethodHandle trỏ tới lambda$main$0), rồi cache lại CallSite
+```
+
+**Vì sao thiết kế phức tạp vậy thay vì để `javac` sinh sẵn anonymous class như trước Java 8?** (1) File `.class` nhẹ hơn — không có hàng trăm class `Example$1`, `Example$2`... nếu file có nhiều lambda; (2) **Lười** — class thật sự chỉ sinh ra khi/nếu dòng code đó **thực sự chạy**, tiết kiệm thời gian khởi động cho lambda ít dùng; (3) Cho phép JVM/thư viện tối ưu cách hiện thực (ví dụ cache, chia sẻ) mà không cần đổi bytecode nguồn — chỉ cần đổi cách `LambdaMetafactory` hoạt động.
+
+Đây cũng là lý do method reference (`String::toUpperCase`) và lambda cho cùng một functional interface **có thể** (không đảm bảo) chia sẻ cùng cơ chế sinh class runtime — khác hẳn việc mỗi lambda là "một class riêng viết sẵn lúc compile" như lập trình viên C++ quen nghĩ.
+
 ---
 
 ## 13. OutOfMemoryError, cờ JVM quan trọng & container awareness
@@ -758,6 +839,21 @@ JVM đọc đúng cgroup limit (v1 và v2 — cgroup v2 hỗ trợ tốt từ JD
 
 > **Ngoài phạm vi, biết là đủ:** **AOT / GraalVM Native Image** biên dịch sẵn toàn bộ ra file thực thi native → khởi động ~ms, RAM thấp, **không cần warm-up**, nhưng mất JIT đỉnh cao (peak throughput có thể thấp hơn) và hạn chế reflection/dynamic — hợp serverless/CLI. **Project Leyden** đang đưa một phần lợi ích AOT vào HotSpot chuẩn.
 
+### CDS / AppCDS — tăng tốc khởi động mà vẫn là JVM thường (không cần biên dịch native)
+
+Mỗi lần JVM khởi động, nó phải **parse bytecode của hàng nghìn class** (JDK lõi + thư viện + code ứng dụng) rồi dựng cấu trúc metadata trong Metaspace (mục 2) — việc này lặp lại giống hệt nhau ở **mọi lần khởi động**, kể cả khi nội dung class không đổi. **Class Data Sharing (CDS)** ghi sẵn dữ liệu class đã parse ra một file archive (`.jsa`), lần khởi động sau **map thẳng (memory-map)** file đó vào Metaspace thay vì parse lại từ đầu.
+
+```bash
+# 1. Tạo archive cho các class JDK lõi (mặc định JDK đã có sẵn archive cơ bản)
+java -Xshare:dump
+
+# 2. AppCDS (Java 10+) — mở rộng sang CẢ class của ứng dụng/thư viện, không chỉ JDK
+java -XX:ArchiveClassesAtExit=app.jsa -jar app.jar     # chạy 1 lần để "ghi" các class đã dùng
+java -XX:SharedArchiveFile=app.jsa -jar app.jar        # các lần chạy sau — nạp từ archive, khởi động nhanh hơn
+```
+
+Lợi ích: giảm thời gian khởi động (thường 10–30%) **và** giảm RSS bộ nhớ (nhiều container cùng chạy trên một máy có thể **chia sẻ chung** vùng archive được map read-only — đúng tinh thần "shared" trong tên gọi). Khác AOT/GraalVM: CDS **không** biên dịch trước bytecode thành máy native — JVM vẫn thông dịch/JIT bình thường, chỉ tiết kiệm công đoạn **parse & load class**, nên vẫn giữ được **toàn bộ khả năng** của JVM chuẩn (reflection, dynamic class loading, JIT đỉnh cao sau warm-up). Đây là lựa chọn "chi phí thấp, lợi ích vừa phải" phổ biến hơn AOT cho ứng dụng Spring Boot chạy trong container, vì không cần đổi toolchain build.
+
 ---
 
 ## 14. Công cụ chẩn đoán JVM thực tế
@@ -803,6 +899,7 @@ Không cần thành thạo ngay — **biết tên, biết dùng khi nào**. Tấ
 | `System.gc()` | Chỉ là gợi ý; **không gọi trong production** — dễ ép Full GC STW |
 | Parallel vs Concurrent | Parallel = nhiều thread GC nhưng **vẫn STW**; Concurrent = GC chạy **cùng lúc với ứng dụng** |
 | Minor vs Full GC | Minor: Young, thường xuyên, ~1–10 ms. Full: cả Heap, hiếm, 0.5–5 s+ — thấy nhiều = có vấn đề |
+| Card Table / Write Barrier | Đánh dấu "dirty" card ở Old Gen khi có ghi tham chiếu Old→Young; Minor GC chỉ quét card dirty đó thay vì toàn bộ Old Gen → giữ Minor GC nhanh dù có tham chiếu ngược thế hệ |
 | Reference types | strong / **soft** (cache, dọn khi gần OOM) / **weak** (`WeakHashMap`, `ThreadLocal`, dọn ngay GC kế) / **phantom** (`Cleaner`, `get()`=null) |
 | finalize → Cleaner | `finalize()` deprecated for removal; dùng `Cleaner` + `AutoCloseable`; state không được giữ ref tới object gốc |
 | GC collectors | **Serial** (nhỏ) · **Parallel** (throughput/batch) · **CMS** (đã xóa Java 14) · **G1** (mặc định Java 9+, region, `MaxGCPauseMillis`) · **ZGC/Shenandoah** (concurrent, STW < 1 ms, Heap khổng lồ) |
@@ -820,6 +917,7 @@ Không cần thành thạo ngay — **biết tên, biết dùng khi nào**. Tấ
 | Warm-up / JMH | Chậm lúc mới khởi động là bình thường. Đo microbenchmark thủ công gần như luôn sai (dead code elim, constant fold) → dùng **JMH** |
 | OOM variants | `Java heap space` · `GC overhead limit exceeded` · `Metaspace` · `unable to create native thread` · `Direct buffer memory`. Là **Error** — đừng catch để chạy tiếp |
 | Container awareness | `-XX:+UseContainerSupport` (mặc định JDK 10+): đọc đúng cgroup. Dùng `-XX:MaxRAMPercentage=75` thay `-Xmx` cứng; `availableProcessors()` theo cgroup |
+| CDS / AppCDS | Ghi sẵn class đã parse ra file `.jsa`, lần sau memory-map thay vì parse lại → khởi động nhanh hơn + RAM thấp hơn (archive chia sẻ được giữa nhiều container). Khác AOT: vẫn là JVM thường, vẫn JIT/reflection đầy đủ |
 | Cờ luôn bật production | `-Xms`=`-Xmx`, `-XX:+HeapDumpOnOutOfMemoryError` + `HeapDumpPath`, `-Xlog:gc*`, `-XX:+ExitOnOutOfMemoryError` |
 | Công cụ | `jps` · `jstat -gcutil` · `jmap -histo/-dump` · `jstack` · `jcmd` (đa năng) · JFR + JMC · Eclipse MAT |
 
