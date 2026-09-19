@@ -1,0 +1,59 @@
+name: Docs quality checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  markdownlint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run markdownlint-cli2
+        uses: DavidAnson/markdownlint-cli2-action@v18
+        with:
+          config: .markdownlint.yml
+          globs: |
+            **/*.md
+            !node_modules
+            !.github
+            !out
+            !docs-site
+            !**/src/**
+
+  mermaid:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Cài @mermaid-js/mermaid-cli
+        run: npm install -g @mermaid-js/mermaid-cli
+      - name: Kiểm tra cú pháp sơ đồ Mermaid
+        run: node scripts/check-mermaid.mjs
+
+  link-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Kiểm tra liên kết nội bộ
+        uses: lycheeverse/lychee-action@v2
+        with:
+          args: >
+            --no-progress
+            --exclude-mail
+            --exclude "^https?://"
+            "**/*.md"
+          fail: true
+
+  structure:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Kiểm tra numbering & code fence
+        run: python scripts/check-structure.py

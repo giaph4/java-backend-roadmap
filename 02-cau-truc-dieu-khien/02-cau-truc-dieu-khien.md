@@ -1151,7 +1151,7 @@ String result = switch (grade) {
 8. **Không compile** nếu compiler không chắc đã bao phủ hết (thực ra 4 hằng đã đủ → *compile được* và không cần `default`). Nếu muốn phòng xa enum thêm hằng, thêm `default -> 0;`. (Ý đồ câu hỏi: nhận ra enum-switch expression đủ hằng thì hợp lệ mà không cần `default`.)
 9. In `nhỏ: 5`. `o` là `Integer 5`: nhãn đầu có `when i > 10` → false, bỏ qua; nhãn `case Integer i` khớp → `"nhỏ: 5"`. `case null` không cần vì `o != null`.
 10. **Không kết thúc bình thường** — `i` tăng tới `Integer.MAX_VALUE`, `i++` tiếp theo **tràn** về `Integer.MIN_VALUE` (số âm) → `i > 0` thành false → **vòng lặp thoát** sau khi cuộn vòng. Vậy nó *có* kết thúc, nhưng sau ~2,1 tỷ vòng và nhờ overflow, không phải theo cách người viết mong đợi.
-11. In `00 01 10 11 ` — với `i=0,1`: `j=0,1` in (`j==2` break trước khi in). Với `i=2`: `continue` nên không in gì.
+11. In `00 01 10 11` — với `i=0,1`: `j=0,1` in (`j==2` break trước khi in). Với `i=2`: `continue` nên không in gì.
 12. In `0` rồi **treo vô hạn**. Khi `i == 1`, `continue` nhảy lên kiểm tra điều kiện **mà chưa chạy `i++`** → `i` mãi bằng 1.
 
 </details>
