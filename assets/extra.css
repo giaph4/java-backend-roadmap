@@ -1,0 +1,58 @@
+/* Polish nhẹ cho theme Material — không đổi màu nền tảng, chỉ tinh chỉnh chi tiết. */
+
+/* Hero block đầu README/trang chủ: nền gradient dịu + bo góc + khoảng đệm thoáng */
+.md-typeset > div[align="center"]:first-of-type {
+  padding: 2rem 1.5rem 1.75rem;
+  margin: -0.5rem -0.2rem 2rem;
+  border-radius: 0.75rem;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--md-primary-fg-color) 10%, transparent) 0%,
+    transparent 70%
+  );
+}
+
+.md-typeset > div[align="center"]:first-of-type h1 {
+  margin-top: 0;
+}
+
+/* Badge (shields.io) hơi tách nhau ra cho dễ đọc và không dính sát dòng chữ */
+.md-typeset > div[align="center"]:first-of-type img {
+  margin: 0.15rem 0.2rem;
+  vertical-align: middle;
+}
+
+/* Card grid (::: grid cards) — thêm bóng nhẹ + hiệu ứng nhấc lên khi hover */
+.md-typeset .grid.cards > ul > li,
+.md-typeset .grid.cards > .card {
+  border-radius: 0.6rem;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.md-typeset .grid.cards > ul > li:hover,
+.md-typeset .grid.cards > .card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+}
+
+/* Khung chứa sơ đồ Mermaid: bo góc + viền mảnh cho tách khỏi văn bản xung quanh */
+.md-typeset .mermaid {
+  border-radius: 0.5rem;
+  padding: 0.75rem;
+  background: var(--md-code-bg-color);
+}
+
+/* Bảng: header đậm hơn 1 chút, dòng chẵn/lẻ tương phản nhẹ cho dễ dò theo hàng */
+.md-typeset table:not([class]) th {
+  font-weight: 700;
+}
+
+.md-typeset table:not([class]) tr:nth-child(even) {
+  background-color: color-mix(in srgb, var(--md-default-fg-color) 3%, transparent);
+}
+
+/* Checkbox trạng thái học trong README ("☐ Chưa học") canh giữa cho gọn cột */
+.md-typeset table:not([class]) td:last-child {
+  text-align: center;
+  white-space: nowrap;
+}

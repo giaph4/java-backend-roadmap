@@ -61,6 +61,66 @@ flowchart LR
 
 Cột **Trạng thái** để bạn tự đánh dấu tiến độ học — mặc định toàn bộ **☐ Chưa học**, tự sửa thành `[x]` (hoặc thay `☐` bằng `☑`) khi đọc xong module đó.
 
+<div class="grid cards" markdown>
+
+-   :material-language-java:{ .lg .middle } **1 · Ngôn ngữ Java**
+
+    ---
+
+    Cú pháp, OOP, SOLID, equals/hashCode — 7 module nền tảng.
+
+    [:octicons-arrow-right-24: Module 01](01-cu-phap-kieu-du-lieu/01-cu-phap-kieu-du-lieu.md)
+
+-   :material-book-open-variant:{ .lg .middle } **2 · Thư viện chuẩn & hiện đại**
+
+    ---
+
+    Collections, Generics, Stream, Concurrency, Java 9–21 — 7 module.
+
+    [:octicons-arrow-right-24: Module 08](<08 collections framework/08-collections-framework.md>)
+
+-   :material-chip:{ .lg .middle } **3 · Bên dưới lớp vỏ ngôn ngữ**
+
+    ---
+
+    JVM Internals, Design Patterns, Build Tools — 3 module.
+
+    [:octicons-arrow-right-24: Module 15](<15 jvm internals/15-jvm-internals.md>)
+
+-   :material-database:{ .lg .middle } **4 · Dữ liệu**
+
+    ---
+
+    SQL, RDBMS vs NoSQL, JPA/Hibernate — 3 module.
+
+    [:octicons-arrow-right-24: Module 18](<18 database sql/18-database-sql.md>)
+
+-   :material-leaf:{ .lg .middle } **5 · Spring**
+
+    ---
+
+    Core, Boot, REST, Data, Security — 5 module.
+
+    [:octicons-arrow-right-24: Module 21](<21 spring core/21-spring-core.md>)
+
+-   :material-shield-check-outline:{ .lg .middle } **6 · Chất lượng & vận hành**
+
+    ---
+
+    Testing, Caching, Microservices, DevOps, Observability — 5 module.
+
+    [:octicons-arrow-right-24: Module 26](<26 testing/26-testing.md>)
+
+-   :material-chart-timeline-variant:{ .lg .middle } **7 · Kiến trúc & sự nghiệp**
+
+    ---
+
+    System Design, Bảo mật OWASP, Soft Skills — 3 module.
+
+    [:octicons-arrow-right-24: Module 31](<31 system design/31-system-design.md>)
+
+</div>
+
 ### Giai đoạn 1 — Ngôn ngữ Java
 
 | # | Module | Trạng thái |

@@ -66,6 +66,12 @@ MD036: false
 # thụt lề (ví dụ: "dòng này dùng Tab -> YAML parser lỗi"), không phải lỗi thật.
 MD010: false
 
+# Material for MkDocs quy ước dùng 3 khoảng trắng sau "-" trong cú pháp
+# "grid cards" (```<div class="grid cards" markdown>```) để căn đúng khối nội
+# dung lồng bên trong (heading/---/đoạn văn/link thụt 4 cột) — có chủ đích,
+# không phải gõ nhầm.
+MD030: false
+
 # TẮT CÓ CHỦ ĐÍCH: rule này so khớp anchor link nội bộ (mục lục mỗi file) bằng
 # thuật toán tạo slug riêng của markdownlint, vốn xử lý tiếng Việt có dấu +
 # emoji (⚠️) trong heading khác với GitHub/MkDocs — nhiều false positive dù
