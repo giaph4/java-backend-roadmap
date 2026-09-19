@@ -16,9 +16,10 @@
 5. [Lộ trình phát triển Junior → Mid → Senior](#5-lộ-trình-phát-triển-junior--mid--senior)
 6. [Giao tiếp kỹ thuật trong team](#6-giao-tiếp-kỹ-thuật-trong-team)
 7. [Postmortem — học từ sự cố production](#7-postmortem--học-từ-sự-cố-production)
-8. [⚠️ Các bẫy hay gặp](#8-các-bẫy-hay-gặp)
-9. [Tổng kết — Bảng ghi nhớ nhanh](#9-tổng-kết--bảng-ghi-nhớ-nhanh)
-10. [Bài tập luyện tập](#10-bài-tập-luyện-tập)
+8. [Agile/Scrum, đọc codebase lớn, học liên tục & sức khỏe nghề nghiệp](#8-agilescrum-đọc-codebase-lớn-học-liên-tục--sức-khỏe-nghề-nghiệp)
+9. [⚠️ Các bẫy hay gặp](#9-các-bẫy-hay-gặp)
+10. [Tổng kết — Bảng ghi nhớ nhanh](#10-tổng-kết--bảng-ghi-nhớ-nhanh)
+11. [Bài tập luyện tập](#11-bài-tập-luyện-tập)
 
 ---
 
@@ -555,7 +556,117 @@ không đóng Connection đúng cách trong nhánh xử lý lỗi (thiếu try-w
 
 ---
 
-## 8. ⚠️ Các bẫy hay gặp
+## 8. Agile/Scrum, đọc codebase lớn, học liên tục & sức khỏe nghề nghiệp
+
+### Agile/Scrum — các nghi thức (ceremony) cơ bản
+
+Phần lớn team Backend hiện nay làm việc theo khung Scrum (1 nhánh của Agile). Hiểu vai trò từng nghi thức giúp bạn tham gia hiệu quả thay vì coi đó là "họp cho có":
+
+| Nghi thức | Tần suất | Mục đích |
+|---|---|---|
+| **Sprint** | Chu kỳ lặp lại (thường 1-2 tuần) | Đơn vị thời gian cố định để lập kế hoạch, thực thi, và đánh giá — tạo nhịp độ đều đặn cho team |
+| **Sprint Planning** | Đầu mỗi Sprint | Team chọn các User Story sẽ làm trong Sprint, ước lượng độ khó (Story Point) |
+| **Daily Standup** | Mỗi ngày, ~15 phút | Đồng bộ nhanh: hôm qua làm gì, hôm nay làm gì, có gì đang chặn (blocker) — KHÔNG phải báo cáo chi tiết cho quản lý |
+| **Sprint Review** | Cuối mỗi Sprint | Demo sản phẩm đã hoàn thành cho stakeholder, thu thập phản hồi |
+| **Retrospective (Retro)** | Cuối mỗi Sprint | Team tự nhìn lại: cái gì làm tốt, cái gì cần cải thiện cho Sprint sau — tinh thần tương tự Blameless Postmortem (mục 7) nhưng áp dụng cho QUY TRÌNH làm việc hàng ngày, không chỉ sự cố |
+
+**User Story** — mô tả yêu cầu theo góc nhìn người dùng, thường theo mẫu:
+```
+Là [vai trò], tôi muốn [hành động], để [lợi ích/mục đích].
+
+VD: "Là khách hàng, tôi muốn hủy đơn hàng trong vòng 1 giờ sau khi đặt,
+     để tránh mất tiền oan nếu đặt nhầm."
+```
+
+**Story Point** — đơn vị đo ĐỘ PHỨC TẠP tương đối (không phải thời gian tuyệt đối), thường dùng dãy Fibonacci (1, 2, 3, 5, 8, 13...) để ước lượng nhanh mà tránh giả vờ chính xác tuyệt đối như khi ước lượng theo giờ/ngày (liên hệ mục 6 — Estimation).
+
+> ⚠️ **Hiểu sai phổ biến:** Story Point KHÔNG quy đổi trực tiếp ra số giờ cố định — 1 Story Point ở team A có thể khác hoàn toàn 1 Story Point ở team B. Giá trị của nó nằm ở việc so sánh TƯƠNG ĐỐI trong nội bộ 1 team qua thời gian (Velocity — tổng Story Point hoàn thành mỗi Sprint), không phải để so sánh giữa các team hay báo cáo cho khách hàng như 1 cam kết thời gian.
+
+### Chiến lược đọc hiểu 1 codebase lớn, xa lạ
+
+Khi vào 1 dự án mới (hoặc 1 module bạn chưa từng đụng tới), đọc TỪ ĐẦU ĐẾN CUỐI theo thứ tự file là cách tiếp cận kém hiệu quả nhất. Chiến lược thực chiến hơn:
+
+```
+1. Bắt đầu từ ENTRY POINT — nơi request/luồng xử lý bắt đầu
+   (VD: @RestController, main() method, message listener - Module 19)
+   KHÔNG bắt đầu từ file Utility/Config ngẫu nhiên.
+
+2. Trace theo LUỒNG THỰC THI thực tế của 1 tính năng cụ thể (không cố hiểu
+   TOÀN BỘ codebase cùng lúc) - dùng Debugger đặt breakpoint và step qua
+   từng lớp (Controller -> Service -> Repository - Module 12/13) để thấy
+   dữ liệu biến đổi ra sao qua từng tầng, thay vì chỉ đọc code tĩnh.
+
+3. Đọc Test trước khi đọc Implementation - Unit Test/Integration Test
+   (Module 17) thường mô tả RÕ RÀNG "code này được kỳ vọng làm gì" hơn
+   là tự suy luận từ code nghiệp vụ phức tạp.
+
+4. Tìm ADR/RFC nếu có (mục 6) - hiểu được LÝ DO kiến trúc hiện tại thay vì
+   chỉ đoán mò qua code, tiết kiệm rất nhiều thời gian "khảo cổ".
+
+5. Đặt câu hỏi CỤ THỂ cho người trong team SAU KHI đã tự thử — không hỏi
+   "code này làm gì vậy?" (lười), mà hỏi "mình thấy method X gọi service Y
+   rồi lại gọi ngược lại service X ở dòng 42, có phải cố ý cho trường hợp Z
+   không hay là bug tồn đọng?" (đã tự điều tra, hỏi đúng trọng tâm).
+```
+
+### Học liên tục (Continuous Learning) — học SÂU trước, học RỘNG sau
+
+Ngành công nghệ có tốc độ ra công cụ/framework mới rất nhanh — cố "chạy theo" mọi xu hướng là chiến lược không bền vững. Cách tiếp cận hiệu quả hơn:
+
+- **Ưu tiên học SÂU (fundamentals)** trước — đúng tinh thần của 24 Module trong lộ trình này: OOP, Cấu trúc dữ liệu & giải thuật, mô hình mạng, Database, hệ phân tán. Những kiến thức nền tảng này **thay đổi chậm** và là nền để hiểu NHANH bất kỳ framework mới nào xây trên nó (framework JS mới ra đời liên tục, nhưng khái niệm HTTP/REST/Database đứng sau hầu như không đổi).
+- **Học RỘNG (framework/tool cụ thể) theo NHU CẦU thực tế**, không theo hype — khi dự án thực sự cần, hoặc khi đã thấy 1 công cụ được nhiều nơi uy tín (không chỉ 1 bài blog nổi) áp dụng ổn định.
+- **Đọc Release Note / Changelog chính thức** của công nghệ đang dùng hàng ngày (Java, Spring Boot...) thay vì chỉ đọc tóm tắt qua mạng xã hội — tránh hiểu sai/thiếu ngữ cảnh về tính năng mới.
+- **Dạy lại là cách học sâu nhất** — viết blog nội bộ, present trong team, hoặc mentor Junior (liên hệ mục 5) buộc bạn phải hiểu đủ sâu để giải thích rõ ràng, không chỉ "dùng được".
+
+### Làm việc từ xa (Remote) & giao tiếp bất đồng bộ (Async Communication)
+
+```
+✅ Viết message ĐẦY ĐỦ NGỮ CẢNH ngay từ đầu, không hỏi "rảnh không?" rồi
+   chờ trả lời mới nói vấn đề - người nhận có thể ở múi giờ khác, hoặc
+   đang tập trung sâu (deep work), tin nhắn "rảnh không?" chỉ tạo thêm
+   1 vòng qua lại không cần thiết.
+
+✅ VD message tốt: "Mình đang gặp lỗi Connection Timeout khi gọi Payment
+   Service từ Order Service (log đính kèm). Đã thử tăng timeout lên 5s
+   nhưng vẫn lỗi. Bạn có 15 phút để cùng xem qua hôm nay không? Nếu bận,
+   mình sẽ tiếp tục tự điều tra và cập nhật thread này."
+
+❌ "Alo bạn ơi rảnh không?" (thiếu ngữ cảnh, buộc người nhận phải hỏi lại)
+```
+
+**Kỷ luật bản thân khi làm remote:** đặt ranh giới rõ ràng giữa giờ làm việc và giờ nghỉ (dễ bị "làm việc 24/7" khi nhà = văn phòng), chủ động cập nhật tiến độ cho team thay vì chờ bị hỏi (vì không ai "nhìn thấy" bạn đang làm gì như ở văn phòng), và ưu tiên viết tài liệu/message rõ ràng hơn là dựa vào giao tiếp trực tiếp tức thời.
+
+### Burnout & cân bằng công việc-cuộc sống
+
+**Dấu hiệu cảnh báo Burnout** (kiệt sức nghề nghiệp) cần chú ý sớm: mất hứng thú với công việc từng yêu thích, mệt mỏi kéo dài dù đã nghỉ ngơi, hiệu suất giảm rõ rệt, cảm giác hoài nghi/tiêu cực về công việc kéo dài.
+
+**Phòng tránh:** đặt ranh giới thời gian làm việc rõ ràng (đặc biệt quan trọng khi làm remote — xem mục trên), nghỉ phép thực sự (không mang laptop theo "phòng khi"), chia sẻ khi cảm thấy quá tải với người quản lý TRƯỚC KHI tới điểm kiệt sức (thường dễ giải quyết hơn nhiều khi phát hiện sớm), và phân biệt rõ "áp lực tạm thời do deadline gấp" (bình thường, có điểm kết thúc) với "áp lực liên tục kéo dài không có lối ra" (dấu hiệu cần thay đổi thực sự — nói chuyện với quản lý hoặc cân nhắc môi trường khác).
+
+### Imposter Syndrome — hiện tượng cực kỳ phổ biến, không phải "yếu kém cá nhân"
+
+**Imposter Syndrome** là cảm giác dai dẳng rằng bản thân "không đủ giỏi", "may mắn mới được nhận việc/thăng chức", dù có bằng chứng khách quan ngược lại — hiện tượng này xảy ra ở TẤT CẢ cấp độ, kể cả Senior/Staff Engineer nhiều năm kinh nghiệm, đặc biệt phổ biến trong ngành công nghệ vì kiến thức luôn có "vùng chưa biết" mới xuất hiện (không ai biết hết mọi thứ).
+
+**Cách đối mặt thực tế:**
+- Ghi lại cụ thể những gì đã làm được (liên hệ STAR Method ở mục 4) — đối chiếu bằng chứng khách quan với cảm giác chủ quan "mình không đủ giỏi".
+- Chấp nhận rằng **không biết** 1 điều gì đó là chuyện BÌNH THƯỜNG trong ngành thay đổi liên tục — kỹ năng quan trọng hơn "biết hết" là khả năng **học nhanh** khi cần (liên hệ mục học liên tục ở trên).
+- Nhận ra rằng hầu hết đồng nghiệp xung quanh, kể cả người có vẻ tự tin nhất, cũng từng/đang trải qua cảm giác tương tự — đây là góc nhìn giúp giảm cảm giác "chỉ mình mình như vậy".
+
+### Xây dựng CV/Resume — nhấn mạnh TÁC ĐỘNG (impact), không chỉ liệt kê công nghệ
+
+```
+❌ "Sử dụng Java, Spring Boot, MySQL, Docker, Kubernetes để phát triển hệ thống."
+   (chỉ liệt kê công nghệ — không nói được ĐÃ LÀM GÌ, KẾT QUẢ RA SAO)
+
+✅ "Tối ưu API lấy danh sách đơn hàng bằng cách khắc phục N+1 Query Problem
+   (JOIN FETCH + DTO Projection - Module 11), giảm thời gian phản hồi từ
+   3s xuống 200ms, giảm 60% tải Database ở giờ cao điểm."
+```
+
+> **Nguyên tắc:** Mỗi dòng mô tả kinh nghiệm nên trả lời được câu hỏi "Vậy thì SAO?" (so what?) — công nghệ dùng là PHƯƠNG TIỆN, KẾT QUẢ ĐO LƯỜNG ĐƯỢC (giảm bao nhiêu %, tăng bao nhiêu người dùng, giảm bao nhiêu lỗi) mới là điều nhà tuyển dụng thực sự quan tâm, và cũng chính là nội dung STAR Method (mục 4) áp dụng ngay trong CV chứ không chỉ lúc phỏng vấn trực tiếp.
+
+---
+
+## 9. ⚠️ Các bẫy hay gặp
 
 1. **Viết Documentation 1 lần rồi không bao giờ cập nhật** — tài liệu lỗi thời còn nguy hiểm hơn không có tài liệu (người đọc tin tưởng thông tin SAI).
 
@@ -583,7 +694,7 @@ không đóng Connection đúng cách trong nhánh xử lý lỗi (thiếu try-w
 
 ---
 
-## 9. Tổng kết — Bảng ghi nhớ nhanh
+## 10. Tổng kết — Bảng ghi nhớ nhanh
 
 | Khái niệm | Ghi nhớ nhanh |
 |---|---|
@@ -600,10 +711,17 @@ không đóng Connection đúng cách trong nhánh xử lý lỗi (thiếu try-w
 | RFC vs ADR | RFC = thảo luận TRƯỚC quyết định; ADR = ghi lại lý do SAU khi đã chốt, không sửa lại |
 | Estimation | Chia nhỏ công việc + buffer cho rủi ro không lường trước |
 | Blameless Postmortem | Tập trung sửa QUY TRÌNH/hệ thống, không quy trách nhiệm cá nhân |
+| Sprint/Standup/Retro | Nhịp lặp cố định, đồng bộ nhanh hàng ngày, tự cải thiện quy trình cuối mỗi Sprint |
+| Story Point | Đo ĐỘ PHỨC TẠP tương đối (Fibonacci), không quy đổi trực tiếp ra giờ/ngày |
+| Đọc codebase lớn | Bắt đầu từ Entry Point, trace luồng thực thi bằng Debugger, đọc Test trước Implementation |
+| Học liên tục | Ưu tiên học SÂU (fundamentals) trước, học RỘNG (framework) theo nhu cầu thực tế, không theo hype |
+| Async Communication | Viết đủ ngữ cảnh ngay từ đầu, không hỏi "rảnh không?" rồi mới nói vấn đề |
+| Imposter Syndrome | Cảm giác phổ biến ở MỌI cấp độ, không phải yếu kém cá nhân — đối chiếu bằng chứng khách quan |
+| CV/Resume | Nhấn mạnh TÁC ĐỘNG đo lường được (số liệu cụ thể), không chỉ liệt kê tên công nghệ |
 
 ---
 
-## 10. Bài tập luyện tập
+## 11. Bài tập luyện tập
 
 ### Phần A — Trắc nghiệm nhận định (Đúng/Sai + giải thích)
 

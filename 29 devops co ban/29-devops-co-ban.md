@@ -10,7 +10,7 @@
 ## Mục lục
 
 1. [Vấn đề "Works on my machine" — vì sao cần Docker](#1-vấn-đề-works-on-my-machine)
-2. [Docker Image vs Container](#2-docker-image-vs-container)
+2. [Docker Image vs Container](#2-docker-image-vs-container) (kèm Container Registry, Immutable Infrastructure)
 3. [Dockerfile — đóng gói ứng dụng Spring Boot](#3-dockerfile)
 4. [Docker Compose — chạy nhiều container cùng lúc](#4-docker-compose)
 5. [Linux Command Line cần thiết](#5-linux-command-line-cần-thiết)
@@ -18,9 +18,10 @@
 7. [GitHub Actions — CI/CD thực hành](#7-github-actions)
 8. [Giới thiệu Kubernetes](#8-giới-thiệu-kubernetes)
 9. [Deployment Strategy: Rolling Update, Blue-Green, Canary](#9-deployment-strategy)
-10. [⚠️ Các bẫy hay gặp](#10-các-bẫy-hay-gặp)
-11. [Tổng kết — Bảng ghi nhớ nhanh](#11-tổng-kết--bảng-ghi-nhớ-nhanh)
-12. [Bài tập luyện tập](#12-bài-tập-luyện-tập)
+10. [Môi trường Dev/Staging/Production, IaC, Git Branching, Feature Flag](#10-môi-trường-devstagingproduction-iac-git-branching-feature-flag)
+11. [⚠️ Các bẫy hay gặp](#11-các-bẫy-hay-gặp)
+12. [Tổng kết — Bảng ghi nhớ nhanh](#12-tổng-kết--bảng-ghi-nhớ-nhanh)
+13. [Bài tập luyện tập](#13-bài-tập-luyện-tập)
 
 ---
 
@@ -113,6 +114,29 @@ Layer 1: (Kernel Layer - dùng chung với Host)
 ```
 
 **Lợi ích của cơ chế Layer:** Docker **cache lại từng Layer** — nếu Layer nào không đổi (VD: base image, dependency), lần build sau **không cần build lại**, chỉ build lại Layer bị thay đổi → tăng tốc quá trình build đáng kể.
+
+### Container Registry — nơi lưu trữ và phân phối Image
+
+Image sau khi build (`docker build`) chỉ nằm trên máy vừa build. **Container Registry** là kho lưu trữ tập trung để **đẩy (push)** Image lên và **kéo (pull)** về từ bất kỳ máy nào khác (server CI/CD, server production, máy đồng nghiệp) — tương tự vai trò của Maven Repository (Module 17) nhưng cho Docker Image thay vì file `.jar`.
+
+```bash
+docker tag myapp:1.0 myregistry.com/myteam/myapp:1.0   # Gắn nhãn Image theo địa chỉ Registry đích
+docker push myregistry.com/myteam/myapp:1.0             # Đẩy Image lên Registry
+docker pull myregistry.com/myteam/myapp:1.0              # Máy khác kéo Image về để chạy
+```
+
+- **Public Registry:** Docker Hub — kho công khai, phổ biến cho base image (`eclipse-temurin`, `postgres`, `redis`...).
+- **Private Registry:** Amazon ECR, Google Artifact Registry, Azure ACR, hoặc tự host (Harbor, Nexus) — dùng cho image nội bộ công ty, không public ra ngoài, tích hợp kiểm soát quyền truy cập.
+- **Image tag & versioning:** `myapp:1.0`, `myapp:latest` — `latest` chỉ là 1 tag thông thường (không phải "phiên bản mới nhất" theo nghĩa đặc biệt gì cả), ⚠️ **tránh dùng `latest` cho production deploy** vì không xác định được chính xác đang chạy version nào, nên tag rõ theo số phiên bản hoặc Git commit SHA (`myapp:a1b2c3d`) để truy vết được chính xác.
+
+### Immutable Infrastructure — nguyên tắc đứng sau toàn bộ mô hình Container
+
+Bảng so sánh Image/Container ở trên có ghi Image là **bất biến (immutable)** — đây không chỉ là đặc điểm kỹ thuật mà là cả 1 **triết lý vận hành hạ tầng hiện đại**:
+
+- **Cách làm CŨ (mutable infrastructure):** Server chạy production được **sửa trực tiếp** khi cần cập nhật (SSH vào, `apt update`, sửa file cấu hình tại chỗ) — theo thời gian, không ai nhớ chính xác server đó đã bị chỉnh sửa những gì → **"config drift"** (hạ tầng thực tế lệch khỏi tài liệu/kỳ vọng ban đầu), rất khó tái lập y hệt môi trường đó ở nơi khác.
+- **Cách làm MỚI (immutable infrastructure):** Không bao giờ sửa Container/server đang chạy. Khi cần thay đổi (code mới, cấu hình mới) → build **Image MỚI** → **thay thế toàn bộ** Container cũ bằng Container mới từ Image đó, Container cũ bị hủy hoàn toàn.
+
+> **Liên hệ:** Đây chính là cơ chế đứng sau Rolling Update/Blue-Green Deployment (mục 9) — Kubernetes/hệ thống deploy không "vá" Pod cũ, mà luôn tạo Pod MỚI từ Image mới rồi loại bỏ Pod cũ. Nhờ vậy, môi trường production tại bất kỳ thời điểm nào cũng **khớp chính xác 100%** với 1 Image cụ thể đã được test — không còn tình trạng "không ai biết chính xác server đang chạy gì" như mô hình sửa trực tiếp truyền thống.
 
 ---
 
@@ -713,7 +737,103 @@ Nếu v2 phát hiện lỗi ở BẤT KỲ giai đoạn nào -> route traffic NG
 
 ---
 
-## 10. ⚠️ Các bẫy hay gặp
+## 10. Môi trường Dev/Staging/Production, IaC, Git Branching, Feature Flag
+
+### DevOps là gì — không chỉ là công cụ
+
+**DevOps** trước hết là một **văn hóa/thực hành làm việc**, không chỉ là "dùng Docker + Jenkins". Trước DevOps, Dev (viết code) và Ops (vận hành hạ tầng) thường là 2 team tách biệt ("silo") — Dev ném code "qua tường" cho Ops deploy, mỗi bên đổ lỗi cho bên kia khi có sự cố. DevOps phá bỏ ranh giới đó: Dev chịu trách nhiệm luôn cả việc code mình chạy ổn định ở production ("You build it, you run it"), Ops tham gia sớm hơn vào thiết kế hệ thống. Mục tiêu cuối cùng: **deploy nhanh hơn, thường xuyên hơn, nhưng vẫn ổn định** — CI/CD, Docker, Kubernetes (đã học ở các mục trên) chỉ là **công cụ hiện thực hóa** văn hóa này, không phải bản chất của nó.
+
+### Môi trường (Environment): Dev → Staging → Production
+
+Một thay đổi code hiếm khi đi thẳng từ máy Developer lên Production — luôn có các môi trường trung gian để giảm rủi ro:
+
+| Môi trường | Mục đích | Đặc điểm |
+|---|---|---|
+| **Development (Dev)** | Developer code và test nhanh trên máy cá nhân | Dữ liệu giả, cấu hình lỏng lẻo, có thể lỗi vặt |
+| **Staging (hay Pre-production/UAT)** | Môi trường **giống hệt Production nhất có thể** để test lần cuối trước khi release | Cùng version OS/DB/dependency với Production, dữ liệu giống thật (đã ẩn danh nếu cần), nơi QA/stakeholder duyệt tính năng |
+| **Production (Prod)** | Môi trường phục vụ **người dùng thật** | Yêu cầu ổn định cao nhất, mọi thay đổi đều phải qua kiểm tra kỹ ở Staging trước |
+
+⚠️ **Vì sao Staging phải giống Production:** Nếu Staging dùng MySQL 5.7 nhưng Production dùng MySQL 8, hay Staging thiếu load thật (chỉ vài request/giây) trong khi Production chịu hàng nghìn request/giây, thì việc test "pass" ở Staging không đảm bảo gì cho Production — đây chính là biến thể khác của vấn đề "works on my machine" đã nói ở mục 1, chỉ là xảy ra giữa 2 môi trường server thay vì giữa máy dev và server.
+
+### Infrastructure as Code (IaC) — hạ tầng cũng là code
+
+**Vấn đề trước IaC:** Kỹ sư vận hành tự tay bấm chuột/gõ lệnh tạo server, mở port, cấu hình firewall trên giao diện cloud provider (AWS Console, Azure Portal...) — không ai nhớ chính xác đã làm gì, không thể tái lập y hệt hạ tầng ở môi trường khác, dễ **cấu hình lệch (config drift)** giữa các môi trường theo thời gian.
+
+**IaC** giải quyết bằng cách định nghĩa toàn bộ hạ tầng (server, network, database, load balancer...) dưới dạng **file cấu hình có thể version control** (commit vào Git y hệt code ứng dụng), rồi dùng công cụ để tạo/thay đổi hạ tầng tự động dựa trên file đó.
+
+```hcl
+# ví dụ Terraform - tạo 1 server AWS EC2 khai báo bằng code
+resource "aws_instance" "app_server" {
+  ami           = "ami-0abcdef1234567890"
+  instance_type = "t3.medium"
+  tags = {
+    Name = "order-service-prod"
+  }
+}
+```
+
+- **Terraform** — công cụ IaC phổ biến nhất, hỗ trợ đa nền tảng cloud (AWS/Azure/GCP), khai báo **trạng thái mong muốn** (declarative — "tôi muốn có 3 server như thế này"), Terraform tự tính toán cần tạo/sửa/xóa gì để đạt trạng thái đó.
+- **Ansible** — công cụ tự động hóa cấu hình (configuration management), thường dùng để cài đặt phần mềm/cấu hình bên TRONG server đã tồn tại (khác Terraform tập trung tạo MỚI hạ tầng), dùng cú pháp YAML "playbook", không cần agent cài sẵn trên máy đích (agentless, qua SSH).
+
+**Lợi ích cốt lõi:** Version control cho hạ tầng (xem lịch sử ai đổi gì, revert được), tái lập được y hệt ở nhiều môi trường (dev/staging/prod chỉ khác vài biến số), giảm lỗi thao tác tay, review hạ tầng qua Pull Request y hệt review code.
+
+### GitOps — dùng Git làm "nguồn chân lý duy nhất" cho việc deploy
+
+**GitOps** là 1 bước tiến thêm trên nền IaC: thay vì CI/CD pipeline **chủ động chạy lệnh** deploy hạ tầng/ứng dụng (push-based — pipeline "đẩy" thay đổi vào cluster), GitOps đảo ngược mô hình — 1 **Agent** (VD: ArgoCD, Flux) chạy liên tục **BÊN TRONG** cluster, tự so sánh trạng thái khai báo trong Git (VD: file YAML Deployment trong repo) với trạng thái thực tế đang chạy, và **tự động đồng bộ** khi phát hiện khác biệt (pull-based).
+
+```
+Mô hình CI/CD truyền thống (Push-based):
+Pipeline (bên ngoài cluster) --kubectl apply--> Kubernetes Cluster
+-> Pipeline cần được cấp quyền truy cập TRỰC TIẾP vào cluster (rủi ro bảo mật)
+
+Mô hình GitOps (Pull-based):
+Git Repo (khai báo trạng thái mong muốn) <--liên tục theo dõi-- ArgoCD/Flux (chạy TRONG cluster)
+-> Agent tự "kéo" thay đổi về, cluster không cần mở quyền truy cập cho hệ thống bên ngoài
+```
+
+**Lợi ích cốt lõi:**
+- **Git là nguồn chân lý duy nhất (single source of truth)** — muốn biết cluster production đang chạy phiên bản nào, chỉ cần xem trạng thái nhánh Git tương ứng, không cần SSH vào server kiểm tra.
+- **Audit trail tự nhiên** — mọi thay đổi hạ tầng đều đi qua Pull Request + Git history, dễ truy vết ai đổi gì khi nào (y hệt lợi ích của IaC ở trên, nhưng áp dụng riêng cho bước "deploy" cuối cùng).
+- **Rollback cực đơn giản** — chỉ cần `git revert` commit gây lỗi, Agent tự động phát hiện và đồng bộ cluster về trạng thái cũ, không cần chạy lại toàn bộ pipeline.
+- **Bảo mật tốt hơn** — không cần cấp credential truy cập cluster cho hệ thống CI bên ngoài (GitHub Actions...), giảm bề mặt tấn công.
+
+> **Liên hệ thực tế:** CI/CD Pipeline (mục 6, 7) vẫn đảm nhiệm build/test/tạo Docker Image như bình thường — GitOps chỉ thay đổi **BƯỚC CUỐI** (deploy): thay vì pipeline tự chạy `kubectl apply`, pipeline chỉ cần cập nhật file YAML (VD: đổi tag Image mới) trong 1 Git repo riêng chứa cấu hình hạ tầng ("config repo"), rồi ArgoCD/Flux tự phát hiện và đồng bộ vào cluster.
+
+### Git Branching Strategy — liên hệ trực tiếp CI/CD
+
+Chiến lược đặt nhánh Git ảnh hưởng trực tiếp tới khi nào CI/CD Pipeline (mục 6, 7) được kích hoạt:
+
+| Chiến lược | Cách hoạt động | Phù hợp |
+|---|---|---|
+| **Git Flow** | Nhiều nhánh dài hạn: `main` (production), `develop` (tích hợp), `feature/*`, `release/*`, `hotfix/*` | Dự án release theo chu kỳ cố định (VD: 2 tuần/lần), cần kiểm soát chặt |
+| **Trunk-based Development** | Mọi người commit thẳng (hoặc qua nhánh sống rất ngắn ngày) vào 1 nhánh chính (`main`/`trunk`), dùng Feature Flag (xem bên dưới) để giấu tính năng chưa hoàn thiện | Đội ngũ có CI/CD mạnh, muốn deploy liên tục nhiều lần/ngày — phổ biến ở các công ty áp dụng Continuous Deployment thực sự |
+
+⚠️ **Đánh đổi:** Git Flow an toàn hơn khi đội chưa có CI/CD tốt (nhiều bước kiểm tra thủ công trước khi merge `develop` → `main`), nhưng branch sống lâu dễ bị "merge conflict địa ngục" khi nhiều người cùng làm dài ngày trên nhánh riêng. Trunk-based giảm hẳn vấn đề này nhưng đòi hỏi test suite đủ tin cậy để commit thẳng vào `main` không phá vỡ hệ thống.
+
+### Feature Flag (Feature Toggle) — tách "deploy" khỏi "release"
+
+**Vấn đề:** Đôi khi cần deploy code lên production (để chạy CI/CD thường xuyên, tránh nhánh sống quá lâu — hỗ trợ Trunk-based ở trên) nhưng **CHƯA muốn** người dùng thấy tính năng mới ngay (còn đang test, hoặc muốn ra mắt đúng thời điểm marketing).
+
+**Feature Flag** là 1 điều kiện `if` (thường đọc từ cấu hình/service riêng, có thể bật/tắt **không cần deploy lại**) bọc quanh code tính năng mới:
+
+```java
+if (featureFlagService.isEnabled("new-checkout-flow", currentUser)) {
+    return newCheckoutFlow();   // Tính năng mới - chỉ bật cho % user/nhóm user nhất định
+} else {
+    return oldCheckoutFlow();   // Hành vi cũ, mặc định
+}
+```
+
+**Lợi ích:**
+- **Tách "deploy" khỏi "release"** — deploy code lên production bất kỳ lúc nào (an toàn, tính năng vẫn tắt), rồi "release" (bật flag) vào thời điểm mong muốn mà **không cần deploy lại**.
+- Kết hợp Canary Deployment (mục 9.3) ở mức tính năng — bật flag cho 5% user trước, tăng dần, tắt ngay nếu có vấn đề (rollback tức thì bằng cách tắt flag, không cần rollback cả bản deploy).
+- Hỗ trợ A/B testing — bật flag khác nhau cho các nhóm user để so sánh hiệu quả.
+
+⚠️ **Bẫy:** Feature Flag để lại quá lâu sau khi tính năng đã ổn định (không dọn dẹp code nhánh `else` cũ) khiến code tích tụ nhiều `if` lồng nhau, khó đọc, khó maintain — nên coi Feature Flag là **tạm thời**, dọn dẹp ngay sau khi tính năng đã rollout 100% và ổn định.
+
+---
+
+## 11. ⚠️ Các bẫy hay gặp
 
 1. **Không dùng Multi-stage Build** — Image production chứa cả Maven, source code, công cụ build không cần thiết, kích thước phình to, tăng bề mặt tấn công bảo mật.
 
@@ -756,7 +876,7 @@ app:
 
 ---
 
-## 11. Tổng kết — Bảng ghi nhớ nhanh
+## 12. Tổng kết — Bảng ghi nhớ nhanh
 
 | Khái niệm | Ghi nhớ nhanh |
 |---|---|
@@ -775,10 +895,14 @@ app:
 | Kubernetes Service | Điểm truy cập ổn định tới nhóm Pod — tương tự Service Discovery |
 | liveness vs readiness | liveness = còn sống hay không (fail → kill Pod); readiness = sẵn sàng nhận traffic hay không (fail → tạm ngừng route) |
 | Deployment Strategy | Rolling Update (mặc định, đơn giản) / Blue-Green (rollback tức thì, tốn tài nguyên) / Canary (rủi ro thấp nhất, phức tạp nhất) |
+| Dev/Staging/Production | Staging phải giống Production nhất có thể — nếu không, test "pass" ở Staging vô nghĩa |
+| Infrastructure as Code | Hạ tầng định nghĩa bằng file, version control được, tái lập được (Terraform tạo mới, Ansible cấu hình bên trong) |
+| Git Flow vs Trunk-based | Git Flow: nhiều nhánh dài hạn, an toàn khi CI/CD chưa mạnh; Trunk-based: commit thẳng `main`, cần Feature Flag hỗ trợ |
+| Feature Flag | Tách "deploy" (đưa code lên prod) khỏi "release" (bật cho user thấy) — bật/tắt không cần deploy lại, dọn dẹp sau khi ổn định |
 
 ---
 
-## 12. Bài tập luyện tập
+## 13. Bài tập luyện tập
 
 ### Phần A — Trắc nghiệm nhận định (Đúng/Sai + giải thích)
 

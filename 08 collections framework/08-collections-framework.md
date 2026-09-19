@@ -19,8 +19,10 @@
 9. [An toàn luồng & bất biến](#9-an-toàn-luồng--bất-biến)
 10. [Bẫy thường gặp](#10-bẫy-thường-gặp)
 11. [Cây quyết định: chọn cấu trúc dữ liệu nào?](#11-cây-quyết-định-chọn-cấu-trúc-dữ-liệu-nào)
-12. [Tổng kết — Bảng ghi nhớ nhanh](#12-tổng-kết--bảng-ghi-nhớ-nhanh)
-13. [Bài tập luyện tập](#13-bài-tập-luyện-tập)
+12. [Comparable vs Comparator — đào sâu](#12-comparable-vs-comparator--đào-sâu)
+13. [Chi phí Autoboxing trong Collection — đào sâu](#13-chi-phí-autoboxing-trong-collection--đào-sâu)
+14. [Tổng kết — Bảng ghi nhớ nhanh](#14-tổng-kết--bảng-ghi-nhớ-nhanh)
+15. [Bài tập luyện tập](#15-bài-tập-luyện-tập)
 
 ---
 
@@ -562,7 +564,128 @@ Lưu cặp key → value?
 
 ---
 
-## 12. Tổng kết — Bảng ghi nhớ nhanh
+## 12. Comparable vs Comparator — đào sâu
+
+Cả hai đều để trả lời câu hỏi "phần tử nào đứng trước phần tử nào", nhưng khác nhau về **vị trí đặt logic so sánh**.
+
+### `Comparable<T>` — "thứ tự tự nhiên" gắn liền với class
+
+```java
+public class Student implements Comparable<Student> {
+    private final String name;
+    private final double gpa;
+
+    @Override
+    public int compareTo(Student other) {
+        return Double.compare(this.gpa, other.gpa);   // thứ tự tự nhiên: theo GPA tăng dần
+    }
+}
+List<Student> list = new ArrayList<>(...);
+Collections.sort(list);          // dùng compareTo() — chỉ CÓ MỘT thứ tự tự nhiên
+```
+
+- Chỉ **một** class implement **một** `compareTo()` → chỉ có **một** cách sắp xếp "mặc định".
+- Method nằm **bên trong** class được sắp xếp — phải sửa được source code của class đó.
+- `TreeSet`/`TreeMap` không có Comparator tường minh sẽ tự dùng `compareTo()` của key.
+
+### Hợp đồng (contract) của `compareTo`
+
+| Quy tắc | Ý nghĩa |
+|---|---|
+| **Dấu hiệu nhất quán ngược** | `sgn(a.compareTo(b)) == -sgn(b.compareTo(a))` |
+| **Bắc cầu (transitive)** | `a > b` và `b > c` ⇒ `a > c` |
+| **Nhất quán khi bằng** | `a.compareTo(b) == 0` ⇒ `a.compareTo(c)` và `b.compareTo(c)` phải cùng dấu với mọi `c` |
+| **Khuyến nghị mạnh — không bắt buộc** | `(a.compareTo(b) == 0) == a.equals(b)` — nếu vi phạm, `TreeSet`/`TreeMap` sẽ coi hai object "bằng nhau" theo `compareTo` dù `equals()` nói khác (đã nêu ở mục 3, đây là gốc rễ). |
+
+> ⚠️ Không bao giờ viết `return a.getX() - b.getX();` để so hai `int` — nếu hiệu số **tràn số** (integer overflow, ví dụ `Integer.MIN_VALUE` trừ số dương), dấu bị sai, phá vỡ tính bắc cầu và gây bug ẩn cực khó tái hiện. Luôn dùng `Integer.compare(a, b)` / `Double.compare(a, b)`.
+
+### `Comparator<T>` — thứ tự "bên ngoài", tùy ngữ cảnh
+
+Không đụng vào class gốc, định nghĩa **bao nhiêu thứ tự tùy thích**, truyền vào nơi cần (`sort`, `TreeMap`, `PriorityQueue`, `Stream.sorted`).
+
+```java
+Comparator<Student> byName = Comparator.comparing(Student::getName);
+Comparator<Student> byGpaDesc = Comparator.comparingDouble(Student::getGpa).reversed();
+
+// Kết hợp nhiều tiêu chí — so gpa trước, gpa bằng nhau thì so name
+Comparator<Student> byGpaThenName =
+    Comparator.comparingDouble(Student::getGpa).reversed()
+              .thenComparing(Student::getName);
+
+list.sort(byGpaThenName);                      // List.sort — không cần Collections.sort nữa (Java 8+)
+Set<Student> ranked = new TreeSet<>(byGpaThenName);
+```
+
+### Bộ combinator tĩnh cần thuộc
+
+| Phương thức | Công dụng |
+|---|---|
+| `Comparator.comparing(keyExtractor)` | So theo một field trích ra bằng method reference (field kiểu `Comparable`). |
+| `Comparator.comparingInt/Long/Double(...)` | Bản chuyên biệt cho primitive — tránh autoboxing so với `comparing` tổng quát. |
+| `.reversed()` | Đảo ngược một comparator đã có, **không** cần viết lại từ đầu. |
+| `.thenComparing(...)` | Tiêu chí phụ khi tiêu chí trước "hòa" (trả `0`) — xích được nhiều lần. |
+| `Comparator.naturalOrder()` | Bọc `compareTo()` sẵn có của kiểu `Comparable` thành một `Comparator`. |
+| `Comparator.reverseOrder()` | Ngược lại thứ tự tự nhiên — tương đương `naturalOrder().reversed()`. |
+| `Comparator.nullsFirst(cmp)` / `nullsLast(cmp)` | Bọc thêm một comparator để **cho phép `null`** — `null` luôn nhỏ nhất/lớn nhất, tránh `NullPointerException` khi field có thể null. |
+
+```java
+Comparator<Student> byNameNullSafe =
+    Comparator.comparing(Student::getNickname, Comparator.nullsLast(Comparator.naturalOrder()));
+```
+
+### Bảng chọn nhanh
+
+| Tiêu chí | `Comparable` | `Comparator` |
+|---|---|---|
+| Số lượng thứ tự khả dụng | Đúng 1 ("thứ tự tự nhiên") | Không giới hạn |
+| Sửa source code class gốc? | Bắt buộc | Không cần |
+| Dùng cho kiểu bên thứ ba (thư viện) không sửa được? | Không thể | Có thể |
+| API dùng ngầm định khi không truyền gì | `Collections.sort(list)`, `new TreeSet<>()` | `list.sort(cmp)`, `new TreeSet<>(cmp)`, `stream().sorted(cmp)` |
+
+---
+
+## 13. Chi phí Autoboxing trong Collection — đào sâu
+
+Mọi collection chuẩn (`ArrayList<Integer>`, `HashMap<String,Long>`...) chỉ lưu được **kiểu tham chiếu**, không lưu trực tiếp `int`/`long`/`double`. Vì vậy mỗi phần tử nguyên thủy đưa vào collection đều bị **autobox** thành object wrapper (Module 01.1) — đây không chỉ là cú pháp gọn, mà có **chi phí bộ nhớ và thời gian thật**.
+
+### Chi phí bộ nhớ
+
+```java
+int[] primArr = new int[1_000_000];          // ~4 MB   (4 byte/phần tử, liền khối)
+List<Integer> boxedList = new ArrayList<>();  // mỗi Integer là 1 OBJECT riêng trên heap:
+                                               //   12-16 byte header + 4 byte giá trị + padding ≈ 16 byte/object
+                                               // CỘNG mảng Object[] chứa 8 byte reference/phần tử (64-bit, chưa nén)
+                                               // ⇒ tổng ~24 byte/phần tử → ~24 MB, gấp ~6 lần mảng nguyên thủy
+```
+
+- Mỗi `Integer` là một object **độc lập, rải rác** trên heap (trừ khi rơi vào Integer Cache -128..127) → mất cache locality, GC phải quét nhiều object nhỏ hơn là 1 block liền.
+- `HashMap<Integer, Integer>` còn tốn hơn nữa: mỗi entry là một `Node` (object) chứa `hash`, `key` (object), `value` (object), `next` — nhiều lớp gián tiếp hơn hẳn mảng phẳng.
+
+### Chi phí thời gian
+
+- **Autoboxing/unboxing** diễn ra ở *mọi* lần `add`/`get`/so sánh — với vòng lặp hàng triệu phần tử, chi phí tạo object (dù nhỏ) cộng dồn đáng kể so với thao tác trên `int[]` trực tiếp.
+- **So sánh `==` giữa hai `Integer` lấy ra từ collection** dễ sai (Module 01.1 — Integer Cache chỉ cache -128..127); trong ngữ cảnh collection càng dễ quên vì cứ tưởng "đang làm việc với số".
+
+```java
+Integer a = list.get(0);
+Integer b = list.get(1);
+if (a == b) { ... }        // ⚠️ so sánh reference, chỉ đúng "tình cờ" nếu giá trị trong khoảng cache
+if (a.equals(b)) { ... }   // ✅ đúng luôn — hoặc unbox: a.intValue() == b.intValue()
+```
+
+### Khi nào chi phí này thực sự đáng quan tâm
+
+| Tình huống | Khuyến nghị |
+|---|---|
+| Dưới vài chục nghìn phần tử, code nghiệp vụ thông thường | Cứ dùng `List<Integer>`/`Map<K, Integer>` — đọc dễ, JIT + Integer Cache đủ tốt. |
+| Hàng triệu phần tử số, vòng lặp tính toán nặng (số học, ma trận, xử lý tín hiệu) | Ưu tiên **mảng nguyên thủy** (`int[]`, `double[]`) hoặc `IntStream`/`LongStream`/`DoubleStream` (Module 03.3) — các stream chuyên biệt này tránh boxing hoàn toàn cho phần lớn thao tác trung gian (`map`, `filter`, `sum`, `average`). |
+| Cần thư viện collection nguyên thủy chuyên dụng (hiếm khi cần trong bài tập/backend CRUD thông thường) | Có các thư viện ngoài JDK như Eclipse Collections, fastutil — nằm ngoài phạm vi `java.util` nên chỉ nhắc tên. |
+
+> **Tóm gọn triết lý thiết kế:** Java đánh đổi hiệu năng thô của mảng nguyên thủy để lấy sự thống nhất API (mọi collection đều thao tác trên `Object`/generic `T`) — hợp lý cho ~95% code nghiệp vụ, nhưng là điểm cần nhớ khi viết code tính toán hiệu năng cao.
+
+---
+
+## 14. Tổng kết — Bảng ghi nhớ nhanh
 
 | Khái niệm | Điểm mấu chốt |
 |---|---|
@@ -583,10 +706,12 @@ Lưu cặp key → value?
 | An toàn luồng | Mặc định: không. `Collections.synchronizedXxx` (tự khóa khi duyệt). Đa luồng thật → concurrent collections (Module 09). |
 | Chỉ đọc | `unmodifiableList` = view (nguồn đổi thì rò rỉ); `List.copyOf` / `List.of` = bất biến thật. |
 | Bẫy | `list.remove(int)` vs `remove(Object)`; `Arrays.asList` cố định kích thước; `capacity ≠ size`; autobox trong `contains`; `stream().toList()` bất biến. |
+| `Comparable` vs `Comparator` | `Comparable` = 1 thứ tự tự nhiên, sửa trong class gốc. `Comparator` = nhiều thứ tự, truyền từ ngoài, ghép bằng `comparing().reversed().thenComparing()`. Không bao giờ `a.getX() - b.getX()` để so `int` (tràn số) — dùng `Integer.compare`. |
+| Autoboxing trong Collection | Mọi collection chuẩn chỉ chứa được object, nên `int`/`double`... bị box → tốn bộ nhớ (~object header + padding) và thời gian hơn mảng nguyên thủy. Dữ liệu số khối lượng lớn, tính toán nặng → ưu tiên mảng nguyên thủy hoặc `IntStream`/`LongStream`/`DoubleStream`. |
 
 ---
 
-## 13. Bài tập luyện tập
+## 15. Bài tập luyện tập
 
 ### Phần A — Trắc nghiệm nhận định (giải thích lý do)
 

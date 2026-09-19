@@ -570,6 +570,33 @@ public class ServiceA {
 }
 ```
 
+### Cơ chế 3-level cache — vì sao Field/Setter Injection "vá" được vòng lặp
+
+Spring giải quyết circular dependency cho Field/Setter Injection bằng 3 `Map` cache bên trong `DefaultSingletonBeanRegistry`:
+
+| Cache | Chứa gì |
+|---|---|
+| `singletonObjects` (level 1) | Bean đã khởi tạo **hoàn chỉnh** (DI xong, init xong) — cache "chính thức" |
+| `earlySingletonObjects` (level 2) | Bean **mới new xong, CHƯA populate property** — bản "thô", raw reference |
+| `singletonFactories` (level 3) | `ObjectFactory` biết cách tạo ra bản "thô" ở trên, dùng 1 lần rồi bị xóa |
+
+**Luồng xử lý khi tạo `ServiceA` (phụ thuộc `ServiceB`, `ServiceB` phụ thuộc ngược lại `ServiceA`):**
+
+```
+1. Spring bắt đầu tạo ServiceA -> gọi constructor rỗng -> có object ServiceA (chưa inject field)
+2. Đưa 1 ObjectFactory<ServiceA> vào singletonFactories (level 3) -> "hứa" sẽ cung cấp ref sớm nếu ai cần
+3. Populate field ServiceA -> cần ServiceB -> Spring bắt đầu tạo ServiceB
+4. ServiceB cần ServiceA -> Spring tìm trong singletonObjects: KHÔNG có (chưa xong)
+                          -> tìm earlySingletonObjects: KHÔNG có
+                          -> tìm singletonFactories: CÓ! gọi ObjectFactory lấy ref "thô" của ServiceA,
+                             đẩy ref đó lên earlySingletonObjects (level 2), xóa khỏi level 3
+5. ServiceB nhận được ref "thô" của ServiceA (object đã new, field ServiceA-trong-B trỏ đúng địa chỉ,
+   dù ServiceA vẫn ĐANG populate dở field khác) -> ServiceB hoàn tất khởi tạo -> chuyển vào singletonObjects
+6. Quay lại bước 3: ServiceA nhận được ServiceB (đã hoàn chỉnh) -> ServiceA hoàn tất -> chuyển vào singletonObjects
+```
+
+> ⚠️ **Vì sao Constructor Injection KHÔNG dùng được cơ chế này:** ở bước 1, Spring cần gọi constructor **ngay** để có ref "thô" — nhưng nếu constructor của `ServiceA` đòi `ServiceB` làm tham số, Spring **không thể** gọi constructor trước khi có `ServiceB` (khác Field/Setter Injection, nơi object rỗng được tạo trước bằng constructor không tham số, rồi field mới được set sau). Đây là lý do field injection "linh hoạt" hơn về mặt kỹ thuật — nhưng chính sự linh hoạt này che giấu 1 lỗi thiết kế đáng lẽ nên bị phát hiện sớm.
+
 **Giải pháp đúng đắn — Refactor:**
 
 ```java

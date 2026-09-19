@@ -21,10 +21,11 @@
 10. [CommandLineRunner & ApplicationRunner](#10-commandlinerunner--applicationrunner)
 11. [Spring Boot Actuator](#11-spring-boot-actuator)
 12. [Đóng gói & triển khai ứng dụng](#12-đóng-gói--triển-khai-ứng-dụng)
-13. [Tự viết Auto-configuration — hiểu "phép màu" từ bên trong](#13-tự-viết-auto-configuration)
-14. [⚠️ Các bẫy hay gặp](#14-các-bẫy-hay-gặp)
-15. [Tổng kết — Bảng ghi nhớ nhanh](#15-tổng-kết--bảng-ghi-nhớ-nhanh)
-16. [Bài tập luyện tập](#16-bài-tập-luyện-tập)
+13. [DevTools & Testing trong Spring Boot](#13-devtools--testing-trong-spring-boot)
+14. [Tự viết Auto-configuration — hiểu "phép màu" từ bên trong](#14-tự-viết-auto-configuration)
+15. [⚠️ Các bẫy hay gặp](#15-các-bẫy-hay-gặp)
+16. [Tổng kết — Bảng ghi nhớ nhanh](#16-tổng-kết--bảng-ghi-nhớ-nhanh)
+17. [Bài tập luyện tập](#17-bài-tập-luyện-tập)
 
 ---
 
@@ -792,7 +793,70 @@ spring:
 
 ---
 
-## 13. Tự viết Auto-configuration
+## 13. DevTools & Testing trong Spring Boot
+
+### Spring Boot DevTools — vòng lặp phát triển nhanh hơn
+
+```xml
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-devtools</artifactId>
+    <optional>true</optional>   <!-- không đóng gói vào JAR production -->
+</dependency>
+```
+
+`spring-boot-devtools` chỉ **kích hoạt khi chạy từ IDE** (Spring Boot tự phát hiện đang chạy trong thư mục `target/classes` thay vì trong JAR đã đóng gói — nên tự tắt khi deploy) và mang lại 2 tính năng chính:
+
+| Tính năng | Cơ chế |
+|---|---|
+| **Automatic Restart** | DevTools dùng **2 ClassLoader**: 1 "base" ClassLoader nạp thư viện bên thứ 3 (hiếm đổi), 1 "restart" ClassLoader nạp code của bạn. Khi biên dịch lại 1 class (Ctrl+S trong IDE với auto-build bật), chỉ **restart ClassLoader** bị hủy và nạp lại — nhanh hơn nhiều so với tắt/bật cả JVM từ đầu. |
+| **LiveReload** | DevTools chạy kèm 1 LiveReload server (port 35729) — trình duyệt có cài extension LiveReload sẽ tự **refresh trang** khi phát hiện tài nguyên tĩnh (HTML/CSS/JS trong `static/`, `templates/`) thay đổi, không cần F5 thủ công. |
+
+⚠️ **Lưu ý:** Automatic Restart **không nhanh bằng** hot-swap thật sự (như JRebel) — nó vẫn khởi động lại ApplicationContext, chỉ là restart nhanh hơn cold-start nhờ tách ClassLoader. Thay đổi cấu trúc class (thêm/xóa method, field) vẫn cần restart này; hot-swap JVM thường (không DevTools) qua debugger chỉ thay được **nội dung method**, không thêm được method mới.
+
+### Testing trong Spring Boot — tổng quan (chi tiết ở Module Testing riêng)
+
+Bài này **chỉ giới thiệu khái quát** 2 chiến lược test chính để bạn hình dung bức tranh tổng thể — annotation, kỹ thuật mock, assertion chi tiết thuộc Module Testing riêng.
+
+| Loại test | Annotation | Phạm vi context được nạp | Tốc độ |
+|---|---|---|---|
+| **Full integration test** | `@SpringBootTest` | Nạp **toàn bộ** ApplicationContext (mọi Bean, kể cả DataSource, web server nếu có `webEnvironment`) | Chậm — dùng khi cần test luồng end-to-end thật |
+| **Slice test — Web layer** | `@WebMvcTest(OrderController.class)` | Chỉ nạp tầng MVC (Controller, `@ControllerAdvice`, filter/converter liên quan) — Service/Repository phải `@MockBean` | Nhanh |
+| **Slice test — JPA layer** | `@DataJpaTest` | Chỉ nạp `@Entity`, `@Repository`, cấu hình DataSource (mặc định chuyển sang **in-memory DB** như H2 nếu có trên classpath) | Nhanh |
+
+```java
+@WebMvcTest(OrderController.class)
+class OrderControllerTest {
+    @Autowired private MockMvc mockMvc;
+    @MockBean private OrderService orderService;   // KHÔNG nạp OrderService thật, chỉ mock
+
+    @Test
+    void getOrder_shouldReturn200() throws Exception {
+        when(orderService.findById(1L)).thenReturn(new Order(1L, "PAID"));
+        mockMvc.perform(get("/api/orders/1"))
+               .andExpect(status().isOk())
+               .andExpect(jsonPath("$.status").value("PAID"));
+    }
+}
+```
+
+> **Vì sao ưu tiên slice test hơn `@SpringBootTest` khi có thể:** `@SpringBootTest` nạp toàn bộ context (bao gồm cả kết nối DataSource thật, Bean không liên quan tới thứ đang test) — chạy chậm hơn đáng kể khi project lớn có hàng trăm Bean. Slice test chỉ nạp đúng phần cần thiết, giữ test suite chạy nhanh, khuyến khích chia nhỏ theo layer giống kiến trúc đã bàn ở mục 5.
+
+### Liên hệ 12-Factor App — triết lý đứng sau nhiều thiết kế của Spring Boot
+
+[12-Factor App](https://12factor.net/) là tập nguyên tắc xây dựng ứng dụng cloud-native hiện đại; nhiều mục trong bài này chính là hiện thân trực tiếp của nó:
+
+| Yếu tố 12-Factor | Tương ứng trong Spring Boot |
+|---|---|
+| **III. Config** — cấu hình tách khỏi code, lưu trong biến môi trường | Externalized Configuration (mục 8, 9) — `application.yml` + biến môi trường + `${DB_PASSWORD}` |
+| **V. Build, release, run** — tách bạch rõ 3 giai đoạn | Fat JAR build 1 lần (`mvn package`), release/run bằng cách đổi Property Source ngoài JAR (mục 9), không build lại cho từng môi trường |
+| **VI. Processes** — ứng dụng chạy như tiến trình stateless | Cùng với Session/Cache ngoài (Redis) — khuyến khích để scale ngang nhiều instance dễ dàng |
+| **IX. Disposability** — khởi động nhanh, tắt "có trách nhiệm" | Graceful Shutdown (mục 12) — tối đa hóa khả năng chịu lỗi khi container/pod bị terminate đột ngột |
+| **XI. Logs** — xem log như luồng sự kiện (event stream), không tự quản lý file log | Spring Boot mặc định ghi log ra `stdout`, để hạ tầng (Docker/Kubernetes/ELK) thu thập — không tự xoay vòng file log trong code ứng dụng |
+
+---
+
+## 14. Tự viết Auto-configuration
 
 Hiểu sâu cơ chế Auto-configuration (mục 3) từ góc nhìn "người tạo ra nó" — không chỉ "người dùng nó" — giúp củng cố toàn bộ kiến thức trước đó, và là nền tảng nếu sau này cần đóng gói 1 module dùng chung thành **Starter riêng** cho nhiều dự án trong công ty.
 
@@ -849,7 +913,7 @@ app:
 
 ---
 
-## 14. ⚠️ Các bẫy hay gặp
+## 15. ⚠️ Các bẫy hay gặp
 
 1. **Đặt class `@SpringBootApplication` sai vị trí** (không ở package gốc) → `@ComponentScan` bỏ sót Bean ở package khác.
 
@@ -879,7 +943,7 @@ app:
 
 ---
 
-## 15. Tổng kết — Bảng ghi nhớ nhanh
+## 16. Tổng kết — Bảng ghi nhớ nhanh
 
 | Khái niệm | Ghi nhớ nhanh |
 |---|---|
@@ -896,11 +960,14 @@ app:
 | Actuator | `/actuator/health`, `/actuator/metrics` — giám sát production, nhớ bảo mật; `HealthIndicator` mở rộng kiểm tra riêng |
 | Fat JAR / Layered JAR | Fat JAR: code+dependency+server trong 1 file; Layered JAR tách theo tần suất đổi — tối ưu cache Docker |
 | Graceful Shutdown | `server.shutdown: graceful` — hoàn tất request đang chạy trước khi tắt, cần cho Kubernetes rolling update |
+| DevTools | 2 ClassLoader (base/restart) để restart nhanh khi code đổi; LiveReload tự refresh trình duyệt; chỉ hoạt động khi chạy từ IDE, tự tắt trong JAR production |
+| Testing (tổng quan) | `@SpringBootTest` nạp full context (chậm) vs slice test `@WebMvcTest`/`@DataJpaTest` (chỉ nạp đúng layer cần test, nhanh hơn nhiều) |
+| 12-Factor App | Config tách code (III), build 1 lần chạy nhiều môi trường (V), stateless process (VI), graceful shutdown (IX), log ra stdout (XI) |
 | Tự viết Auto-configuration | `@AutoConfiguration` + file `AutoConfiguration.imports` — cơ chế y hệt mọi starter chính thức của Spring Boot |
 
 ---
 
-## 16. Bài tập luyện tập
+## 17. Bài tập luyện tập
 
 ### Phần A — Trắc nghiệm nhận định (Đúng/Sai + giải thích)
 

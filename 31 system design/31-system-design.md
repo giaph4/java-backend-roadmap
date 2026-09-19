@@ -15,6 +15,7 @@
 4. [Database Sharding](#4-database-sharding)
 5. [CDN (Content Delivery Network)](#5-cdn)
 6. [Rate Limiting](#6-rate-limiting)
+6b. [Bloom Filter — kiểm tra "chắc chắn KHÔNG có" cực nhanh](#6b-bloom-filter--kiểm-tra-chắc-chắn-không-có-cực-nhanh-cực-nhẹ-bộ-nhớ)
 7. [CAP Theorem & PACELC — áp dụng vào lựa chọn kiến trúc](#7-cap-theorem--pacelc)
 8. [Quy trình tiếp cận 1 câu hỏi System Design](#8-quy-trình-tiếp-cận-1-câu-hỏi-system-design)
 9. [Case Study 1: Thiết kế URL Shortener (bit.ly)](#9-case-study-1-url-shortener)
@@ -326,6 +327,24 @@ Lưu TIMESTAMP của MỖI request trong "cửa sổ thời gian" (VD: 1 phút g
 Nhược điểm: Tốn bộ nhớ (phải lưu timestamp của MỌI request)
 ```
 
+**2b. Leaky Bucket (họ hàng gần với Token Bucket, tư duy ngược lại):**
+
+```
+Request đến được xếp vào 1 "xô" (bucket) có dung lượng giới hạn
+Xô "rò rỉ" (leak) request ra ngoài để xử lý theo TỐC ĐỘ CỐ ĐỊNH, đều đặn (VD: đúng 5 request/giây)
+Xô ĐẦY (quá nhiều request đang chờ xử lý) -> request mới bị từ chối
+
+Khác Token Bucket ở ĐIỂM MẤU CHỐT:
+- Token Bucket: cho phép BURST (xử lý dồn dập ngay khi còn token) -> tốc độ XỬ LÝ không đều
+- Leaky Bucket: LUÔN xử lý ở tốc độ ĐỀU ĐẶN, bất kể request dồn dập cỡ nào -> làm "mượt" traffic (traffic shaping)
+
+Ưu điểm: Tốc độ output ổn định tuyệt đối — phù hợp khi hệ thống downstream (VD: 1 API bên thứ 3)
+         yêu cầu nghiêm ngặt "không quá X request/giây", không chấp nhận burst dù ngắn hạn
+Nhược điểm: Request hợp lệ có thể phải CHỜ trong xô dù server còn dư sức xử lý ngay lập tức
+```
+
+> **Chọn Token Bucket hay Leaky Bucket?** Token Bucket phù hợp bảo vệ **chính hệ thống của mình** khỏi quá tải nhưng vẫn thân thiện với traffic thực tế (vốn dĩ hay có burst ngắn hạn, VD: user bấm nút nhiều lần liên tiếp). Leaky Bucket phù hợp khi cần **làm mượt traffic gửi ĐI** tới 1 hệ thống khác có giới hạn tốc độ nghiêm ngặt (VD: gọi ra API bên thứ 3 chỉ cho phép đúng N request/giây, không chấp nhận burst).
+
 **3. Fixed Window Counter (đơn giản nhất nhưng có nhược điểm):**
 
 ```
@@ -371,6 +390,50 @@ public class RateLimitingFilter extends OncePerRequestFilter {
 ```
 
 > **Nơi triển khai Rate Limiting trong thực tế:** Thường đặt tại **API Gateway** (đã học Module 19) — tập trung tại 1 điểm, áp dụng cho toàn hệ thống, không cần lặp lại logic ở từng service riêng lẻ (giống nguyên tắc tập trung Authentication tại Gateway).
+
+---
+
+## 6b. Bloom Filter — kiểm tra "chắc chắn KHÔNG có" cực nhanh, cực nhẹ bộ nhớ
+
+**Vấn đề thực tế:** Trước khi query 1 thao tác tốn kém (query Database, gọi ra service khác), nhiều hệ thống muốn kiểm tra nhanh "phần tử này CÓ KHẢ NĂNG tồn tại không?" mà không cần load toàn bộ dữ liệu vào bộ nhớ hay đánh 1 query thật sự.
+
+**Bloom Filter** là 1 cấu trúc dữ liệu xác suất (probabilistic data structure) trả lời câu hỏi đó cực nhanh (O(1)) với bộ nhớ CỰC NHỎ so với lưu toàn bộ dữ liệu gốc — đánh đổi lại là **có thể sai theo 1 CHIỀU DUY NHẤT**:
+
+```
+Bloom Filter chỉ trả lời 2 khả năng:
+  - "CHẮC CHẮN KHÔNG tồn tại"      -> luôn ĐÚNG 100%, không bao giờ sai (No False Negative)
+  - "CÓ THỂ tồn tại"                -> có thể SAI (False Positive) — nói "có thể có"
+                                       nhưng thực ra KHÔNG có
+-> Không bao giờ có chuyện Bloom Filter báo "chắc chắn không có" mà thực ra CÓ.
+```
+
+### Cơ chế hoạt động (khái quát)
+
+```
+Cấu trúc: 1 mảng bit (bit array) kích thước m, khởi tạo toàn số 0, kèm k hàm hash độc lập
+
+Thêm phần tử x vào Filter:
+  -> tính k giá trị hash của x -> BẬT (set = 1) k vị trí bit tương ứng trong mảng
+
+Kiểm tra phần tử y có trong Filter không:
+  -> tính k giá trị hash của y -> kiểm tra CẢ k vị trí bit tương ứng
+  -> NẾU có bất kỳ 1 bit nào = 0  -> CHẮC CHẮN y CHƯA từng được thêm (chính xác 100%)
+  -> NẾU cả k bit đều = 1        -> y CÓ THỂ đã được thêm (nhưng có thể là "trùng ngẫu nhiên"
+                                     do phần tử KHÁC đã bật đúng những bit đó -> False Positive)
+```
+
+> Tỷ lệ False Positive tăng dần khi mảng bit càng "đầy" (càng nhiều phần tử được thêm vào) — cần chọn kích thước `m` và số hàm hash `k` phù hợp với số lượng phần tử dự kiến để giữ tỷ lệ sai chấp nhận được (thường thiết kế ở mức < 1%).
+
+### Ứng dụng thực tế trong thiết kế hệ thống
+
+| Use case | Cách dùng |
+|---|---|
+| **Cache Penetration Prevention** (liên hệ Module 18 — Cache) | Trước khi query DB cho 1 key không có trong Cache, kiểm tra Bloom Filter trước — nếu Filter nói "chắc chắn không tồn tại", trả lỗi NGAY, không cần đánh 1 query DB vô ích (chặn tấn công cố tình query hàng loạt key không tồn tại để "làm sập" DB qua Cache Miss liên tục) |
+| **Kiểm tra username/email đã tồn tại** (khi đăng ký tài khoản) | Check Bloom Filter trước — nếu "chắc chắn chưa có", cho phép đăng ký ngay không cần query DB; nếu "có thể đã có", MỚI query DB để xác nhận chính xác (giảm tải query DB cho trường hợp phổ biến — hầu hết username thử đăng ký đều CHƯA tồn tại) |
+| **Trình duyệt cảnh báo Malicious URL** (Google Safe Browsing) | Danh sách hàng tỷ URL độc hại không thể tải hết vào RAM máy client — Bloom Filter nén thành kích thước rất nhỏ, chỉ khi "có thể trùng" mới gọi API kiểm tra chính xác |
+| **Cassandra/HBase** | Trước khi đọc từ đĩa (chậm) để tìm 1 key trong SSTable, kiểm tra Bloom Filter của từng file trước — bỏ qua ngay các file "chắc chắn không chứa" key đó |
+
+> **Mức độ ưu tiên học:** Giống Consistent Hashing (mục 4) — hiểu **vấn đề nó giải quyết** (kiểm tra tồn tại cực nhanh, cực nhẹ bộ nhớ, chấp nhận 1 chiều sai) là đủ cho System Design Interview; hiếm khi cần tự cài đặt từ đầu vì hầu hết ngôn ngữ/hệ thống đã có thư viện hỗ trợ sẵn (Guava `BloomFilter` cho Java, Redis Module `RedisBloom`).
 
 ---
 
@@ -692,7 +755,8 @@ Khi user B xem feed:
 | Sharding | Chia dữ liệu ra nhiều DB độc lập — Range/Hash-based; khó Cross-shard Query |
 | Consistent Hashing | Giảm thiểu dữ liệu cần di chuyển khi thêm/bớt shard, so với hash `% N` thông thường |
 | CDN | Cache nội dung tĩnh gần user về mặt địa lý — giảm latency, giảm tải Origin Server |
-| Rate Limiting | Token Bucket (phổ biến) / Sliding Window / Fixed Window (có bug ranh giới) |
+| Rate Limiting | Token Bucket (phổ biến, cho phép burst) / Leaky Bucket (làm mượt tốc độ output cố định) / Sliding Window / Fixed Window (có bug ranh giới) |
+| Bloom Filter | Kiểm tra "chắc chắn không có" (100% đúng) vs "có thể có" (có thể False Positive) — cực nhanh, cực nhẹ bộ nhớ; dùng chống Cache Penetration, check username trùng |
 | CAP Theorem | Khi có Partition: chọn tối đa 2/3 (C, A, P) — thực tế thường là CP hoặc AP |
 | PACELC | Mở rộng CAP cho lúc KHÔNG có sự cố — đánh đổi Latency vs Consistency thường trực |
 | Quy trình System Design | Làm rõ yêu cầu → Ước lượng quy mô → Data Model → Kiến trúc tổng thể → Deep Dive → Trade-off |

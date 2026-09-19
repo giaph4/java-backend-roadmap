@@ -14,7 +14,7 @@
 4. [Upcasting, Downcasting & `instanceof`](#4-upcasting-downcasting--instanceof)
 5. [Polymorphism — Tính đa hình](#5-polymorphism--tính-đa-hình)
 6. [Hiding vs Overriding vs Shadowing — phân biệt 3 khái niệm](#6-hiding-vs-overriding-vs-shadowing--phân-biệt-3-khái-niệm)
-7. [Abstraction — Tính trừu tượng](#7-abstraction--tính-trừu-tượng)
+7. [Abstraction — Tính trừu tượng (kèm Anonymous class)](#7-abstraction--tính-trừu-tượng)
 8. [Kế thừa vs Composition](#8-kế-thừa-vs-composition)
 9. [4 trụ cột phối hợp trong 1 ví dụ hoàn chỉnh](#9-4-trụ-cột-phối-hợp-trong-1-ví-dụ-hoàn-chỉnh)
 10. [Tổng kết — Bảng ghi nhớ nhanh](#10-tổng-kết--bảng-ghi-nhớ-nhanh)
@@ -138,6 +138,44 @@ class Sub extends Base {
 }
 ```
 
+### `protected` — bẫy ít người để ý khi kế thừa khác package
+
+`protected` cho phép **subclass ở package khác** truy cập member, nhưng chỉ theo một quy tắc hẹp hơn nhiều người tưởng: subclass chỉ truy cập được `protected` member **qua tham chiếu kiểu chính nó (hoặc kiểu con của nó)**, KHÔNG được truy cập qua tham chiếu kiểu superclass hay qua một object khác cùng là subclass anh em.
+
+```java
+// package a;
+public class Base { protected int secret = 42; }
+
+// package b;
+public class Sub extends Base {
+    void test(Base other, Sub me) {
+        System.out.println(me.secret);      // ✅ OK — truy cập qua kiểu Sub (chính mình/kiểu con)
+        // System.out.println(other.secret); // ❌ lỗi compile — 'other' khai báo kiểu Base, khác package
+    }
+}
+```
+
+Lý do thiết kế: `protected` chỉ nới quyền cho *quan hệ kế thừa thật sự đang thực thi*, không nới quyền cho "biết ai đó là subclass của Base ở đâu đó" — tránh việc lợi dụng kế thừa như một cách vòng để truy cập nội bộ object khác cùng package gốc.
+
+### Thứ tự nạp & khởi tạo static khi có kế thừa
+
+Khi lần đầu dùng đến một lớp trong cây kế thừa, JVM nạp và khởi tạo **static context** theo thứ tự **từ gốc (`Object`) xuống lớp con**, trước khi bất kỳ instance nào được tạo:
+
+```java
+class A { static { System.out.println("static A"); } }
+class B extends A { static { System.out.println("static B"); } }
+
+class Demo {
+    public static void main(String[] args) {
+        new B();
+        // In ra: "static A" rồi "static B" — cha luôn khởi tạo static TRƯỚC con,
+        // dù ta chỉ trực tiếp new B() chứ không đụng tới A.
+    }
+}
+```
+
+Thứ tự đầy đủ khi `new Sub()` lần đầu: **static block/field của `Object` → ... → static block/field của `Sub`** (một lần duy nhất cho cả class, dùng chung mọi object) → sau đó với **từng object** mới thực sự tạo: **instance block/field của cha → constructor cha → instance block/field của con → constructor con** (chi tiết instance-level xem Module 01.3 §8).
+
 ### Đơn kế thừa với class
 
 ```java
@@ -260,6 +298,15 @@ class UserRepo extends Repo {
     @Override User find() { ... }        // ✅ covariant return: User là con của Object
 }
 ```
+
+### `final` method — vì sao cấm override, không chỉ là "khóa cho vui"
+
+Một method `final` không thể bị override ở bất kỳ lớp con nào. Hai lý do thực tế:
+
+1. **An toàn/bất biến hành vi:** nếu một method điều khiển một bất biến quan trọng (ví dụ logic tính hash, logic kiểm tra quyền), cho phép override đồng nghĩa cho phép lớp con "phá" hành vi mà code gọi nó đang tin tưởng. Ví dụ kinh điển: các method `final` trong `String` — không ai được viết lớp con của `String` để đổi nghĩa `length()`, vì vô số thư viện toàn hệ thống đang giả định `length()` luôn đúng nghĩa gốc.
+2. **Tối ưu hóa của JIT compiler:** method ảo (có thể override) buộc JVM tra bảng method (vtable lookup) mỗi lần gọi — tốn thêm một bước gián tiếp. Method `final` (hoặc method mà JIT chứng minh được "chỉ có một lớp cài đặt trong toàn bộ classpath đã nạp" — *monomorphic call site*) có thể được **inline thẳng** thân method vào nơi gọi, bỏ qua bước tra bảng. Đây là lý do một số thư viện hiệu năng cao cố tình đánh dấu `final` cho method nóng (hot path).
+
+> Lưu ý: `final` class ⇒ mọi method của nó **tự động** không thể override (vì không class nào kế thừa được nữa) — không cần đánh dấu `final` riêng cho từng method trong một `final` class.
 
 ### `@Override` cứu bạn khỏi bug thầm lặng
 
@@ -410,6 +457,29 @@ public class CreditCard implements Payable {
 
 Bảng đầy đủ + "khi nào dùng cái nào" ở **Module 01.5**.
 
+### Lớp vô danh (Anonymous class) — cài đặt nhanh mà không đặt tên lớp
+
+Khi chỉ cần **một** biến thể của `abstract class`/`interface` dùng đúng một lần, không cần định nghĩa hẳn một lớp có tên — Java cho phép vừa kế thừa/hiện thực vừa khởi tạo trong cùng một biểu thức:
+
+```java
+Shape mysteryShape = new Shape("Vô danh") {     // "kế thừa" Shape ngay tại chỗ new
+    @Override public double area()      { return 99.9; }
+    @Override public double perimeter() { return 9.9; }
+};
+mysteryShape.describe();     // vẫn chạy đa hình bình thường — describe() gọi đúng area() vừa cài
+```
+
+Về bản chất, compiler sinh ra một class thật (tên nội bộ dạng `Shape$1`), kế thừa `Shape`, chỉ được dùng đúng tại điểm khởi tạo đó — hoàn toàn tuân theo mọi quy tắc override đã học ở §5 (chữ ký, access, exception, covariant return). Đây chính là cách viết `Runnable`, `Comparator`, listener... trước khi Java 8 có lambda (Module 01.10):
+
+```java
+List<String> names = new ArrayList<>(List.of("Bao", "An", "Pho"));
+Collections.sort(names, new Comparator<String>() {          // anonymous class hiện thực interface
+    @Override public int compare(String a, String b) { return a.length() - b.length(); }
+});
+```
+
+Giới hạn của anonymous class: không có constructor tường minh (chỉ dùng `super(...)` ngầm qua đối số truyền vào sau tên lớp cha), không thể `implements` nhiều interface cùng lúc, và chỉ tạo được **đúng một** instance tại nơi khai báo. Khi cần tái sử dụng nhiều nơi → nên đặt tên thành lớp/lớp lồng thật sự (static nested class — Module 01.3).
+
 ### Vì sao Abstraction quan trọng ở backend
 
 Lập trình dựa trên **interface** (`PaymentService`) thay vì lớp cụ thể (`CreditCardPaymentServiceImpl`) → đổi implementation (thẻ → ví điện tử) mà **không sửa** nơi sử dụng. Đây là **Dependency Inversion Principle** (chữ D của SOLID — Module 01.6) và cốt lõi của Dependency Injection.
@@ -540,6 +610,8 @@ public class Payroll {
 | `super()` | Compiler tự chèn `super()`; cha không có no-arg ctor → con phải gọi `super(...)` tường minh |
 | `final` / `sealed` class | `final` cấm kế thừa; `sealed ... permits` giới hạn danh sách lớp con (Java 17) |
 | Fragile base class | Kế thừa khiến con phụ thuộc chi tiết nội bộ của cha → cân nhắc composition |
+| `protected` khác package | Subclass chỉ truy cập qua tham chiếu kiểu **chính nó/kiểu con**, không qua tham chiếu kiểu cha hay object anh em khác |
+| Static init & kế thừa | Static block/field của **cha luôn chạy trước con**, đúng một lần khi lớp lần đầu được dùng đến |
 | Upcasting | Con → cha, ngầm, an toàn, chỉ thu hẹp góc nhìn (kiểu tĩnh) |
 | Downcasting | Cha → con, tường minh, có thể `ClassCastException`; kiểm tra bằng `instanceof` (hoặc pattern `instanceof X x`) |
 | `instanceof` vs `getClass()==` | `instanceof` khớp cả lớp con; `getClass()==` khớp đúng một lớp; `null instanceof X` = false |
@@ -557,6 +629,8 @@ public class Payroll {
 | abstract method | Không được `private`/`static`/`final`; con không cài hết → con cũng `abstract` |
 | Abstraction vs abstract class | Abstraction là nguyên lý; `interface`/`abstract class`/API gọn đều là công cụ đạt nó |
 | Leaky abstraction | Chi tiết tầng dưới (kiểu lỗi, kiểu dữ liệu) rò ra API |
+| `final` method | Cấm override vì bảo toàn bất biến hành vi + cho JIT inline thẳng (bỏ qua tra vtable) |
+| Anonymous class | Vừa kế thừa/hiện thực vừa `new` tại chỗ, dùng đúng 1 lần, vẫn tuân mọi quy tắc override |
 | Composition > Inheritance | Ưu tiên "has-a" + delegate; chỉ kế thừa khi is-a thật và cha được thiết kế để kế thừa |
 
 ---

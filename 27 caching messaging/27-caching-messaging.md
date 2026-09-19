@@ -189,6 +189,56 @@ Dùng Redis (cache tập trung, chia sẻ):
 
 > **Liên hệ Module 10:** Redis đã được giới thiệu ở phần NoSQL — ở đây là ứng dụng cụ thể nhất và phổ biến nhất của Redis trong thực tế: **làm Cache layer** cho ứng dụng Backend.
 
+### Cấu trúc dữ liệu (data structure) của Redis — không chỉ là "key-value" đơn giản
+
+Redis không chỉ lưu chuỗi văn bản (String) — 5 cấu trúc dữ liệu chính bên dưới cho phép Redis đóng nhiều vai trò khác nhau (cache, session store, bộ đếm, hàng đợi đơn giản, bảng xếp hạng...) chứ không chỉ dừng ở cache thông thường:
+
+| Kiểu | Mô tả | Lệnh tiêu biểu | Use case thực tế |
+|---|---|---|---|
+| **String** | Chuỗi byte đơn giản (text, số, hoặc dữ liệu nhị phân serialize) | `SET`/`GET`/`INCR`/`EXPIRE` | Cache 1 object (JSON serialize), bộ đếm view/like (`INCR` atomic — không cần lock) |
+| **List** | Danh sách liên kết đôi, có thứ tự | `LPUSH`/`RPUSH`/`LPOP`/`LRANGE` | Hàng đợi đơn giản (task queue nhẹ), timeline gần đây |
+| **Hash** | Map con trong 1 key (field-value) | `HSET`/`HGET`/`HGETALL` | Lưu object có nhiều field mà không cần serialize/deserialize cả object mỗi lần đọc 1 field (VD: cache session user: `HSET session:123 name "A" role "ADMIN"`) |
+| **Set** | Tập hợp không trùng lặp, không thứ tự | `SADD`/`SISMEMBER`/`SINTER` | Kiểm tra tồn tại nhanh (đã đọc bài viết chưa), giao/hợp tập hợp (bạn chung) |
+| **Sorted Set (ZSet)** | Set nhưng mỗi phần tử có 1 `score` để sắp xếp | `ZADD`/`ZRANGE`/`ZRANK` | **Bảng xếp hạng (leaderboard)** theo điểm số, rate limiting theo cửa sổ thời gian (sliding window) |
+
+```java
+// Ví dụ Sorted Set — bảng xếp hạng điểm số real-time, không cần ORDER BY trên DB mỗi lần đọc
+redisTemplate.opsForZSet().add("leaderboard", "user123", 1500); // Thêm/cập nhật điểm
+redisTemplate.opsForZSet().reverseRange("leaderboard", 0, 9);   // Top 10 điểm cao nhất — O(log N)
+```
+
+> Đây là lý do Redis được gọi là "data structure server" thay vì chỉ "key-value cache" — chọn đúng cấu trúc dữ liệu cho đúng bài toán giúp tránh phải tự cài đặt logic đó ở tầng ứng dụng (VD: tự viết bảng xếp hạng bằng `ORDER BY score DESC LIMIT 10` trên SQL sẽ chậm hơn nhiều so với `ZREVRANGE` của Redis khi dữ liệu lớn và cập nhật liên tục).
+
+### Redis Persistence — vì sao dữ liệu in-memory vẫn không mất khi restart
+
+Dù Redis lưu dữ liệu chủ yếu trong RAM (nhanh), nó vẫn hỗ trợ ghi xuống đĩa để không mất trắng dữ liệu khi restart/crash, qua 2 cơ chế:
+
+| Cơ chế | Cách hoạt động | Ưu điểm | Nhược điểm |
+|---|---|---|---|
+| **RDB (snapshot)** | Định kỳ (VD: mỗi 5 phút hoặc sau N lần ghi) chụp toàn bộ dữ liệu ra 1 file nhị phân | File nhỏ gọn, phục hồi nhanh | Có thể mất dữ liệu của khoảng thời gian giữa 2 lần snapshot gần nhất |
+| **AOF (Append Only File)** | Ghi lại MỌI lệnh ghi (SET/HSET/...) vào file log, phát lại (replay) toàn bộ log khi khởi động lại | Mất dữ liệu ít hơn (tuỳ tần suất `fsync`) | File lớn hơn, phục hồi chậm hơn RDB |
+
+> **Lưu ý khi dùng Redis làm Cache (không phải Primary Database):** Nếu Redis CHỈ đóng vai trò cache (dữ liệu gốc luôn nằm ở DB chính, cache chỉ để tăng tốc), việc mất cache khi restart **không nghiêm trọng** — ứng dụng chỉ cần query lại DB (cache miss) rồi tự động nạp lại cache như bình thường. Persistence quan trọng hơn nhiều khi Redis được dùng làm **Primary store** cho dữ liệu nào đó (session, rate-limit counter cần bền vững) — trường hợp đó cần cân nhắc bật AOF.
+
+### Eviction Policy — Redis/Caffeine tự loại bỏ entry khi bộ nhớ đầy
+
+Khi cache đạt giới hạn bộ nhớ (`maxmemory` ở Redis, `maximumSize` ở Caffeine), cần 1 chính sách quyết định **loại bỏ entry nào** để nhường chỗ cho entry mới:
+
+| Chính sách | Nguyên tắc loại bỏ | Khi nào phù hợp |
+|---|---|---|
+| **LRU** (Least Recently Used) | Loại bỏ entry **lâu nhất chưa được truy cập** | Phổ biến nhất — giả định dữ liệu vừa dùng gần đây có khả năng cao sẽ dùng lại sớm |
+| **LFU** (Least Frequently Used) | Loại bỏ entry có **số lần truy cập ít nhất** | Khi có dữ liệu truy cập đều đặn dù không "gần đây" (LRU có thể loại nhầm entry hay dùng nhưng vừa có 1 khoảng nghỉ ngắn) |
+| **FIFO** (First In First Out) | Loại bỏ entry **được thêm vào sớm nhất**, bất kể có được dùng nhiều hay không | Ít dùng cho cache (không phản ánh mức độ "hữu ích" của dữ liệu), phù hợp hơn cho hàng đợi |
+| **Random** | Loại bỏ ngẫu nhiên | Chi phí tính toán thấp nhất, Redis dùng làm fallback nhanh khi không cần chính xác tuyệt đối |
+
+```
+# Cấu hình Redis chọn eviction policy khi đầy bộ nhớ (redis.conf)
+maxmemory 256mb
+maxmemory-policy allkeys-lru   # Loại LRU trên TOÀN BỘ key (có cả biến thể volatile-lru chỉ áp dụng cho key có TTL)
+```
+
+> **Caffeine mặc định dùng thuật toán xấp xỉ LFU (biến thể W-TinyLFU)** — chính xác hơn LRU thuần trong nhiều benchmark thực tế vì kết hợp cả tần suất lẫn độ gần đây, nhưng người học chỉ cần hiểu khái niệm LRU/LFU cơ bản là đủ dùng ở tầng ứng dụng — không cần tự cài đặt thuật toán eviction, các thư viện đã tối ưu sẵn.
+
 ### Redis Template — thao tác trực tiếp (không qua annotation) khi cần logic phức tạp hơn
 
 ```java
@@ -534,6 +584,20 @@ public class EmailNotificationConsumer {
 - **Decoupling** — Producer và Consumer không cần biết nhau tồn tại, có thể phát triển/deploy độc lập
 - **Chịu lỗi tốt hơn (resilience):** Nếu Consumer tạm thời down, message vẫn nằm trong Queue chờ, không bị mất (tùy cấu hình)
 - **Scale độc lập:** Tăng số lượng Consumer instance để xử lý message nhanh hơn khi tải cao, không ảnh hưởng phần API chính
+
+### 2 mô hình giao tiếp nền tảng — Point-to-Point vs Publish-Subscribe
+
+Mọi hệ thống messaging (RabbitMQ, Kafka...) đều xây trên 1 trong 2 mô hình gốc sau (hoặc kết hợp cả hai):
+
+| | Point-to-Point (Queue) | Publish-Subscribe (Pub/Sub) |
+|---|---|---|
+| Số Consumer nhận 1 message | **Đúng 1** Consumer xử lý (dù có nhiều Consumer cùng lắng nghe Queue, message chỉ được giao cho 1 trong số đó) | **Tất cả** Subscriber đang lắng nghe đều nhận được bản sao của message |
+| Ẩn dụ | Quầy vé — 1 khách chỉ được 1 nhân viên phục vụ | Loa phát thanh — ai đang nghe đài đều nghe được cùng nội dung |
+| Ví dụ thực tế | Xử lý đơn hàng: chỉ cần 1 worker xử lý 1 đơn, không cần 2 worker xử lý trùng | Thông báo sự kiện: cả Email Service, SMS Service, Analytics Service đều cần biết "đơn hàng vừa tạo" |
+| Trong RabbitMQ | Queue thường (1 message → 1 consumer trong nhóm consumer của Queue đó) | Fanout Exchange (broadcast tới mọi Queue đã bind) |
+| Trong Kafka | 1 Consumer Group với nhiều instance — chỉ 1 instance trong group xử lý 1 message (chia theo partition) | Nhiều Consumer Group KHÁC NHAU cùng đọc 1 Topic — mỗi Group đều nhận đủ mọi message, độc lập với Group khác |
+
+> **Lưu ý dễ nhầm:** Kafka thực chất kết hợp CẢ HAI mô hình trong cùng 1 cơ chế — nhiều Consumer Group khác nhau đọc cùng 1 Topic là Pub/Sub (mục 9 đã minh họa: Consumer Group A và B đều đọc được toàn bộ message), nhưng bên TRONG 1 Consumer Group, các message được chia đều cho từng Consumer instance theo Point-to-Point (mỗi message trong 1 partition chỉ 1 instance của group đó xử lý).
 
 ---
 

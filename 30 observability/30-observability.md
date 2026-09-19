@@ -65,7 +65,26 @@ Với hàng trăm metric có thể thu thập, câu hỏi thực tế là: **nê
 | **E**rrors | Số/tỷ lệ request bị lỗi trên tổng số request | `rate(http_server_requests_seconds_count{status=~"5.."}[1m])` |
 | **D**uration | Thời gian xử lý mỗi request (nên xem theo percentile, không chỉ average) | `histogram_quantile(0.95, ...)` — đã học ở mục 6 |
 
-> **Liên hệ:** 3 chỉ số RED chính là bộ dashboard **tối thiểu** nên có cho mọi Microservice trước khi nghĩ tới việc thêm metric nghiệp vụ tùy chỉnh (Counter/Gauge riêng ở mục 5) — trả lời ngay câu hỏi "service này đang khỏe không" chỉ trong vài giây nhìn Dashboard, mà không cần biết trước sự cố cụ thể là gì. (Framework song song **USE Method** — Utilization/Saturation/Errors — dùng để theo dõi *tài nguyên hạ tầng* như CPU/Disk/Network thay vì service, không đi sâu ở đây vì thuộc phạm vi hạ tầng hơn là code ứng dụng.)
+> **Liên hệ:** 3 chỉ số RED chính là bộ dashboard **tối thiểu** nên có cho mọi Microservice trước khi nghĩ tới việc thêm metric nghiệp vụ tùy chỉnh (Counter/Gauge riêng ở mục 5) — trả lời ngay câu hỏi "service này đang khỏe không" chỉ trong vài giây nhìn Dashboard, mà không cần biết trước sự cố cụ thể là gì.
+
+### USE Method — khung chọn Metric cho TÀI NGUYÊN hạ tầng (khác RED — dùng cho SERVICE)
+
+RED Method (ở trên) trả lời "**service** này có đang phục vụ request tốt không?" — nhìn từ góc độ **request đi vào/đi ra**. **USE Method** (cũng phổ biến trong giới SRE, do Brendan Gregg đề xuất) trả lời câu hỏi khác: "**tài nguyên hạ tầng** (CPU, RAM, Disk, Network, Connection Pool...) có đang là nút thắt cổ chai (bottleneck) không?" — nhìn từ góc độ **tài nguyên bên trong** service đang tiêu thụ.
+
+| Chữ cái | Đo gì | Ví dụ cụ thể |
+|---|---|---|
+| **U**tilization | Tỷ lệ % thời gian tài nguyên đang **bận** (đang được dùng) | CPU usage 85%, Disk I/O busy 60% |
+| **S**aturation | Mức độ tài nguyên đang **bị dồn ứ**, phải xếp hàng chờ vì không đáp ứng kịp | Độ dài hàng đợi CPU run queue, số connection đang chờ trong HikariCP pool (`pending` > 0) |
+| **E**rrors | Số lỗi phát sinh khi thao tác với tài nguyên đó | Disk I/O error, packet drop ở Network Interface, `Connection timeout` khi xin connection từ pool |
+
+```
+Ví dụ áp dụng USE Method cho HikariCP Connection Pool (Module 20):
+- Utilization: activeConnections / maximumPoolSize (VD: 9/10 = 90% — gần cạn)
+- Saturation:  threadsAwaitingConnection (VD: 5 request đang PHẢI CHỜ vì pool hết connection)
+- Errors:      connectionTimeoutCount (VD: số lần request bị lỗi do chờ quá connectionTimeout)
+```
+
+> **Vì sao cần CẢ HAI framework, không chỉ 1?** RED cho biết **TRIỆU CHỨNG** ("API `/orders` đang chậm, error rate tăng") — đúng góc nhìn của **user**. USE cho biết **NGUYÊN NHÂN HẠ TẦNG** ("vì CPU đã Utilization 95% và Saturation cao — request phải xếp hàng chờ CPU rảnh") — đúng góc nhìn của **hệ thống**. Quy trình debug thực tế thường đi từ RED (phát hiện triệu chứng qua Dashboard tổng quan) → USE (soi vào từng tài nguyên cụ thể để tìm bottleneck) → Distributed Tracing/Logs (mục 4/2, xác định chính xác dòng code/query nào gây ra) — 3 tầng công cụ bổ trợ nhau, không thay thế nhau.
 
 ---
 
@@ -367,6 +386,28 @@ public class OrderService {
 | **Gauge** | Giá trị hiện tại (tăng/giảm) | Số connection đang mở, số item trong queue |
 | **Timer** | Thời gian thực thi | Thời gian xử lý 1 API request |
 | **Distribution Summary** | Phân phối giá trị bất kỳ | Kích thước file upload, giá trị đơn hàng |
+
+### ⚠️ Cardinality Explosion — bẫy nghiêm trọng nhất khi gắn "tag" cho Metric
+
+Mỗi Metric có thể gắn thêm **tag** (label) để phân tách dữ liệu (VD: `orders.created.total{status="SUCCESS", region="VN"}`). Vấn đề: **mỗi tổ hợp giá trị tag khác nhau tạo ra 1 time-series RIÊNG BIỆT** trong Prometheus — số lượng time-series này gọi là **cardinality**.
+
+```java
+// ❌ NGUY HIỂM — gắn tag bằng giá trị có SỐ LƯỢNG KHÔNG GIỚI HẠN
+meterRegistry.counter("orders.created.total",
+        "userId", request.getUserId(),      // Hàng triệu user khác nhau -> hàng triệu time-series!
+        "orderId", order.getId().toString() // Mỗi đơn hàng 1 giá trị DUY NHẤT -> KHÔNG BAO GIỜ nên làm tag
+).increment();
+
+// ✅ AN TOÀN — chỉ gắn tag bằng giá trị có tập hợp HỮU HẠN, ổn định
+meterRegistry.counter("orders.created.total",
+        "status", order.getStatus().name(), // Chỉ vài giá trị cố định: PENDING/CONFIRMED/CANCELLED...
+        "region", order.getRegion()         // Chỉ vài chục region cố định
+).increment();
+```
+
+**Hậu quả khi cardinality bùng nổ:** Prometheus phải lưu trữ và index MỘT time-series RIÊNG cho MỖI tổ hợp tag — với `userId`/`orderId` làm tag, hệ thống có thể tạo ra hàng triệu time-series chỉ sau vài giờ, khiến Prometheus **tốn cực nhiều RAM, chậm dần, và cuối cùng có thể sập hoàn toàn (out of memory)** — đây là nguyên nhân sự cố production kinh điển, thường bị phát hiện quá muộn (khi hệ thống giám sát chính lại là thứ gây ra sự cố).
+
+> **Nguyên tắc chọn tag:** Chỉ dùng tag cho giá trị thuộc **tập hợp nhỏ, biết trước, ổn định theo thời gian** (status, HTTP method, region, service name...). Không bao giờ dùng ID định danh duy nhất (userId, orderId, email, IP address, UUID request) làm tag — nếu cần lọc/tìm theo ID cụ thể, đó là việc của **Logging** (mục 2, dùng Correlation ID) hoặc **Tracing** (mục 4), không phải Metrics.
 
 ### Prometheus — thu thập & lưu trữ Metrics theo mô hình "Pull"
 

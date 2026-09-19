@@ -15,6 +15,7 @@
 4. [Querydsl — thay thế Specification hiện đại hơn](#4-querydsl)
 5. [Auditing — tự động ghi lại ai/khi nào tạo-sửa record](#5-auditing)
 6. [Optimistic Locking vs Pessimistic Locking](#6-optimistic-locking-vs-pessimistic-locking)
+6.5. [`@Transactional` nâng cao — Propagation, Isolation, readOnly, rollbackFor](#65-transactional-nâng-cao--propagation-isolation-readonly-rollbackfor)
 7. [Database Migration: Flyway & Liquibase](#7-database-migration)
 8. [Projection — tối ưu query chỉ lấy field cần thiết](#8-projection)
 9. [EntityGraph — kiểm soát Fetch Plan khai báo](#9-entitygraph)
@@ -152,6 +153,79 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
 ```
 
 ⚠️ **Giới hạn của Derived Query Method:** Tên method sẽ **rất dài và khó đọc** khi có quá nhiều điều kiện (VD: `findByStatusAndUserIdAndCreatedAtBetweenAndTotalAmountGreaterThanOrderByCreatedAtDesc`). Đây là dấu hiệu nên chuyển sang `@Query` (JPQL) hoặc `Specification`/`Querydsl`.
+
+### `@Query` — JPQL tường minh, Native Query, Named vs Positional Parameter
+
+Khi tên method quá dài hoặc logic không diễn đạt được bằng derived query, viết JPQL/SQL trực tiếp bằng `@Query`:
+
+```java
+public interface OrderRepository extends JpaRepository<Order, Long> {
+
+    // Named parameter (:tên) — khuyến nghị, tránh nhầm thứ tự khi sửa query
+    @Query("SELECT o FROM Order o WHERE o.status = :status AND o.totalAmount > :minAmount")
+    List<Order> search(@Param("status") OrderStatus status, @Param("minAmount") BigDecimal minAmount);
+
+    // Positional parameter (?1, ?2) — dễ nhầm khi đổi thứ tự tham số, ít dùng hơn trong code mới
+    @Query("SELECT o FROM Order o WHERE o.status = ?1 AND o.totalAmount > ?2")
+    List<Order> searchPositional(OrderStatus status, BigDecimal minAmount);
+
+    // Native SQL — nativeQuery = true, dùng khi cần cú pháp đặc thù của DB (window function, CTE, hint...)
+    // Lưu ý: trả entity thì OK, nhưng KHÔNG hỗ trợ JPQL syntax (không viết "FROM Order" mà viết "FROM orders" đúng tên bảng thật)
+    @Query(value = "SELECT * FROM orders WHERE status = :status ORDER BY total_amount DESC LIMIT :limit",
+           nativeQuery = true)
+    List<Order> findTopOrdersNative(@Param("status") String status, @Param("limit") int limit);
+}
+```
+
+> **JPQL vs Native Query:** JPQL thao tác trên **Entity/field** (`Order`, `o.totalAmount`) — độc lập database, Hibernate tự dịch sang SQL đúng dialect. Native Query thao tác trên **bảng/cột thật** (`orders`, `total_amount`) — gắn chặt vào 1 loại DB cụ thể, nhưng cho phép dùng tính năng đặc thù (window function của PostgreSQL, hint của Oracle...) mà JPQL không hỗ trợ.
+
+### `@Modifying` — UPDATE/DELETE bằng Query Method
+
+Derived Query `deleteByX()`/`@Query` với `UPDATE`/`DELETE` **bắt buộc** thêm `@Modifying`, nếu không Hibernate sẽ hiểu nhầm là `SELECT` và ném lỗi:
+
+```java
+public interface OrderRepository extends JpaRepository<Order, Long> {
+
+    @Modifying // BẮT BUỘC cho mọi @Query dạng UPDATE/DELETE
+    @Transactional // BẮT BUỘC — @Modifying query cần transaction đang mở, khác SELECT thông thường
+    @Query("UPDATE Order o SET o.status = :newStatus WHERE o.status = :oldStatus")
+    int bulkUpdateStatus(@Param("oldStatus") OrderStatus oldStatus, @Param("newStatus") OrderStatus newStatus);
+    // Trả về int = số dòng bị ảnh hưởng (giống JDBC executeUpdate())
+
+    @Modifying(clearAutomatically = true) // Tự động clear() Persistence Context sau khi chạy
+    @Query("DELETE FROM Order o WHERE o.status = :status AND o.createdAt < :before")
+    int deleteOldCancelledOrders(@Param("status") OrderStatus status, @Param("before") LocalDateTime before);
+}
+```
+
+⚠️ **Bẫy `@Modifying` không có `clearAutomatically`:** Câu `UPDATE`/`DELETE` chạy **thẳng xuống database bằng SQL**, KHÔNG đi qua Persistence Context — nếu trước đó đã load Entity vào bộ nhớ (`persistence context còn giữ bản cũ`), các Entity đó sẽ **không đồng bộ** với dữ liệu thật dưới DB sau khi `@Modifying` chạy. `clearAutomatically = true` giúp Hibernate xóa cache Persistence Context để lần đọc tiếp theo query lại DB, tránh đọc phải dữ liệu cũ (stale data).
+
+### `Pageable`, `Sort`, `Page<T>` vs `Slice<T>`
+
+```java
+public interface OrderRepository extends JpaRepository<Order, Long> {
+    Page<Order> findByStatus(OrderStatus status, Pageable pageable);
+    Slice<Order> findByUserId(Long userId, Pageable pageable);
+}
+
+// Gọi:
+Pageable pageable = PageRequest.of(0, 20, Sort.by("createdAt").descending());
+Page<Order> page = orderRepository.findByStatus(OrderStatus.PENDING, pageable);
+
+page.getContent();        // List<Order> của trang hiện tại
+page.getTotalElements();  // Tổng số phần tử TOÀN BỘ (chạy thêm 1 câu COUNT)
+page.getTotalPages();     // Tổng số trang
+page.hasNext();
+```
+
+| | `Page<T>` | `Slice<T>` |
+|---|---|---|
+| Biết tổng số phần tử | ✅ Có (`getTotalElements()`, `getTotalPages()`) | ❌ Không |
+| Số query chạy | **2 query**: 1 lấy dữ liệu + 1 `COUNT(*)` riêng | **1 query duy nhất** (lấy dư 1 phần tử để biết còn trang tiếp hay không) |
+| Hiệu năng | Chậm hơn với bảng lớn (COUNT toàn bảng tốn kém) | Nhanh hơn — không cần đếm tổng |
+| Phù hợp | UI cần hiển thị số trang (`Trang 3/50`) | Infinite scroll / "Load more" — chỉ cần biết còn dữ liệu tiếp hay không |
+
+> **Mẹo hiệu năng:** Với bảng hàng triệu dòng và UI kiểu "cuộn vô hạn" (không cần hiển thị tổng số trang), ưu tiên `Slice<T>` để tránh câu `COUNT(*)` tốn kém chạy lại ở mỗi lần phân trang.
 
 ### Streaming kết quả lớn — `Stream<T>` thay vì `List<T>`
 
@@ -511,6 +585,131 @@ public class ProductService {
 
 ---
 
+## 6.5. `@Transactional` nâng cao — Propagation, Isolation, readOnly, rollbackFor
+
+Tất cả các ví dụ Locking ở mục 6 đều dựa vào `@Transactional`, nhưng annotation này có nhiều tham số quan trọng chưa khai thác hết.
+
+### Propagation — transaction hiện tại xử lý ra sao khi 1 method `@Transactional` gọi method `@Transactional` khác
+
+```java
+@Service
+public class OrderService {
+
+    @Transactional(propagation = Propagation.REQUIRED) // MẶC ĐỊNH — không cần ghi tường minh
+    public void placeOrder(Order order) {
+        orderRepository.save(order);
+        auditService.logOrderPlaced(order); // Tham gia CÙNG transaction với placeOrder()
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void logOrderPlacedIndependently(Order order) {
+        // Luôn tạo transaction MỚI, độc lập hoàn toàn — commit/rollback riêng
+        // Dù placeOrder() rollback sau đó, log này VẪN được lưu (đã commit riêng trước đó)
+    }
+}
+```
+
+| Propagation | Ý nghĩa |
+|---|---|
+| `REQUIRED` (mặc định) | Có transaction đang chạy → tham gia vào nó. Chưa có → tạo mới. |
+| `REQUIRES_NEW` | Luôn tạo transaction **mới**, tạm treo (suspend) transaction hiện tại nếu có — 2 transaction độc lập hoàn toàn, rollback cái này không ảnh hưởng cái kia. |
+| `NESTED` | Tạo **savepoint** trong transaction hiện tại — rollback riêng method này (về savepoint) mà không rollback toàn bộ transaction cha (khác `REQUIRES_NEW` ở chỗ vẫn chung 1 transaction/connection vật lý). |
+| `SUPPORTS` | Có transaction thì tham gia, không có thì chạy **không transaction**. |
+| `MANDATORY` | Bắt buộc phải có transaction đang chạy sẵn, nếu không → ném exception. |
+| `NEVER` | Bắt buộc KHÔNG được có transaction đang chạy, nếu có → ném exception. |
+| `NOT_SUPPORTED` | Tạm treo transaction hiện tại (nếu có), chạy method này không transaction. |
+
+> **Use case kinh điển của `REQUIRES_NEW`:** Ghi audit log/gửi notification cần lưu lại **dù transaction chính có rollback hay không** (ví dụ: log "đã cố gắng đặt hàng nhưng thất bại" để phân tích sau) — nếu dùng `REQUIRED` thông thường, log này sẽ bị rollback theo transaction cha khi có lỗi.
+
+### Isolation Level override (liên hệ module 18 — Database & SQL)
+
+```java
+@Transactional(isolation = Isolation.READ_COMMITTED) // Override isolation level mặc định của DB cho riêng method này
+public void transferMoney(Long fromId, Long toId, BigDecimal amount) { ... }
+```
+
+Mặc định `Isolation.DEFAULT` dùng isolation level cấu hình sẵn ở DB (thường `READ_COMMITTED` với PostgreSQL/MySQL InnoDB dùng `REPEATABLE_READ`). Chỉ nên override khi có lý do rõ ràng (ví dụ cần `SERIALIZABLE` cho 1 nghiệp vụ tài chính đặc biệt nhạy cảm) — isolation càng cao, throughput càng giảm.
+
+### `readOnly = true` — tối ưu hiệu năng cho query đọc
+
+```java
+@Transactional(readOnly = true)
+public List<OrderSummaryDto> getOrderHistory(Long userId) {
+    return orderRepository.findSummaryByUserId(userId);
+}
+```
+
+- Báo cho Hibernate biết **không có thay đổi nào cần flush** → Hibernate có thể bỏ qua Dirty Checking, giảm overhead.
+- Một số driver DB (ví dụ MySQL) có thể tối ưu thêm ở tầng connection khi biết chắc transaction chỉ đọc.
+- **Không phải khóa an toàn tuyệt đối** — nếu vô tình gọi `save()`/sửa Entity trong method `readOnly = true`, hành vi tùy thuộc driver (có thể vẫn chạy được, hoặc ném exception) — đây là gợi ý tối ưu, không phải ràng buộc cứng như `final`.
+
+### `rollbackFor` — quy tắc rollback mặc định và cách mở rộng
+
+```java
+@Transactional // MẶC ĐỊNH: chỉ rollback khi ném RuntimeException (unchecked) hoặc Error
+public void placeOrder(Order order) throws InsufficientStockException {
+    // InsufficientStockException là checked exception (liên hệ Module 09)
+    // -> Mặc định Spring KHÔNG rollback khi checked exception được ném! Dữ liệu có thể lưu dở dang.
+    if (!hasStock(order)) throw new InsufficientStockException("Hết hàng");
+    orderRepository.save(order);
+}
+
+@Transactional(rollbackFor = InsufficientStockException.class) // Ép rollback kể cả checked exception
+public void placeOrderSafely(Order order) throws InsufficientStockException { ... }
+
+@Transactional(noRollbackFor = MinorValidationWarning.class) // Ngược lại — KHÔNG rollback dù là unchecked
+public void placeOrderTolerant(Order order) { ... }
+```
+
+⚠️ **Bẫy kinh điển:** Đây là một trong những lỗi phổ biến nhất khi mới dùng Spring — ném **checked exception** trong method `@Transactional` mà quên `rollbackFor`, khiến dữ liệu bị lưu **dở dang** (transaction vẫn commit) dù logic nghiệp vụ đã thất bại giữa chừng. Quy tắc an toàn: nếu dùng checked exception cho lỗi nghiệp vụ, luôn khai báo `rollbackFor = MyCheckedException.class` tường minh — hoặc đơn giản hơn, ưu tiên dùng `RuntimeException` cho exception nghiệp vụ (xu hướng phổ biến trong Spring hiện đại, liên hệ Module 09 phần "Checked exception gây tranh cãi").
+
+### Self-invocation problem — `@Transactional` "biến mất" khi gọi nội bộ
+
+```java
+@Service
+public class OrderService {
+
+    public void processOrder(Order order) {
+        saveOrder(order); // Gọi qua "this" trực tiếp — KHÔNG đi qua Proxy của Spring!
+    }
+
+    @Transactional
+    public void saveOrder(Order order) {
+        orderRepository.save(order);
+        // ⚠️ @Transactional Ở ĐÂY BỊ BỎ QUA HOÀN TOÀN khi gọi từ processOrder() ở trên!
+    }
+}
+```
+
+**Nguyên nhân** (liên hệ trực tiếp AOP Proxy đã học ở Module 15 Spring Core): `@Transactional` hoạt động nhờ Spring bọc Bean gốc trong 1 **Proxy** (CGLIB/JDK Dynamic Proxy) — advice transaction chỉ chạy khi lời gọi đi **qua Proxy** (từ bên ngoài class, ví dụ Controller gọi `orderService.saveOrder()`). Khi 1 method trong cùng class gọi method khác bằng `this.saveOrder()` (ngầm định qua `this`), lời gọi đi **thẳng vào object gốc**, bỏ qua hoàn toàn Proxy → annotation `@Transactional` không có tác dụng.
+
+**Cách khắc phục phổ biến:**
+
+```java
+// Cách 1: Tách method @Transactional ra Service/Bean riêng, gọi qua Bean khác (đi qua Proxy đúng cách)
+@Service
+public class OrderService {
+    private final OrderPersistenceService persistenceService; // Bean riêng
+    public void processOrder(Order order) {
+        persistenceService.saveOrder(order); // Gọi qua Bean khác -> ĐI QUA Proxy -> @Transactional hoạt động
+    }
+}
+
+// Cách 2: Tự inject chính mình qua interface (self-injection) — ít khuyến khích hơn vì gây rối cấu trúc
+@Service
+public class OrderService {
+    @Autowired
+    private OrderService self; // Spring inject Proxy của chính class này vào field
+    public void processOrder(Order order) {
+        self.saveOrder(order); // Gọi qua "self" (Proxy) thay vì "this" -> hoạt động đúng
+    }
+    @Transactional
+    public void saveOrder(Order order) { orderRepository.save(order); }
+}
+```
+
+---
+
 ## 7. Database Migration
 
 **Vấn đề:** Khi team nhiều người cùng làm việc, database schema thay đổi liên tục (thêm cột, tạo bảng mới...) — nếu chỉ dựa vào `ddl-auto: update` của Hibernate (đã cảnh báo ở Module 13 là nguy hiểm ở production), sẽ **không có lịch sử thay đổi schema**, không thể rollback, không đồng bộ được giữa các môi trường (dev/staging/prod).
@@ -814,6 +1013,12 @@ public void importProducts(List<ProductImportRow> rows) {
 | `getReferenceById()` | Trả Proxy, không query ngay — dùng khi chỉ cần set FK |
 | Custom Repository | Interface `XxxCustom` + class `XxxCustomImpl`, ghép vào Repository chính |
 | Stream<T> | Đọc dữ liệu lớn theo cursor — bắt buộc `@Transactional` + try-with-resources |
+| `@Query` native vs JPQL | JPQL thao tác Entity/field, độc lập DB; Native thao tác bảng/cột thật, gắn 1 DB cụ thể |
+| `@Modifying` | Bắt buộc cho `@Query` dạng UPDATE/DELETE; `clearAutomatically` tránh đọc phải Entity cũ trong Persistence Context |
+| `Page<T>` vs `Slice<T>` | Page biết tổng (thêm 1 query COUNT); Slice không biết tổng nhưng nhanh hơn — ưu tiên cho infinite scroll |
+| Propagation | `REQUIRED` (mặc định, tham gia/tạo mới) vs `REQUIRES_NEW` (transaction độc lập hoàn toàn) vs `NESTED` (savepoint) |
+| `rollbackFor` | Mặc định chỉ rollback unchecked exception — checked exception cần khai báo `rollbackFor` tường minh, nếu không dữ liệu lưu dở dang |
+| Self-invocation | Gọi `@Transactional` method qua `this` trong cùng class KHÔNG đi qua Proxy → annotation bị bỏ qua (giống bẫy AOP Module 15) |
 | Specification | Query động dùng Criteria API — String field name, không type-safe |
 | Querydsl | Query động type-safe hơn (Q-class), cần build step riêng |
 | Auditing | `@CreatedDate`/`@LastModifiedDate`/`@CreatedBy`/`@LastModifiedBy` + `@EnableJpaAuditing` |

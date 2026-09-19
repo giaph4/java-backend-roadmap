@@ -11,7 +11,7 @@
 1. [Vấn đề trước khi có Generics — raw type & unchecked warning](#1-vấn-đề-trước-khi-có-generics--raw-type--unchecked-warning)
 2. [Generic Class](#2-generic-class)
 3. [Generic Method & suy luận kiểu](#3-generic-method--suy-luận-kiểu)
-4. [Bounded Type — `<T extends X>`](#4-bounded-type--t-extends-x)
+4. [Bounded Type — `<T extends X>`](#4-bounded-type--t-extends-x) (bao gồm Self-bounded Generic / CRGP)
 5. [Tính bất biến (invariance) & quan hệ với mảng](#5-tính-bất-biến-invariance--quan-hệ-với-mảng)
 6. [Wildcard — `?`, `? extends`, `? super` & capture](#6-wildcard---extends-super--capture)
 7. [PECS — Producer Extends, Consumer Super](#7-pecs--producer-extends-consumer-super)
@@ -227,6 +227,36 @@ public static <T extends Object & Comparable<? super T>> T max(Collection<? exte
 ```
 
 `Comparable<? super T>` (thay vì `Comparable<T>`) cho phép `T` **kế thừa** khả năng so sánh từ lớp cha — ví dụ `class Manager extends Employee` mà chỉ `Employee implements Comparable<Employee>` thì `max(List<Manager>)` vẫn hợp lệ.
+
+### Self-bounded Generic / "Curiously Recurring Generic Pattern" (CRGP)
+
+Một dạng recursive bound đặc biệt: type parameter bị ràng buộc bởi **chính class chứa nó** — `class Foo<T extends Foo<T>>`. Mẫu này xuất hiện ngay trong JDK ở `Enum`:
+
+```java
+public abstract class Enum<E extends Enum<E>> implements Comparable<E> { ... }
+
+enum Suit implements Comparable<Suit> { HEART, SPADE, CLUB, DIAMOND }
+// Suit thực chất "extends Enum<Suit>" ngầm định — Suit tự ràng buộc chính nó
+```
+
+Mục đích: để mỗi enum **tự động** có `compareTo` đúng kiểu (`Suit.compareTo(Suit)`, không phải `Suit.compareTo(Enum)`), mà không cần mỗi enum tự viết `implements Comparable<X>` thủ công.
+
+Mẫu này cũng dùng để thiết kế "fluent builder kế thừa được" — subclass builder trả về đúng kiểu subclass thay vì kiểu cha:
+
+```java
+abstract class Builder<T extends Builder<T>> {
+    protected String name;
+    @SuppressWarnings("unchecked")
+    public T name(String name) { this.name = name; return (T) this; }   // self() pattern
+}
+class CarBuilder extends Builder<CarBuilder> {
+    private int seats;
+    public CarBuilder seats(int seats) { this.seats = seats; return this; }
+}
+new CarBuilder().name("Civic").seats(5);   // .name(...) trả về CarBuilder, không phải Builder<CarBuilder>
+```
+
+Không có CRGP, `.name("Civic")` sẽ trả kiểu `Builder<CarBuilder>` — mất luôn method `seats(...)` của subclass trong cùng chuỗi gọi (phải ép kiểu thủ công). Cái giá phải trả: `@SuppressWarnings("unchecked")` ở `(T) this` — compiler không chứng minh được `this` chắc chắn là `T`, chỉ người viết class **tự cam kết** bằng quy ước "subclass phải tự bind `T` = chính nó".
 
 ---
 
@@ -449,6 +479,35 @@ Hạn chế: `Class<T>` không mang được kiểu **tham số hóa** (`List<Us
 private final T[] buf = (T[]) new Object[16];   // OK khi buf chỉ dùng nội bộ
 ```
 
+### Diamond `<>` với anonymous class (Java 9+)
+
+Trước Java 9, diamond operator **không** dùng được khi tạo anonymous class (phải ghi tường minh type argument). Từ Java 9, compiler đủ thông minh để suy luận kiểu kể cả khi có thân class `{ ... }` đi kèm:
+
+```java
+// Java 8 trở về trước — bắt buộc ghi rõ:
+Comparator<String> c = new Comparator<String>() {
+    public int compare(String a, String b) { return a.length() - b.length(); }
+};
+
+// Java 9+ — diamond suy luận được dù có anonymous body:
+Comparator<String> c2 = new Comparator<>() {
+    public int compare(String a, String b) { return a.length() - b.length(); }
+};
+```
+
+Đây cũng chính là cơ chế đứng sau `ParameterizedTypeReference<List<User>>() {}` ở mục 10 — anonymous subclass rỗng để "khắc" kiểu tham số hóa vào metadata (super type token), tận dụng việc `getGenericSuperclass()` của **class**, khác hẳn diamond suy luận kiểu cho **biến**.
+
+### Intersection type khi ép kiểu — `(A & B)`
+
+Ép kiểu (cast) cũng có thể ghi nhiều interface cùng lúc, cú pháp giống multiple bound ở mục 4:
+
+```java
+Object obj = getSomething();
+var x = (Comparable<String> & Serializable) obj;   // x có cả hai "khả năng" cùng lúc
+```
+
+Hữu ích khi một biến cần thỏa mãn nhiều interface không liên quan nhau mà không có sẵn kiểu cụ thể nào gộp cả hai — hiếm gặp trong code nghiệp vụ thường ngày, nhưng xuất hiện trong code sinh bởi framework (proxy, serialization).
+
 ### Generics + varargs → `@SafeVarargs`
 
 ```java
@@ -525,6 +584,7 @@ Không — invariance (mục 5). Tham số "list đọc bất kỳ" phải là `
 | Generic method | `<T> T m(T x)` — `T` khai báo **trước kiểu trả về**; suy luận kiểu + diamond `<>`; type witness `Foo.<String>m()` khi cần |
 | Bounded `<T extends X>` | `T` là X/subtype → gọi được method của X. Interface vẫn viết `extends`. Nhiều bound: `A & B & C`, class đứng đầu |
 | Recursive bound | `<T extends Comparable<? super T>>` — cho phép kế thừa khả năng so sánh từ lớp cha (xem `Collections.max`) |
+| Self-bounded (CRGP) | `class Foo<T extends Foo<T>>` — dùng cho `Enum<E extends Enum<E>>` và fluent builder kế thừa được (`this` trả về đúng kiểu subclass, cần `@SuppressWarnings("unchecked")`) |
 | Invariance | `List<Integer>` **không** là `List<Number>`. Khác mảng (covariant → `ArrayStoreException`). Cần quan hệ cha–con → wildcard |
 | `?` | "kiểu nào đó" — an toàn hơn raw; đọc ra `Object`, không ghi (trừ `null`) |
 | `? extends X` | **Producer** — đọc ra ≥ X; **không** ghi |
@@ -534,6 +594,8 @@ Không — invariance (mục 5). Tham số "list đọc bất kỳ" phải là `
 | Type erasure | `T` bị xóa lúc runtime (→ `Object`/bound). `List<String>` và `List<Integer>` cùng `getClass()`. Bridge method giữ đa hình |
 | Reified / không | Reified: mảng, raw, `List<?>`. Không: `List<String>`, `T` |
 | Lách erasure | `Class<T>` token, `Supplier<T>`, `cls.isInstance`, đổi tên method trùng erasure, `@SafeVarargs` |
+| Diamond + anonymous class | Java 9+ mới cho phép `new Comparator<>() { ... }` (trước đó phải ghi rõ kiểu) |
+| Intersection cast | `(A & B) obj` — ép kiểu thỏa nhiều interface cùng lúc |
 | Spring/JDK | `JpaRepository<T,ID>`, `ResponseEntity<T>`, `Optional<T>`, `Comparator<? super T>`, `ParameterizedTypeReference<...>` |
 
 ---

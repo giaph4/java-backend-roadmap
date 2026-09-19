@@ -298,6 +298,38 @@ project-root/
 
 `mvn install` ở thư mục gốc build **đúng thứ tự** dựa trên phụ thuộc giữa các module (`common` trước, `api` sau). Dùng khi một hệ thống tách nhiều thư viện/service dùng chung nhưng vẫn build/version cùng nhau.
 
+### `<packaging>`: `jar` vs `war` vs Fat Jar/Uber Jar
+
+Thẻ `<packaging>` ở đầu `pom.xml` (mục 2) quyết định `mvn package` sinh ra loại file gì ở `target/`:
+
+| `<packaging>` | Sinh ra gì | Dùng khi nào |
+|---|---|---|
+| `jar` (mặc định) | `.jar` — chỉ chứa **class của chính dự án** + resource, KHÔNG chứa dependency | Thư viện dùng nội bộ, hoặc app chạy kèm classpath dựng thủ công |
+| `war` | `.war` (Web Application Archive) — cấu trúc chuẩn Servlet: `WEB-INF/classes`, `WEB-INF/lib`, `WEB-INF/web.xml` | Deploy vào application server có sẵn (Tomcat/JBoss cài riêng) — mô hình cũ trước khi có embedded server |
+| `pom` | Không sinh artifact nhị phân — chỉ dùng để **điều phối** multi-module (mục 5) | Parent POM |
+
+**Plain jar thường KHÔNG chạy được trực tiếp** bằng `java -jar` nếu có dependency ngoài — vì `.jar` không tự chứa `.jar` khác, JVM không tự "đào" vào `.jar` lồng nhau để tìm class.
+
+**Fat Jar / Uber Jar** giải quyết vấn đề này: đóng gói **toàn bộ dependency đã giải nén** vào chung một `.jar` — chỉ cần `java -jar app.jar` là chạy được ở bất kỳ máy nào có JVM, không cần cài gì thêm. Sinh ra bởi plugin (`maven-shade-plugin`, hoặc `spring-boot-maven-plugin` cho Spring Boot).
+
+**Spring Boot executable jar** dùng biến thể tinh vi hơn plain Fat Jar (không giải nén trộn lẫn class của app với class của thư viện, mà **giữ nguyên từng `.jar` thư viện**, lồng bên trong):
+
+```
+myapp.jar
+├── META-INF/MANIFEST.MF          # khai báo Main-Class = JarLauncher (không phải class app của bạn!)
+├── org/springframework/boot/loader/...   # "JarLauncher" — bootstrap classloader tùy biến
+├── BOOT-INF/
+│   ├── classes/                  # .class + resource CỦA DỰ ÁN BẠN (y hệt src/main/... đã compile)
+│   │   └── com/example/app/Application.class
+│   └── lib/                      # TOÀN BỘ dependency, giữ nguyên dạng .jar, KHÔNG giải nén trộn lẫn
+│       ├── spring-web-6.1.0.jar
+│       └── jackson-databind-2.16.0.jar
+```
+
+Lý do Spring Boot không dùng Fat Jar kiểu giải nén-trộn-lẫn truyền thống: tránh xung đột khi hai thư viện khác nhau có file trùng tên trong `META-INF/services/` (cơ chế `ServiceLoader`) — giải nén trộn chung sẽ khiến file này **ghi đè** lẫn nhau, mất cấu hình. `JarLauncher` (một `ClassLoader` tùy biến do Spring Boot viết) biết cách nạp class trực tiếp từ các `.jar` lồng bên trong `BOOT-INF/lib/` mà không cần giải nén ra đĩa trước.
+
+> `java -jar myapp.jar` chỉ chạy được với **executable jar** (có `Main-Class` hợp lệ trong `MANIFEST.MF` và mọi dependency đã có mặt theo cách JVM tìm thấy được) — plain `jar` do `mvn package` tạo ra khi dự án có dependency ngoài mà KHÔNG dùng `spring-boot-maven-plugin` (hoặc shade/assembly plugin) sẽ báo lỗi `NoClassDefFoundError` ngay khi chạm tới class của thư viện ngoài, vì dependency không hề nằm trong `.jar` đó.
+
 ---
 
 ## 6. Gradle — tổng quan & so sánh với Maven
@@ -335,6 +367,21 @@ Maven: mọi dependency `compile` đều lộ ra transitively cho ai dùng modul
 Mỗi **task** khai báo rõ input/output; Gradle hash input để quyết định **UP-TO-DATE** (bỏ qua, không chạy lại) hay phải chạy. **Build cache** (local/remote) lưu output theo hash input — tái dùng được **giữa các máy/CI**, kể cả build sạch từ đầu.
 
 Build script Gradle có hai giai đoạn: **configuration** (chạy script, dựng đồ thị task) rồi **execution** (chạy đúng task cần theo đồ thị) — lý do Gradle "là code thật" (Groovy/Kotlin) còn Maven chỉ "đọc khai báo" XML.
+
+### Task Graph — đơn vị công việc là `Task`, không phải `Phase` cố định
+
+Khác Maven (chuỗi phase cố định `validate→compile→...`), Gradle mô hình hoá build bằng đồ thị **task** tự định nghĩa quan hệ phụ thuộc, mỗi task chỉ chạy khi cần:
+
+```groovy
+tasks.register('generateVersionFile') {
+    doLast { file("$buildDir/version.txt").text = version }
+}
+tasks.named('compileJava') {
+    dependsOn 'generateVersionFile'   // compileJava tự kéo theo generateVersionFile trước
+}
+```
+
+Chạy `gradle build` không "đi tuần tự qua từng phase" như Maven mà Gradle **duyệt ngược từ task đích**, dựng ra đúng tập task cần chạy theo `dependsOn`, rồi thực thi theo đúng thứ tự tôpô — task nào không nằm trên đường phụ thuộc tới đích thì **không chạy**, đây là gốc rễ của incremental build đã nói ở trên.
 
 ### `gradlew` — Gradle Wrapper (tương đương `mvnw`)
 
@@ -649,7 +696,9 @@ BREAKING CHANGE: field `data` giờ là object thay vì array
 | Build Lifecycle | `validate→compile→test→package→verify→install→deploy`, tuần tự. Phase ≠ goal |
 | `mvnw` | Maven Wrapper — build tái lập, không cần cài Maven |
 | Multi-module | `packaging=pom` + `<modules>` — build đúng thứ tự phụ thuộc |
+| `jar`/`war`/Fat Jar | Plain jar không chứa dependency → `NoClassDefFoundError` khi chạy `java -jar`; Spring Boot jar lồng `.jar` nguyên vẹn trong `BOOT-INF/lib/` + `JarLauncher` tùy biến |
 | Gradle | Nhanh hơn (incremental + cache); `implementation` vs `api` kiểm soát lộ transitively; `gradlew` |
+| Gradle Task Graph | `Task` tự khai `dependsOn`, Gradle duyệt ngược từ đích — khác chuỗi phase cố định của Maven |
 | Git object model | Commit = snapshot (tree) + cha, không phải diff; blob theo hash; DAG; `HEAD` |
 | `reset` vs `revert` | reset sửa lịch sử (chỉ nhánh riêng); revert an toàn cho lịch sử chia sẻ |
 | `stash`/`cherry-pick`/`reflog` | Cất tạm; áp 1 commit cụ thể; lưới cứu sinh sau `reset --hard` |

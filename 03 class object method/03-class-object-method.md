@@ -80,6 +80,30 @@ Object sống tới khi **không còn reference nào** trỏ tới nó → trở
 - Không có `delete`/`free` trong Java. Gán `ref = null` chỉ *gỡ* một tham chiếu.
 - `finalize()` đã **deprecated** (Java 9) và bị loại bỏ — không bao giờ dựa vào nó để dọn tài nguyên. Dùng `try-with-resources` / `AutoCloseable` (Module 01.11).
 
+### `Object` — gốc rễ chung của mọi class
+
+Mọi class trong Java, dù bạn viết `extends` hay không, đều **ngầm kế thừa** `java.lang.Object` (nếu không ghi `extends X`, compiler tự hiểu là `extends Object`). Vì vậy **mọi object** — kể cả một `int[]` hay một class rỗng — đều sở hữu sẵn bộ method sau:
+
+| Method | Vai trò | Ghi chú |
+|---|---|---|
+| `toString()` | Biểu diễn object dưới dạng `String` (mặc định: `TênClass@hashCodeHex`) | Nên override để log/debug dễ đọc — chi tiết Module 01.7 |
+| `equals(Object o)` | So sánh "bằng nhau" — mặc định là `this == o` (so sánh địa chỉ) | Override khi cần so sánh theo *giá trị* — Module 01.7 |
+| `hashCode()` | Trả về mã băm dùng bởi `HashMap`/`HashSet` | Luôn override **cùng lúc** với `equals` — Module 01.7 |
+| `getClass()` | Trả về `Class<?>` mô tả kiểu runtime thực sự của object | `final`, không override được; dùng cho reflection, so `getClass() == other.getClass()` khi cần equals nghiêm ngặt |
+| `clone()` | Tạo bản sao "nông" (shallow copy) nếu class implement `Cloneable` | Ít dùng trong code hiện đại — thường thay bằng copy constructor hoặc factory method |
+| `finalize()` | Từng dùng để dọn tài nguyên trước khi GC thu hồi | **Deprecated & không còn đáng tin cậy** — dùng `try-with-resources`/`AutoCloseable` (Module 01.11) |
+| `wait()`/`notify()`/`notifyAll()` | Cơ chế đồng bộ hoá thread ở mức thấp | Thuộc về monitor lock của object — chi tiết Module 01.12 |
+
+```java
+class Empty { }   // thực chất là: class Empty extends Object { }
+
+Empty e = new Empty();
+System.out.println(e);              // Empty@1b6d3586  (gọi Object.toString() mặc định)
+System.out.println(e.getClass());   // class Empty
+```
+
+> Vì `getClass()`, `equals()`, `hashCode()`, `toString()` luôn tồn tại sẵn trên **mọi biến tham chiếu bất kỳ kiểu nào**, bạn có thể gọi chúng trên tham số kiểu `Object` mà không cần biết trước kiểu cụ thể — đây là nền tảng để các collection (`ArrayList<Object>` thời pre-generics, hay `HashMap` ngày nay) hoạt động tổng quát với mọi kiểu dữ liệu.
+
 ### `record` — class dữ liệu cô đọng (Java 16+)
 
 Khi class chỉ để **mang dữ liệu bất biến**, `record` sinh sẵn constructor, getter (`name()` chứ không phải `getName()`), `equals`/`hashCode`/`toString`:
@@ -112,6 +136,66 @@ new Point(3, 4).equals(p);     // true — so sánh theo giá trị field
 | **anonymous class** | `new Runnable() { ... }` | Không có tên; định nghĩa + tạo instance cùng lúc |
 
 > Mỗi file `.java` chỉ được có **tối đa một `public` top-level class**, và tên file phải trùng tên class đó.
+
+### Đào sâu 4 loại class lồng nhau — ví dụ cụ thể
+
+**Static nested class** — không cần instance của class ngoài, giống một top-level class "gói nhờ" namespace:
+
+```java
+class Outer {
+    static int outerStatic = 100;
+    int outerInstance = 1;
+
+    static class Nested {
+        void show() {
+            System.out.println(outerStatic);   // ✅ chỉ thấy static member của Outer
+            // System.out.println(outerInstance); // ❌ không có instance Outer nào để tham chiếu
+        }
+    }
+}
+Outer.Nested n = new Outer.Nested();   // tạo trực tiếp, KHÔNG cần new Outer()
+```
+
+**Inner class (non-static)** — mỗi instance luôn "đính kèm" một instance `Outer` cụ thể, giữ tham chiếu ngầm tới nó:
+
+```java
+class Outer {
+    int value = 10;
+    class Inner {
+        void show() {
+            System.out.println(value);       // ✅ thấy trực tiếp field của Outer bao quanh
+        }
+    }
+}
+Outer o = new Outer();
+Outer.Inner in = o.new Inner();              // BẮT BUỘC phải có instance Outer trước
+```
+
+Vì mỗi `Inner` giữ tham chiếu ẩn tới `Outer` (được compiler chèn thành field ẩn `Outer.this`), một `Inner` sống lâu có thể **giữ cả `Outer` không bị GC** dù bạn tưởng đã hết dùng — nguồn rò rỉ bộ nhớ âm thầm hay gặp khi đăng ký `Inner` làm listener dài hạn.
+
+**Local class** — khai báo ngay trong thân method, chỉ tồn tại/nhìn thấy trong method đó:
+
+```java
+void processOrders(List<String> items) {
+    class Validator {                        // local class
+        boolean isValid(String s) { return s != null && !s.isBlank(); }
+    }
+    Validator v = new Validator();
+    for (String item : items) if (v.isValid(item)) System.out.println(item);
+}
+```
+
+Local class có thể bắt (capture) biến local của method bao quanh, miễn biến đó là **effectively final** (không bị gán lại sau khi khởi tạo) — cùng quy tắc với lambda (Module 01.10).
+
+**Anonymous class** — vừa định nghĩa vừa khởi tạo trong một biểu thức, không có tên, thường dùng để hiện thực nhanh một interface/abstract class:
+
+```java
+Comparator<String> byLength = new Comparator<String>() {
+    @Override public int compare(String a, String b) { return a.length() - b.length(); }
+};
+```
+
+Từ Java 8 trở đi, khi interface chỉ có **một method trừu tượng** (functional interface), lambda thường thay thế gọn hơn cho anonymous class — nhưng anonymous class vẫn cần thiết khi phải override **nhiều method** hoặc cần thêm field/state riêng cho instance đó.
 
 ---
 
@@ -320,6 +404,29 @@ Quy tắc & bẫy:
 - `f((Object[]) null)` truyền `null` làm mảng → `NullPointerException` khi duyệt; `f((Object) null)` truyền mảng 1 phần tử `null`.
 - `printf`/`String.format` dùng varargs — truyền sai số lượng/kiểu tham số ⇒ `MissingFormatArgumentException` lúc runtime, compiler không bắt.
 - Truyền `T[]` vào `T...` generic có thể sinh cảnh báo *heap pollution* → đánh dấu `@SafeVarargs` nếu chắc chắn an toàn (chi tiết ở Module 01.9).
+
+### Method trả về kiểu tham chiếu — trả về địa chỉ, không phải bản sao dữ liệu
+
+Khi một method có kiểu trả về là class/array/interface, giá trị `return` là **reference** (địa chỉ), giống hệt cơ chế truyền tham số (Module 01.1 §10). Không có object nào bị "sao chép nội dung" trong quá trình `return`:
+
+```java
+class Box { int value; }
+
+Box createAndFill() {
+    Box b = new Box();
+    b.value = 42;
+    return b;              // trả về ĐỊA CHỈ của b, không phải một bản sao của Box
+}
+
+Box result = createAndFill();
+result.value = 100;        // sửa trực tiếp trên object gốc — không có "bản sao" nào khác tồn tại
+```
+
+Hệ quả thực tế cần nhớ:
+
+- Nếu method trả về một field nội bộ (ví dụ `List`, `Map`, mảng), caller nhận **cùng object** đó — sửa qua reference trả về sẽ ảnh hưởng ngược lại object gốc (đã nhắc ở §6 "rò rỉ đóng gói").
+- Trả về `null` là hợp lệ về mặt kiểu (mọi kiểu tham chiếu đều nhận được `null`), nhưng caller gọi method/field trên giá trị `null` đó sẽ `NullPointerException` — nên cân nhắc trả về `Optional<T>` (Module 01.11) khi "có thể không có kết quả" là một khả năng hợp lệ.
+- Ngược lại, method trả về kiểu **primitive** (`int`, `double`...) luôn trả về một **bản sao giá trị** — caller không thể "nhìn thấy" hay ảnh hưởng gì tới biến local bên trong method đã return.
 
 ### Trả về `this` để nối chuỗi (fluent API)
 

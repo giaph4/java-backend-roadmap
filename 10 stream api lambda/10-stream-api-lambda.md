@@ -11,11 +11,12 @@
 1. [Functional Interface — nền tảng của Lambda](#1-functional-interface--nền-tảng-của-lambda)
 2. [Lambda Expression](#2-lambda-expression)
 3. [Họ functional interface trong `java.util.function`](#3-họ-functional-interface-trong-javautilfunction)
-4. [Method Reference (`::`)](#4-method-reference-)
-5. [Tạo Stream — nhiều nguồn & stream nguyên thủy](#5-tạo-stream--nhiều-nguồn--stream-nguyên-thủy)
+4. [Method Reference (`::`)](#4-method-reference-) (kèm `Comparator` — `comparing`/`thenComparing`/`nullsFirst`)
+5. [Tạo Stream — nhiều nguồn & stream nguyên thủy](#5-tạo-stream--nhiều-nguồn--stream-nguyên-thủy) (kèm `Stream.concat`, Stream cần đóng)
 6. [Thao tác trung gian (Intermediate Operations)](#6-thao-tác-trung-gian-intermediate-operations)
 7. [Thao tác kết thúc (Terminal Operations)](#7-thao-tác-kết-thúc-terminal-operations)
-8. [`Collectors` — thu thập kết quả](#8-collectors--thu-thập-kết-quả)
+   - 7.1 [`Optional` — xử lý an toàn kết quả có thể rỗng](#71-optional--xử-lý-an-toàn-kết-quả-có-thể-rỗng)
+8. [`Collectors` — thu thập kết quả](#8-collectors--thu-thập-kết-quả) (kèm viết `Collector` tùy chỉnh)
 9. [Lazy Evaluation & ngữ nghĩa Stream](#9-lazy-evaluation--ngữ-nghĩa-stream)
 10. [`parallelStream()` — song song & cạm bẫy](#10-parallelstream--song-song--cạm-bẫy)
 11. [Khi nào NÊN và KHÔNG NÊN dùng Stream](#11-khi-nào-nên-và-không-nên-dùng-stream)
@@ -223,6 +224,40 @@ BiFunction<String,String,Boolean> eq = String::equals;      // unbound: (a,b) ->
 
 > **Nguyên tắc chọn:** lambda dạng `x -> x.m()` hoặc `x -> C.m(x)` — **không thêm logic** — thì đổi sang method reference. Còn `x -> x.m() + 1` hay `x -> C.m(x, other)` thì giữ lambda.
 
+### `Comparator` — xây dựng bằng phương thức tĩnh & chuỗi (fluent)
+
+`Comparator<T>` cũng là functional interface (`int compare(T, T)`), nhưng hiếm khi viết lambda thô cho so sánh nhiều tiêu chí — JDK cung cấp bộ phương thức tổ hợp giúp đọc gần như câu tiếng Anh:
+
+```java
+record Employee(String name, String dept, double salary) {}
+
+Comparator<Employee> byDeptThenSalaryDesc =
+    Comparator.comparing(Employee::dept)                 // tiêu chí chính: dept tăng dần
+              .thenComparing(Employee::salary, Comparator.reverseOrder());  // tiêu chí phụ: salary giảm dần
+
+employees.sort(byDeptThenSalaryDesc);
+
+Comparator<Employee> bySalary = Comparator.comparingDouble(Employee::salary);  // tránh boxing, có bản Int/Long
+Comparator<Employee> reversed = bySalary.reversed();
+
+// null-safe: đẩy giá trị null lên đầu hoặc xuống cuối thay vì NullPointerException
+Comparator<String> nullsSafe = Comparator.nullsFirst(Comparator.naturalOrder());
+List<String> withNulls = new ArrayList<>(Arrays.asList("b", null, "a"));
+withNulls.sort(nullsSafe);   // [null, "a", "b"]
+```
+
+| Phương thức | Ý nghĩa |
+|---|---|
+| `Comparator.comparing(keyExtractor)` | So sánh theo một "khóa" trích từ object (khóa phải `Comparable`) |
+| `Comparator.comparing(keyExtractor, Comparator<K>)` | Trích khóa rồi so bằng Comparator tùy chỉnh cho khóa đó |
+| `.thenComparing(...)` | Tiêu chí **phụ**, áp dụng khi tiêu chí trước cho kết quả bằng nhau — nối được nhiều lần |
+| `.reversed()` | Đảo ngược thứ tự của **chính Comparator đó** |
+| `Comparator.naturalOrder()` / `reverseOrder()` | Dùng `compareTo` tự nhiên của kiểu (yêu cầu `Comparable`) |
+| `Comparator.nullsFirst(cmp)` / `nullsLast(cmp)` | Bọc một Comparator để xử lý an toàn giá trị `null` |
+| `comparingInt`/`comparingLong`/`comparingDouble` | Bản chuyên biệt cho khóa nguyên thủy — tránh autoboxing khi so sánh số |
+
+> `Comparator` khác `Comparable` (Module 03.1 — Collections): `Comparable<T>` là **thứ tự tự nhiên** gắn cứng vào class (`compareTo`, chỉ một cách sắp xếp); `Comparator<T>` là **chiến lược so sánh rời**, truyền vào `sort`/`sorted`/`TreeMap`, có thể có bao nhiêu cách tùy ý mà không sửa class gốc.
+
 ---
 
 ## 5. Tạo Stream — nhiều nguồn & stream nguyên thủy
@@ -254,6 +289,39 @@ Stream<String> labels = IntStream.range(0, 3).mapToObj(i -> "row" + i);
 ```
 
 Chuyển đổi hai chiều: `stream.mapToInt(...)` / `intStream.boxed()` / `intStream.mapToObj(...)`.
+
+### Nối nhiều Stream — `Stream.concat`
+
+```java
+Stream<Integer> a = Stream.of(1, 2, 3);
+Stream<Integer> b = Stream.of(4, 5);
+List<Integer> both = Stream.concat(a, b).toList();   // [1,2,3,4,5]
+```
+
+`concat` chỉ nhận **2** Stream mỗi lần — nối nhiều hơn thì lồng nhau (`Stream.concat(a, Stream.concat(b, c))`) hoặc dùng `Stream.of(a, b, c).flatMap(s -> s)`. Cảnh báo: nối nhiều Stream có `filter`/`map` lồng sâu (deep nesting) qua `concat` lặp lại có thể gây `StackOverflowError` khi số lượng lớn — với nhiều nguồn, ưu tiên gộp dữ liệu trước rồi `.stream()` một lần.
+
+### Stream trên tài nguyên cần đóng — `Files.lines` và `onClose`
+
+`Files.lines(path)` mở một file handle bên dưới — **phải đóng** sau khi dùng, nếu không sẽ rò rỉ file descriptor. Vì `Stream` implement `AutoCloseable`, dùng được trực tiếp trong try-with-resources (Module 04):
+
+```java
+try (Stream<String> lines = Files.lines(path)) {
+    long count = lines.filter(l -> !l.isBlank()).count();
+}   // tự động gọi lines.close() dù có exception hay không
+```
+
+Method `onClose(Runnable)` cho phép gắn thêm hành động dọn dẹp tùy chỉnh, chạy khi `close()` được gọi (thủ công hoặc qua try-with-resources) — hữu ích khi tự viết method trả về Stream bọc quanh một tài nguyên:
+
+```java
+public static Stream<String> readLines(Path p) throws IOException {
+    var reader = Files.newBufferedReader(p);
+    return reader.lines().onClose(() -> {
+        try { reader.close(); } catch (IOException e) { throw new UncheckedIOException(e); }
+    });
+}
+```
+
+> Hầu hết Stream trong thực tế (từ `List`, mảng, `Stream.of`) **không** cần đóng — chỉ Stream sinh ra từ I/O (`Files.lines`, `Files.walk`) mới cần.
 
 ---
 
@@ -341,6 +409,32 @@ Yêu cầu để `reduce` (nhất là song song) đúng:
 - `accumulator` & `combiner`: **kết hợp được (associative)**, không phụ thuộc thứ tự, không side-effect.
 
 > `count()` (Java 9+) có thể trả kết quả **mà không chạy** các thao tác trung gian nếu số lượng suy ra được từ nguồn (`SIZED`) và pipeline không có `filter`/`flatMap` — lý do khác để không nhét logic vào `peek`.
+
+### 7.1 `Optional` — xử lý an toàn kết quả có thể rỗng
+
+Nhiều terminal operation trả về **`Optional<T>`** thay vì `T` trực tiếp khi stream có thể rỗng: `max`, `min`, `reduce(BinaryOperator)`, `findFirst`, `findAny`. `Optional` là một **hộp chứa 0 hoặc 1 phần tử** — buộc người gọi phải xử lý tường minh trường hợp "không có kết quả", thay vì trả `null` rồi quên kiểm tra (nguồn gốc phổ biến nhất của `NullPointerException`). Phần chi tiết đầy đủ về `Optional` (thiết kế, best practice, khi nào KHÔNG nên dùng) thuộc **Module 04 — Exception Handling**; ở đây chỉ nêu đủ để đọc hiểu và dùng đúng các Optional sinh ra từ Stream.
+
+```java
+Optional<Integer> mx = ns.stream().max(Integer::compareTo);
+
+// Lấy giá trị an toàn — KHÔNG bao giờ gọi get() mà không kiểm tra trước
+int v1 = mx.orElse(0);                          // 0 nếu rỗng — giá trị mặc định TÍNH SẴN, luôn được eval
+int v2 = mx.orElseGet(() -> computeDefault());   // gọi Supplier CHỈ khi rỗng — dùng khi default tốn kém
+int v3 = mx.orElseThrow();                        // NoSuchElementException nếu rỗng (Java 10+)
+int v4 = mx.orElseThrow(() -> new IllegalStateException("Danh sách rỗng"));  // exception tùy biến
+
+mx.ifPresent(v -> System.out.println("Max = " + v));                 // chỉ chạy khi CÓ giá trị
+mx.ifPresentOrElse(
+    v -> System.out.println("Max = " + v),
+    () -> System.out.println("Không có phần tử nào"));               // Java 9 — else-branch tường minh
+
+Optional<String> label = mx.map(v -> "Giá trị lớn nhất: " + v);       // biến đổi NẾU có giá trị, vẫn Optional
+Optional<Integer> big  = mx.filter(v -> v > 100);                     // rỗng nếu không thỏa điều kiện
+```
+
+> ⚠️ **Bẫy kinh điển:** `mx.get()` khi không chắc chắn có giá trị sẽ ném `NoSuchElementException` lúc runtime — về bản chất tái tạo lại đúng vấn đề mà `Optional` sinh ra để giải quyết. Luôn dùng `orElse`/`orElseGet`/`orElseThrow`/`ifPresent` thay vì `get()` trần trụi.
+
+> `orElse(x)` **luôn** tính giá trị `x` (dù Optional có giá trị hay không) vì nó là tham số thường, không phải lambda. Nếu `x` là lời gọi method tốn kém (`orElse(fetchFromDb())`), hãy đổi sang `orElseGet(() -> fetchFromDb())` để chỉ gọi khi thực sự cần.
 
 ---
 
@@ -432,6 +526,25 @@ Map<String,Double> sorted = revenue.entrySet().stream()
 
 > `groupingBy` ↔ `GROUP BY` trong SQL (Module 12). Nếu quen SQL thì downstream collector chính là `COUNT`/`SUM`/`AVG`/`HAVING`.
 
+### Viết `Collector` tùy chỉnh — `Collector.of`
+
+Mọi thứ trong `Collectors` (`toList`, `groupingBy`, `joining`...) chỉ là các `Collector` **dựng sẵn**. Khi logic thu thập không có sẵn factory phù hợp, tự viết bằng `Collector.of(supplier, accumulator, combiner, [finisher])`:
+
+```java
+// Thu thập thành một chuỗi CSV tự viết tay (minh họa cơ chế — thực tế nên dùng Collectors.joining)
+Collector<String, StringBuilder, String> toCsv = Collector.of(
+    StringBuilder::new,                                   // supplier: tạo "hộp chứa" tạm (mutable container)
+    (sb, s) -> { if (!sb.isEmpty()) sb.append(','); sb.append(s); },  // accumulator: gộp 1 phần tử vào hộp
+    (sb1, sb2) -> sb1.append(',').append(sb2),             // combiner: gộp 2 hộp (khi chạy song song)
+    StringBuilder::toString                                // finisher: chuyển hộp tạm thành kết quả cuối
+);
+String csv = names.stream().collect(toCsv);
+```
+
+Bốn thành phần đúng như "3 tham số của `reduce`" (mục 7) mở rộng thêm bước `finisher` để đổi kiểu tích lũy sang kiểu kết quả cuối — đây là lý do `Collector` linh hoạt hơn `reduce` thuần: `reduce` bắt buộc kiểu tích lũy = kiểu trả về (trừ bản 3 tham số), còn `Collector` tách rời "kiểu chứa tạm" (`StringBuilder`) khỏi "kiểu kết quả" (`String`).
+
+Nếu không cần bước `finisher` (kiểu chứa tạm đã chính là kiểu kết quả, ví dụ gom vào `ArrayList`), dùng overload 3 tham số `Collector.of(supplier, accumulator, combiner)`.
+
 ---
 
 ## 9. Lazy Evaluation & ngữ nghĩa Stream
@@ -477,6 +590,26 @@ int sum = list.stream().parallel().mapToInt(Integer::intValue).sum();   // .para
 - Muốn pool riêng: `new ForkJoinPool(4).submit(() -> list.parallelStream()....).get();`
 - Hiệu quả chia việc phụ thuộc **`Spliterator`**: `ArrayList`/mảng/`IntStream.range` chia đôi rẻ → tốt; `LinkedList`, `Files.lines`, `Stream.iterate` chia kém → thường **chậm hơn** tuần tự.
 
+#### `Spliterator` là gì?
+
+`Spliterator` ("**split**-able **iterator**") là cơ chế duyệt phần tử **đứng sau mọi Stream**, kể cả tuần tự — nó là phiên bản hiện đại hơn `Iterator`, được thiết kế sẵn cho song song. Ba khả năng chính:
+
+- `tryAdvance(action)` — xử lý **một** phần tử tiếp theo, giống `Iterator.next()` nhưng gộp cả kiểm tra `hasNext()`.
+- `trySplit()` — **chia đôi** nguồn dữ liệu thành 2 Spliterator con (nếu chia được), mỗi con phụ trách một nửa → đây chính là cơ chế cho phép `ForkJoinPool` phân việc song song mà không cần khóa (lock).
+- `estimateSize()` — ước lượng số phần tử còn lại, giúp framework quyết định có nên tiếp tục chia nhỏ hay dừng lại xử lý tuần tự (tránh chia vụn quá mức gây overhead).
+
+**Vì sao "chia rẻ" hay "chia kém" khác nhau giữa cấu trúc dữ liệu:**
+
+| Nguồn | Đặc điểm `trySplit()` | Kết quả |
+|---|---|---|
+| `ArrayList`, mảng, `IntStream.range` | Biết chính xác kích thước, chỉ cần cắt đôi chỉ số (`O(1)`) | Chia rất rẻ → song song hiệu quả |
+| `LinkedList` | Phải **duyệt tuần tự** từng node để tìm điểm giữa (`O(n)`) | Chia tốn kém → thường chậm hơn tuần tự khi `parallelStream` |
+| `HashSet`/`TreeSet` | Chia theo cấu trúc bucket/cây, không đều nhau | Trung bình, phụ thuộc phân bố dữ liệu |
+| `Stream.iterate` (không giới hạn) | Về bản chất tuần tự — phần tử sau phụ thuộc phần tử trước, **không chia được** | Không tận dụng được song song |
+| `Files.lines` | Phải đọc qua để tìm ranh giới dòng | Chia kém, thêm chi phí I/O |
+
+Không cần tự implement `Spliterator` trong công việc thường ngày — hiểu khái niệm này giúp lý giải **tại sao** đổi `List` implementation lại ảnh hưởng tới hiệu năng `parallelStream`, thay vì chỉ nhớ máy móc "LinkedList thì tệ".
+
 ### Khi nào KHÔNG dùng
 
 | Trường hợp | Lý do |
@@ -515,16 +648,21 @@ Nhược điểm cần cân nhắc: stack trace của lambda khó đọc hơn; d
 | 4 core + biến thể | `Function/Predicate/Supplier/Consumer`; `Bi*`, `UnaryOperator`, `BinaryOperator`; bản `Int/Long/Double*` tránh boxing. |
 | Tổ hợp | `andThen`/`compose`/`identity`; `and`/`or`/`negate`/`Predicate.not`. |
 | Method reference | 4 loại: static, bound, **unbound** (tham số đầu = receiver), constructor (`Type::new`, `Type[]::new`). |
-| Tạo Stream | `stream()`, `Stream.of`, `Arrays.stream`, `iterate`/`generate` (+`limit`), `IntStream.range`, `chars()`, `Files.lines`. |
+| `Comparator` | `comparing`/`thenComparing`/`reversed`/`naturalOrder`/`nullsFirst`; khác `Comparable` (thứ tự tự nhiên gắn với class vs chiến lược so sánh rời). |
+| Tạo Stream | `stream()`, `Stream.of`, `Arrays.stream`, `iterate`/`generate` (+`limit`), `IntStream.range`, `chars()`, `Files.lines`, `Stream.concat`. |
 | Stream nguyên thủy | `IntStream`/`LongStream`/`DoubleStream` — `sum`/`average`/`summaryStatistics`, `boxed`/`mapToObj`. |
+| Stream cần đóng | `Files.lines`/`Files.walk` implement `AutoCloseable` — dùng try-with-resources; `onClose(Runnable)` gắn dọn dẹp tùy chỉnh. Đa số Stream khác không cần đóng. |
 | Trung gian | Lazy, trả Stream mới. Stateless (`filter`/`map`/`flatMap`) vs stateful (`sorted`/`distinct`/`limit`/`takeWhile`). |
 | `peek` | Chỉ để debug — runtime được phép bỏ qua. |
 | `map` vs `flatMap` | 1→1 vs 1→Stream-con rồi làm phẳng. `mapMulti` (Java 16) thay thế nhẹ hơn. |
 | Kết thúc | Kích hoạt pipeline, Stream hết hạn. `findFirst` (order) vs `findAny` (song song). Short-circuit: `anyMatch`/`findFirst`/`limit`. |
+| `Optional` từ Stream | `max`/`min`/`reduce(BinaryOperator)`/`findFirst`/`findAny` trả `Optional<T>`. Ưu tiên `orElse`/`orElseGet`/`orElseThrow`/`ifPresent(OrElse)` — tránh `get()` trần trụi. `orElse` luôn eval tham số; `orElseGet` chỉ eval khi rỗng. |
 | `reduce` | 3 dạng; song song cần identity hợp lệ + accumulator/combiner associative, không side-effect. |
 | `Collectors` | `toList`(Java 16 bất biến) / `toUnmodifiable*`; `toMap` cần merge function khi trùng key; `groupingBy` + downstream (`counting`/`summingX`/`mapping`/`maxBy`/`collectingAndThen`); `partitioningBy` luôn đủ 2 key; `teeing`. |
+| `Collector` tùy chỉnh | `Collector.of(supplier, accumulator, combiner, [finisher])` — tách "kiểu chứa tạm" khỏi "kiểu kết quả", linh hoạt hơn `reduce`. |
 | Lazy & ngữ nghĩa | Dùng 1 lần; không sửa nguồn khi chạy; behavioral param stateless; encounter order. |
 | `parallelStream` | Chạy trên common `ForkJoinPool`; tốt với `ArrayList`/`range`, tệ với `LinkedList`/I/O; benchmark trước khi dùng. |
+| `Spliterator` | Cơ chế duyệt + **chia đôi** (`trySplit`) đứng sau mọi Stream — quyết định song song hiệu quả hay không tùy cấu trúc dữ liệu nguồn. |
 
 ---
 

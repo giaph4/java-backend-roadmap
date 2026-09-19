@@ -17,8 +17,9 @@
 7. [break, continue & nhãn (labels)](#7-break-continue--nhãn-labels)
 8. [Phân tích luồng lúc biên dịch — unreachable code & definite assignment](#8-phân-tích-luồng-lúc-biên-dịch--unreachable-code--definite-assignment)
 9. [Đệ quy (Recursion)](#9-đệ-quy-recursion)
-10. [Tổng kết — Bảng ghi nhớ nhanh](#10-tổng-kết--bảng-ghi-nhớ-nhanh)
-11. [Bài tập luyện tập](#11-bài-tập-luyện-tập)
+10. [Câu lệnh `assert` — kiểm tra bất biến lúc runtime](#10-câu-lệnh-assert--kiểm-tra-bất-biến-lúc-runtime)
+11. [Tổng kết — Bảng ghi nhớ nhanh](#11-tổng-kết--bảng-ghi-nhớ-nhanh)
+12. [Bài tập luyện tập](#12-bài-tập-luyện-tập)
 
 ---
 
@@ -273,6 +274,27 @@ temp = 20;          // VẪN NHÌN THẤY temp (cùng scope switch) — nhưng c
 
 Muốn scope riêng cho từng case: bọc thân case bằng `{ }`.
 
+### `switch` dưới góc nhìn bytecode — vì sao nó nhanh hơn chuỗi `if/else`
+
+Khi biên dịch `switch` trên kiểu số nguyên (`int`, `char`, enum's ordinal...), JVM sinh ra một trong hai lệnh bytecode chuyên dụng thay vì so sánh tuần tự từng nhãn:
+
+| Lệnh bytecode | Compiler chọn khi nào | Cách hoạt động | Độ phức tạp |
+|---|---|---|---|
+| `tableswitch` | Các giá trị `case` **liên tiếp hoặc gần liên tiếp**, khoảng cách nhỏ (ví dụ `1,2,3,4,5`) | Dùng chỉ số làm **địa chỉ tra bảng nhảy trực tiếp** (giống mảng con trỏ) | **O(1)** — nhảy thẳng bất kể có bao nhiêu case |
+| `lookupswitch` | Các giá trị `case` **thưa/không liên tiếp** (ví dụ `1, 100, 5000`) | Bảng `(giá trị, offset)` được sắp xếp, JVM **tìm nhị phân (binary search)** | **O(log n)** |
+
+```java
+// dãy liên tiếp 1..5 → compiler thường sinh tableswitch (tra bảng, O(1))
+switch (day) { case 1 -> ...; case 2 -> ...; case 3 -> ...; case 4 -> ...; case 5 -> ...; }
+
+// giá trị thưa → compiler sinh lookupswitch (tìm nhị phân, O(log n))
+switch (code) { case 1 -> ...; case 404 -> ...; case 9999 -> ...; }
+```
+
+Đây là lý do một `switch` với **hàng trăm case số nguyên liên tục** (ví dụ mã trạng thái HTTP tự viết, mã ASCII) vẫn nhanh gần như tức thời, trong khi chuỗi `if (x==1) ... else if (x==2) ...` tương đương phải so sánh tuần tự — trung bình O(n). Có thể xem bytecode thật bằng lệnh `javap -c TenClass.class` để kiểm chứng compiler chọn `tableswitch` hay `lookupswitch` cho một `switch` cụ thể.
+
+> Với `switch (String)`, bước "băm `hashCode()` rồi `equals()` xác nhận" (đã nói ở trên) thực chất cũng biên dịch xuống `lookupswitch`/`tableswitch` trên giá trị `hashCode()`, cộng thêm bước `equals()` để xử lý đụng độ hash.
+
 ---
 
 ## 5. switch expression & Pattern Matching (Java 14 / 21)
@@ -482,7 +504,48 @@ Hạn chế:
 - Không thể `remove`/`add` phần tử của collection đang duyệt → ném **`ConcurrentModificationException`** (dùng `Iterator.remove()` hoặc `removeIf`, sẽ học ở Module Collections).
 - Không duyệt lùi, không nhảy bước.
 
-### 6.5 Vòng lặp lồng nhau & hiệu năng
+### 6.5 for-each với `Map` — `entrySet()` vs `keySet()`
+
+`Map` không tự `implements Iterable<K>` (một `Map` có 2 "trục" là key và value, không rõ nên duyệt theo trục nào), nên **không** viết được `for (var e : someMap)` trực tiếp. Phải đi qua một trong ba "view":
+
+```java
+Map<String, Integer> stock = Map.of("bút", 10, "vở", 25);
+
+// (1) chỉ cần key
+for (String key : stock.keySet()) { ... }
+
+// (2) chỉ cần value
+for (int qty : stock.values()) { ... }
+
+// (3) cần cả key VÀ value — ĐÂY LÀ CÁCH HIỆU QUẢ, không phải cách dưới
+for (Map.Entry<String, Integer> e : stock.entrySet()) {
+    System.out.println(e.getKey() + " = " + e.getValue());
+}
+```
+
+> ⚠️ **Bẫy hiệu năng kinh điển:** duyệt `keySet()` rồi gọi `map.get(key)` để lấy value trong thân vòng lặp:
+> ```java
+> for (String key : stock.keySet()) {
+>     int qty = stock.get(key);   // MỖI lần lặp lại tra cứu lại trong map (thêm 1 lần hash + lookup)
+> }
+> ```
+> `entrySet()` chỉ duyệt **một lượt** qua cấu trúc nội bộ (bucket/entry đã có sẵn key lẫn value), không tốn thêm lần tra cứu nào — luôn ưu tiên `entrySet()` khi cần cả hai.
+
+Java 8+ còn có `map.forEach((k, v) -> ...)` (dùng lambda, xem Module 01.10) như một cách viết gọn thay cho for-each trên `entrySet()`.
+
+### 6.6 Vòng lặp dưới góc nhìn JIT — vì sao "viết vòng lặp cho sạch" vẫn đủ nhanh
+
+Không cần tự tay "tối ưu thủ công" theo kiểu C thấp cấp — JIT Compiler (C2, xem thêm Module 01.15 JVM Internals) áp dụng nhiều phép biến đổi tự động cho các vòng lặp "nóng" (chạy đủ nhiều lần để được biên dịch native):
+
+| Kỹ thuật JIT | Ý nghĩa ngắn gọn |
+|---|---|
+| **Loop unrolling** | Gộp nhiều lần lặp thành 1 khối lệnh lặp lại (giảm số lần kiểm tra điều kiện & nhảy) |
+| **Bounds-check elimination** | Nếu chứng minh được chỉ số luôn nằm trong `[0, a.length)`, JIT bỏ bớt việc kiểm tra biên mảng ở mỗi lần truy cập `a[i]` |
+| **Loop-invariant hoisting** | Tự động đẩy phép tính không đổi qua các vòng lặp ra ngoài, kể cả khi lập trình viên quên làm |
+
+Hệ quả thực tế: nên ưu tiên viết vòng lặp **rõ ràng, dễ đọc** (kể cả `for-each`) thay vì "vặn tay" thành dạng khó hiểu để "tối ưu" — trong phần lớn trường hợp JIT đã lo phần đó. Chỉ tối ưu thủ công (gộp vòng, tránh tạo object, đưa `.size()` ra ngoài...) khi đã **đo đạc** (profiling/benchmark) và xác nhận đoạn code đó thực sự là điểm nghẽn.
+
+### 6.7 Vòng lặp lồng nhau & hiệu năng
 
 ```java
 for (int i = 0; i < n; i++) {
@@ -781,7 +844,42 @@ void subsets(int[] nums, int idx, List<Integer> path, List<List<Integer>> out) {
 
 ---
 
-## 10. Tổng kết — Bảng ghi nhớ nhanh
+## 10. Câu lệnh `assert` — kiểm tra bất biến lúc runtime
+
+`assert` là một dạng rẽ nhánh đặc biệt: kiểm tra một **điều kiện phải luôn đúng** (bất biến — invariant) tại một điểm trong code; nếu sai, ném `AssertionError` ngay lập tức.
+
+```java
+int index = computeIndex();
+assert index >= 0 : "index không được âm, nhận: " + index;   // dạng có thông điệp lỗi
+assert list != null;                                          // dạng không thông điệp
+
+double price = computePrice();
+assert price >= 0;
+```
+
+### Điểm khác biệt cốt lõi so với `if (...) throw ...`
+
+| | `assert` | `if (cond) throw new IllegalStateException(...)` |
+|---|---|---|
+| Bật/tắt được | **Mặc định TẮT lúc chạy** — phải bật bằng cờ `-ea` (`-enableassertions`) khi `java` | Luôn luôn chạy, không tắt được |
+| Mục đích | Bắt **lỗi lập trình** (bug nội bộ) lúc dev/test — điều "không bao giờ được xảy ra nếu code đúng" | Xác thực **input từ bên ngoài** (tham số method public, dữ liệu người dùng) — phải luôn kiểm tra |
+| Dùng ở production | Không — vì mặc định bị JVM bỏ qua hoàn toàn (kể cả chi phí tính `cond` cũng bị loại) | Có |
+
+> ⚠️ **Bẫy chết người:** vì `assert` **mặc định bị tắt**, **tuyệt đối không đặt code có side-effect (thay đổi trạng thái) bên trong `assert`**:
+> ```java
+> assert list.remove(item);   // ❌ NGUY HIỂM — bật -ea: xóa item; tắt -ea: KHÔNG xóa gì cả!
+> ```
+> Hành vi chương trình sẽ khác nhau tùy có bật `-ea` hay không — một nguồn bug cực khó tái hiện.
+
+### Khi nào dùng `assert`
+
+- Kiểm tra **bất biến nội bộ** của thuật toán: "sau bước sắp xếp này, mảng phải đã sắp xếp", "biến này không bao giờ âm ở đây theo logic đã viết".
+- Kiểm tra nhánh **"không thể xảy ra"** (ví dụ nhánh `default` của `switch` mà lẽ ra đã bao phủ hết) — dùng để tài liệu hóa giả định, không phải để validate input thật.
+- **Không** dùng để kiểm tra tham số của method `public` (dùng `Objects.requireNonNull`, ném `IllegalArgumentException`...) vì `assert` có thể bị tắt hoàn toàn ở production, khiến việc kiểm tra "biến mất".
+
+---
+
+## 11. Tổng kết — Bảng ghi nhớ nhanh
 
 | Khái niệm | Điểm mấu chốt |
 |---|---|
@@ -809,10 +907,14 @@ void subsets(int[] nums, int idx, List<Integer> path, List<List<Integer>> out) {
 | Tail call | **Java KHÔNG tối ưu** — đệ quy đuôi sâu vẫn tràn stack; tự viết vòng lặp |
 | Fibonacci thô | O(2ⁿ) → memoization O(n) → bottom-up O(n) time / O(1) space |
 | Backtracking | Khung "chọn → đệ quy → undo" |
+| `switch` bytecode | Case liên tiếp → `tableswitch` O(1); case thưa → `lookupswitch` O(log n) — xem `javap -c` |
+| `Map` for-each | Cần cả key+value: dùng `entrySet()`, tránh `keySet()` rồi `get()` lại (tốn 1 lần tra cứu thừa mỗi vòng) |
+| JIT & vòng lặp | Loop unrolling, bounds-check elimination, loop-invariant hoisting tự động — ưu tiên code rõ ràng, chỉ tối ưu tay khi đã đo đạc |
+| `assert` | Mặc định **tắt** lúc chạy (cần `-ea`); chỉ dùng cho bất biến nội bộ lúc dev/test, không dùng để validate input public, không đặt side-effect bên trong |
 
 ---
 
-## 11. Bài tập luyện tập
+## 12. Bài tập luyện tập
 
 ### Phần A — Trắc nghiệm nhận định (giải thích lý do)
 

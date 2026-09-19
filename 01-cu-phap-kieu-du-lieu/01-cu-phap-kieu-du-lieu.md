@@ -176,6 +176,26 @@ char num  = 65;         // hợp lệ: gán literal int vừa phạm vi cho char
 
 Chỉ có `true`, `false`, `null`. `null` không có kiểu — nó gán được cho *mọi* biến tham chiếu; `0` **không** phải `false`, `null` **không** phải `0`.
 
+### Bảng escape sequence đầy đủ
+
+Escape sequence bắt đầu bằng `\` và được xử lý ở giai đoạn quét mã nguồn (như đã nói ở trên), dùng được trong cả literal `char` (chỉ loại 1 ký tự) và `String`.
+
+| Escape | Ý nghĩa | Mã Unicode |
+|---|---|---|
+| `\n` | Xuống dòng (Line Feed) | U+000A |
+| `\r` | Về đầu dòng (Carriage Return) | U+000D |
+| `\t` | Tab ngang | U+0009 |
+| `\b` | Backspace | U+0008 |
+| `\f` | Form feed | U+000C |
+| `\0` | Null character | U+0000 |
+| `\'` | Dấu nháy đơn | U+0027 |
+| `\"` | Dấu nháy kép | U+0022 |
+| `\` | Dấu gạch chéo ngược | U+005C |
+| `\s` | Khoảng trắng (chỉ trong text block, Java 15+) | U+0020 |
+| `\uXXXX` | Unicode escape bất kỳ (4 chữ số hex) | tùy ý |
+
+> ⚠️ **`\r\n` vs `\n`:** Windows dùng `\r\n` làm dấu xuống dòng, Unix/Linux/macOS dùng `\n`. Khi ghi log/file cần nhất quán trên nhiều hệ điều hành, nên dùng `System.lineSeparator()` thay vì hardcode `\n`, hoặc chuẩn hóa đầu vào bằng `text.replace("\r\n", "\n")` trước khi xử lý theo dòng.
+
 ---
 
 ## 3. Primitive Types vs Wrapper Class
@@ -298,6 +318,28 @@ String bin = Integer.toBinaryString(10);   // "1010"
 String hx  = Integer.toHexString(255);     // "ff"
 int bits   = Integer.bitCount(255);        // 8
 ```
+
+### `Character` — lớp tiện ích phân loại ký tự
+
+`char` chỉ là một số nguyên 16 bit; lớp `Character` cung cấp các method **tĩnh** để hỏi "ký tự này thuộc loại gì" mà không cần tự so sánh khoảng mã ASCII thủ công (dễ sai với ký tự Unicode ngoài bảng chữ Latin).
+
+```java
+Character.isDigit('7');        // true  — nhận diện chữ số Unicode (kể cả số Ả Rập, không chỉ 0-9)
+Character.isLetter('A');       // true
+Character.isLetterOrDigit('_');// false
+Character.isWhitespace(' ');   // true  — Unicode-aware, khác so sánh == ' '
+Character.isUpperCase('A');    // true
+Character.isLowerCase('a');    // true
+Character.toUpperCase('a');    // 'A'
+Character.toLowerCase('A');    // 'a'
+Character.getNumericValue('7');// 7  (int) — hữu ích khi parse từng ký tự số trong chuỗi
+Character.digit('F', 16);      // 15 — giá trị của ký tự F trong hệ cơ số 16
+Character.isAlphabetic('海');  // true — hoạt động đúng với ký tự Unicode ngoài ASCII
+```
+
+> **Vì sao nên dùng `Character.isDigit(c)` thay vì `c >= '0' && c <= '9'`?** Cách viết tay chỉ đúng cho chữ số ASCII; `Character.isDigit` còn nhận diện chữ số của các hệ chữ viết khác (Ả Rập-Ấn Độ, Devanagari...). Ngược lại, nếu mục tiêu **chỉ** muốn giới hạn ở `0-9` ASCII (ví dụ validate mã OTP), so sánh tay `c >= '0' && c <= '9'` lại là lựa chọn **đúng và rõ ràng hơn** — đừng dùng `isDigit` một cách mù quáng.
+
+> ⚠️ **Các overload nhận `int` (code point) nên được ưu tiên khi xử lý ký tự ngoài BMP:** `Character.isLetter(int codePoint)` xử lý đúng cả ký tự cần surrogate pair, còn overload nhận `char` chỉ thấy được *một nửa* surrogate pair nên có thể trả kết quả sai.
 
 ---
 
@@ -496,12 +538,44 @@ boolean changed = updateA() | updateB();   // cố ý: muốn CẢ HAI method ch
 
 Ứng dụng thực tế: cờ bитмаск (`flags & MASK`), `n & 1` kiểm tra lẻ/chẵn (nhanh và đúng cả với số âm, khác `n % 2`), `n >>> 1` chia đôi an toàn khi tính `mid = (low + high) >>> 1` để tránh tràn khi cộng.
 
-### 5.4 `==` với primitive vs với object
+### 5.4 `instanceof` — kiểm tra kiểu, và Pattern Matching (Java 16+)
+
+`instanceof` kiểm tra một reference có phải là (hoặc kế thừa từ) một kiểu cụ thể lúc runtime, trả về `boolean`. `null instanceof AnyType` luôn là `false` — không bao giờ ném NPE.
+
+```java
+Object obj = "Hello";
+
+// Cách cũ (trước Java 16): kiểm tra rồi ép kiểu thủ công, dư thừa
+if (obj instanceof String) {
+    String s = (String) obj;      // phải tự cast lại — dễ quên, dư dòng
+    System.out.println(s.length());
+}
+
+// Pattern Matching for instanceof (Java 16+, JEP 394): vừa kiểm tra vừa gán biến đã cast
+if (obj instanceof String s) {
+    System.out.println(s.length());   // 's' đã sẵn là String, không cần ép kiểu tay
+}
+```
+
+- Biến pattern (`s`) chỉ **có phạm vi (scope)** trong nhánh mà compiler chứng minh được kiểu đã khớp — gọi là *flow scoping*.
+- Có thể kết hợp điều kiện ngay trong `if`, biến vẫn "sống" tới hết biểu thức `&&`:
+  ```java
+  if (obj instanceof String s && s.length() > 3) { ... }  // ✅ 's' dùng được ở vế sau &&
+  ```
+- Dùng được cả ở nhánh phủ định nhờ *flow analysis*, miễn nhánh `if` return/throw:
+  ```java
+  if (!(obj instanceof String s)) return;
+  System.out.println(s.length());   // ✅ tới đây chắc chắn obj là String, s hợp lệ
+  ```
+
+> Đây là nền tảng cú pháp cho **switch pattern matching** và **record pattern** (Java 21+) — sẽ khai thác sâu hơn ở Module OOP/Java hiện đại; ở bài này chỉ cần nắm cú pháp cơ bản của `instanceof` như một toán tử.
+
+### 5.5 `==` với primitive vs với object
 
 - Primitive: so sánh **giá trị bit**. Lưu ý `Double.NaN == Double.NaN` là `false` (mục 6).
 - Object: so sánh **địa chỉ tham chiếu** (hai biến có trỏ cùng một object không). Muốn so sánh nội dung: `.equals()`.
 
-### 5.5 Nối chuỗi bằng `+` — cách compiler xử lý
+### 5.6 Nối chuỗi bằng `+` — cách compiler xử lý
 
 - Từ **Java 9**, `"a" + b + c` được biên dịch thành một lời gọi `invokedynamic` tới `StringConcatFactory` (không còn tự sinh `StringBuilder` như Java 8). Nghĩa là nối chuỗi **rời rạc, một lần** thì hoàn toàn tối ưu — **không cần** `StringBuilder` cho những trường hợp đó.
 - Vấn đề hiệu năng chỉ xảy ra khi nối **lặp lại trong vòng lặp** (mục 8).
@@ -715,6 +789,40 @@ Integer.toString(42);
 > ⚠️ **`substring`/`indexOf` làm việc theo *char* (UTF-16 code unit), không theo *ký tự người dùng thấy*.** Với emoji hoặc ký tự ngoài BMP, cắt nhầm giữa surrogate pair cho ra ký tự hỏng.
 
 > ⚠️ **`toUpperCase()`/`toLowerCase()` không truyền `Locale` phụ thuộc locale máy chủ.** Kinh điển: locale Thổ Nhĩ Kỳ biến `"i".toUpperCase()` thành `"İ"` (I có chấm) → so sánh/định danh sai. Với xử lý dữ liệu kỹ thuật luôn dùng `Locale.ROOT`.
+
+### Bảng format specifier — `String.format` / `printf`
+
+```java
+String.format("%s", "abc");        // "abc"    — chuỗi bất kỳ (gọi toString())
+String.format("%d", 42);           // "42"     — số nguyên
+String.format("%5d", 42);          // "   42"  — độ rộng tối thiểu 5, căn phải
+String.format("%-5d|", 42);        // "42   |" — căn trái
+String.format("%05d", 42);         // "00042"  — đệm số 0
+String.format("%.2f", 3.14159);    // "3.14"   — số thực, 2 chữ số thập phân
+String.format("%,d", 1234567);     // "1,234,567" — phân tách hàng nghìn
+String.format("%x", 255);          // "ff"     — hex thường; %X → "FF"
+String.format("%o", 8);            // "10"     — bát phân
+String.format("%b", true);         // "true"   — boolean
+String.format("%c", 65);           // "A"      — char
+String.format("%n");               // xuống dòng ĐÚNG hệ điều hành (khác "\n" cố định)
+String.format("%%");               // "%"      — ký tự % literal
+String.format("%+d", 42);          // "+42"    — luôn hiện dấu
+String.format("%10.2f", 3.14159);  // "      3.14" — vừa giới hạn độ rộng vừa giới hạn thập phân
+```
+
+| Specifier | Ý nghĩa |
+|---|---|
+| `%s` | Chuỗi (gọi `String.valueOf`/`toString()`, an toàn cả với `null` → in `"null"`) |
+| `%d` | Số nguyên hệ 10 |
+| `%f` | Số thực dạng thập phân cố định |
+| `%e` / `%E` | Số thực dạng khoa học |
+| `%x` / `%X` | Hex thường/hoa |
+| `%o` | Bát phân |
+| `%b` | Boolean |
+| `%c` | Ký tự |
+| `%n` | Xuống dòng theo nền tảng (nên dùng thay `\n` khi in ra console/log đa nền tảng) |
+
+> ⚠️ **`%d` chỉ nhận số nguyên** (`int`, `long`, `Integer`...) — truyền `double` vào `%d` ném `IllegalFormatConversionException` lúc runtime (compiler không kiểm tra được vì đây là varargs kiểu `Object...`). Ngược lại `%f` không nhận số nguyên trực tiếp mà không ép kiểu.
 
 ### 8.3 Text Blocks — chuỗi nhiều dòng (Java 15+)
 

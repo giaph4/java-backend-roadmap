@@ -10,10 +10,10 @@
 ## Mục lục
 
 1. [Monolith vs Microservices](#1-monolith-vs-microservices)
-2. [Khi nào NÊN và KHÔNG NÊN dùng Microservices](#2-khi-nào-nên-và-không-nên-dùng-microservices)
-3. [Service Discovery](#3-service-discovery)
-4. [API Gateway](#4-api-gateway)
-5. [Inter-service Communication](#5-inter-service-communication)
+2. [Khi nào NÊN và KHÔNG NÊN dùng Microservices](#2-khi-nào-nên-và-không-nên-dùng-microservices) (kèm Bounded Context/DDD)
+3. [Service Discovery](#3-service-discovery) (kèm Config Server)
+4. [API Gateway](#4-api-gateway) (kèm Load Balancing)
+5. [Inter-service Communication](#5-inter-service-communication) (kèm gRPC)
 6. [Circuit Breaker & Resilience4j](#6-circuit-breaker--resilience4j)
 7. [Distributed Transaction & Saga Pattern](#7-distributed-transaction--saga-pattern)
 8. [Database per Service & Data Consistency](#8-database-per-service--data-consistency)
@@ -91,7 +91,49 @@
 - Dự án **mới bắt đầu**, domain boundary **CHƯA RÕ RÀNG** — chia service quá sớm khi chưa hiểu hết nghiệp vụ dễ dẫn tới chia SAI ranh giới, sau này phải refactor lại toàn bộ (tốn kém hơn nhiều so với refactor trong Monolith)
 - Chưa có kinh nghiệm/hạ tầng DevOps đủ mạnh để vận hành hệ thống phân tán (Kubernetes, CI/CD cho nhiều service, centralized logging...)
 
+### Conway's Law — cấu trúc hệ thống phản chiếu cấu trúc tổ chức
+
+> *"Organizations which design systems ... are constrained to produce designs which are copies of the communication structures of these organizations."* — Melvin Conway, 1967.
+
+Nói đơn giản: **kiến trúc phần mềm cuối cùng sẽ có hình dạng giống hệt cách các team giao tiếp/tổ chức với nhau**, dù kiến trúc sư có cố tình thiết kế khác đi. Nếu công ty có 4 team riêng biệt (Frontend, Backend, DBA, QA) giao tiếp qua nhiều lớp phê duyệt, hệ thống sẽ có xu hướng hình thành 4 tầng tương ứng dù bài toán không thực sự cần chia như vậy — ngược lại, nếu tổ chức theo 3 team độc lập phụ trách trọn vẹn 1 domain (Order team, Payment team, Inventory team — mỗi team có đủ dev/QA/DBA riêng), hệ thống sẽ tự nhiên hình thành 3 Microservices tương ứng.
+
+**Hệ quả thực tế cho việc chia Microservices:**
+- Chia Microservices **thành công nhất** khi đi kèm với việc tổ chức lại team theo đúng ranh giới đó — mỗi team sở hữu trọn vẹn 1 (vài) service từ code tới vận hành ("you build it, you run it" — mô hình DevOps team).
+- Chia Microservices nhưng **vẫn giữ nguyên tổ chức team cũ** (VD: 1 team chuyên Frontend cho MỌI service, 1 team chuyên Backend cho MỌI service) thường dẫn tới kết quả tệ hơn Monolith — vì mọi thay đổi vẫn cần nhiều team phối hợp qua network thay vì gọi hàm nội bộ, trong khi lợi ích "team độc lập" của Microservices lại không đạt được.
+- **Inverse Conway Maneuver:** một số tổ chức chủ động **tái cấu trúc team trước**, theo đúng ranh giới kiến trúc mong muốn, để "ép" hệ thống tự nhiên phát triển theo hướng đó — thay vì chỉ vẽ sơ đồ kiến trúc rồi hy vọng team tự thích nghi.
+
+> **Liên hệ Bounded Context:** Conway's Law là lý do thực tiễn bổ sung cho DDD ở trên — ranh giới Bounded Context tốt nhất nên **trùng với ranh giới team**, không chỉ trùng với ranh giới khái niệm nghiệp vụ trên giấy.
+
 > **"Monolith First" strategy:** Nhiều kiến trúc sư có kinh nghiệm khuyến nghị **bắt đầu bằng Monolith** (nhưng thiết kế **module hóa tốt** bên trong — package theo domain rõ ràng như đã đề cập ở Module 13), rồi **tách dần thành Microservices** khi thực sự cần thiết (khi đã hiểu rõ domain boundary qua thực tế vận hành) — thay vì thiết kế Microservices ngay từ đầu dựa trên phỏng đoán domain boundary có thể sai. Kỹ thuật cụ thể để tách dần được trình bày ở mục 10 — Strangler Fig Pattern.
+
+### Bounded Context (DDD) — cơ sở để chia ranh giới Service đúng cách
+
+Câu hỏi khó nhất khi thiết kế Microservices không phải "công nghệ nào" mà là **"chia service ở đâu?"**. Domain-Driven Design (DDD) — trường phái thiết kế phần mềm tập trung vào mô hình hóa đúng nghiệp vụ — cung cấp khái niệm **Bounded Context** để trả lời câu hỏi này.
+
+- **Domain Model** là cách hệ thống mô tả một khái niệm nghiệp vụ (VD: "Product"). Nhưng **cùng 1 từ "Product" lại mang nghĩa khác nhau** ở từng bộ phận nghiệp vụ:
+  - Với đội **Catalog** (trưng bày sản phẩm): `Product` cần `tên, mô tả, ảnh, danh mục`.
+  - Với đội **Kho vận (Inventory)**: `Product` cần `SKU, số lượng tồn, vị trí kho`.
+  - Với đội **Kế toán (Billing)**: `Product` cần `giá vốn, thuế suất, mã kế toán`.
+- **Bounded Context** là ranh giới (thường trùng với 1 Microservice) bên trong đó 1 thuật ngữ nghiệp vụ có **đúng 1 nghĩa duy nhất, nhất quán**. Ngoài ranh giới đó, cùng thuật ngữ có thể mang nghĩa khác — và đó là điều **BÌNH THƯỜNG**, không phải trùng lặp cần loại bỏ.
+
+```
+┌─────────────────────┐   ┌─────────────────────┐   ┌─────────────────────┐
+│ Catalog Context       │   │ Inventory Context     │   │ Billing Context       │
+│                       │   │                       │   │                       │
+│ Product {             │   │ Product {             │   │ Product {             │
+│   name, description,  │   │   sku, quantity,       │   │   costPrice,          │
+│   images, category    │   │   warehouseLocation    │   │   taxCode             │
+│ }                     │   │ }                     │   │ }                     │
+└─────────────────────┘   └─────────────────────┘   └─────────────────────┘
+   3 "Product" khác nhau, phục vụ đúng nhu cầu riêng của TỪNG Bounded Context
+```
+
+> ⚠️ **Sai lầm kinh điển khi chưa hiểu Bounded Context:** Cố tạo **1 bảng `Product` "dùng chung" cho mọi team**, chứa đủ mọi field mà Catalog/Inventory/Billing cần — dẫn tới 1 bảng khổng lồ, mọi team đều sợ sửa vì ảnh hưởng team khác (chính là biểu hiện của "chia sai ranh giới Service" ở mục Bẫy thường gặp). Cách làm đúng: mỗi Bounded Context tự giữ **model riêng, tối giản đúng nhu cầu của nó**, đồng bộ dữ liệu cần thiết qua API/Event (không chia sẻ bảng DB).
+
+- **Ubiquitous Language** (Ngôn ngữ chung): trong phạm vi 1 Bounded Context, code, tài liệu, và cách nói chuyện của Business Analyst/Developer phải dùng **chung 1 thuật ngữ nhất quán** — giảm hiểu lầm giữa nghiệp vụ và kỹ thuật.
+- **Context Mapping**: khi 2 Bounded Context cần trao đổi dữ liệu, cần xác định rõ mối quan hệ (VD: *Customer/Supplier* — 1 bên là "khách hàng" phụ thuộc API của bên kia; *Anti-Corruption Layer* — 1 lớp dịch dữ liệu ở ranh giới để Bounded Context không bị "ô nhiễm" bởi model của Context khác, đặc biệt hữu ích khi tích hợp với hệ thống cũ/bên thứ 3).
+
+> **Liên hệ trực tiếp:** Ranh giới Microservice tốt nhất **trùng với ranh giới Bounded Context**, không phải trùng với 1 bảng dữ liệu hay 1 chức năng kỹ thuật đơn lẻ. Đây là lý do vì sao mục 2 nhấn mạnh "domain boundary phải rõ ràng" trước khi tách Microservices — domain boundary CHÍNH LÀ Bounded Context.
 
 ---
 
@@ -167,6 +209,50 @@ eureka:
 ```
 
 > **Xu hướng hiện đại:** Với hệ thống chạy trên **Kubernetes**, Service Discovery thường được Kubernetes **tự đảm nhiệm** (qua Kubernetes Service + DNS nội bộ) — không cần thêm Eureka riêng. Eureka vẫn phổ biến trong môi trường không dùng Kubernetes hoặc hệ thống cũ hơn.
+
+### Config Server — quản lý cấu hình tập trung cho nhiều Service
+
+**Vấn đề:** Mỗi Microservice có file `application.yml` riêng. Khi có hàng chục service, thay đổi 1 giá trị cấu hình dùng chung (VD: connection string, feature flag) đòi hỏi sửa và **redeploy TỪNG service** — chậm và dễ sai sót/thiếu sót.
+
+**Spring Cloud Config** giải quyết bằng cách tách cấu hình ra khỏi code, lưu tập trung ở **1 Git repository riêng** (hoặc Vault, hệ thống quản lý secret khác):
+
+```
+┌───────────────┐        ┌─────────────────────┐
+│ Config Server  │───────►│ Git Repo (config)     │
+│ (Spring Boot)  │  đọc    │ order-service.yml     │
+└───────┬───────┘        │ user-service.yml      │
+        │ mỗi service khi khởi động │ application.yml (chung) │
+        │ TỰ TẢI cấu hình của mình   └─────────────────────┘
+   ┌────┴────┬─────────┐
+   ▼         ▼         ▼
+Order Svc  User Svc  Payment Svc
+```
+
+```xml
+<!-- Config Server -->
+<dependency>
+    <groupId>org.springframework.cloud</groupId>
+    <artifactId>spring-cloud-config-server</artifactId>
+</dependency>
+```
+
+```java
+@SpringBootApplication
+@EnableConfigServer
+public class ConfigServerApplication { }
+```
+
+```yaml
+# Mỗi Microservice (Client) chỉ cần trỏ về Config Server
+spring:
+  config:
+    import: "optional:configserver:http://localhost:8888"
+  application:
+    name: order-service   # Config Server tự tìm file "order-service.yml" trong Git repo
+```
+
+- **Refresh động** (`@RefreshScope` + endpoint `/actuator/refresh`, hoặc Spring Cloud Bus để broadcast refresh cho toàn bộ service cùng lúc qua message queue) — đổi cấu hình mà **không cần restart** service.
+- Lịch sử thay đổi cấu hình đi kèm lịch sử Git — dễ audit/rollback ("ai đổi giá trị này, khi nào, vì sao").
 
 ---
 
@@ -277,6 +363,35 @@ public class GatewayConfig {
 
 > **Khi nào cần BFF thay vì 1 Gateway chung:** Chỉ nên áp dụng khi thực sự có **sự khác biệt lớn về nhu cầu dữ liệu** giữa các loại client (VD: ứng dụng có cả Admin Dashboard phức tạp lẫn Mobile App đơn giản) — với hệ thống nhỏ/vừa, 1 API Gateway chung là đủ, thêm BFF sớm sẽ chỉ tăng số lượng thành phần cần vận hành mà chưa có lợi ích tương xứng (liên hệ nguyên tắc "đừng chia quá sớm" ở mục 2).
 
+### Load Balancing — phân phối tải khi 1 Service có nhiều Instance
+
+Khi `order-service` chạy 3 instance (để scale), ai quyết định request tiếp theo đi vào instance nào?
+
+| | Server-side Load Balancing | Client-side Load Balancing |
+|---|---|---|
+| Vị trí quyết định | 1 thành phần TRUNG GIAN (Gateway, Nginx, cloud Load Balancer) đứng giữa client và các instance | Chính **client gọi** (service gọi sang) tự lấy danh sách instance từ Service Discovery rồi tự chọn |
+| Độ trễ thêm | Thêm 1 "hop" mạng qua Load Balancer | Không thêm hop — gọi thẳng tới instance đã chọn |
+| Ai cần biết danh sách instance | Chỉ Load Balancer cần biết | Bản thân client (thư viện) cần tích hợp Service Discovery |
+| Ví dụ | AWS ELB, Nginx, Spring Cloud Gateway (mục 4) | Spring Cloud LoadBalancer (thay thế Netflix Ribbon đã ngừng phát triển), gRPC client-side LB |
+
+**Thuật toán chọn instance phổ biến:**
+- **Round-robin** — lần lượt xoay vòng qua từng instance theo thứ tự (đơn giản, phổ biến nhất, mặc định của nhiều thư viện).
+- **Least connections** — ưu tiên instance đang xử lý ÍT request đồng thời nhất — cân bằng tốt hơn round-robin khi các request có độ nặng xử lý khác nhau nhiều.
+- **Weighted round-robin** — instance mạnh hơn (nhiều CPU/RAM) được gán trọng số cao hơn, nhận nhiều request hơn.
+- **Random** — chọn ngẫu nhiên, đơn giản, hiệu quả tương đương round-robin ở quy mô lớn.
+
+```java
+// Spring Cloud LoadBalancer — tích hợp trong suốt với RestClient/WebClient/OpenFeign
+// khi dùng "lb://" scheme, KHÔNG cần code chọn instance thủ công
+@Bean
+@LoadBalanced   // Đánh dấu RestClient.Builder này sẽ tự resolve "lb://order-service" qua Service Discovery
+public RestClient.Builder loadBalancedRestClientBuilder() {
+    return RestClient.builder();
+}
+```
+
+> **Liên hệ:** Đây chính là cơ chế đứng sau `uri: lb://order-service` đã thấy ở cấu hình Spring Cloud Gateway (mục 4) — `lb://` báo cho Gateway biết cần tra cứu Service Discovery rồi tự Load Balancing giữa các instance tìm được, thay vì gọi tới 1 địa chỉ cố định.
+
 ---
 
 ## 5. Inter-service Communication
@@ -323,6 +438,34 @@ public class OrderService {
     }
 }
 ```
+
+### 5.1.1. gRPC — thay thế REST/JSON cho giao tiếp Service-to-Service hiệu năng cao
+
+REST/JSON tiện cho API hướng ra ngoài (public API, browser gọi trực tiếp) nhưng có 2 điểm chưa tối ưu cho giao tiếp **nội bộ giữa các Microservice**: JSON là text (tốn băng thông hơn định dạng nhị phân), và HTTP/1.1 không hỗ trợ multiplexing tốt (nhiều request cùng lúc trên 1 connection).
+
+**gRPC** (Google) giải quyết cả 2 vấn đề:
+
+| | REST/JSON | gRPC |
+|---|---|---|
+| Định dạng dữ liệu | JSON (text, người đọc được) | **Protocol Buffers** (binary, nhỏ gọn hơn nhiều, nhanh hơn serialize/deserialize) |
+| Giao thức tầng dưới | HTTP/1.1 (phổ biến hơn) | **HTTP/2** (multiplexing — nhiều request/response đồng thời trên 1 connection, hỗ trợ streaming 2 chiều) |
+| Hợp đồng API | Thường không bắt buộc (OpenAPI là tùy chọn) | **Bắt buộc** định nghĩa trước bằng file `.proto` — sinh code client/server tự động cho nhiều ngôn ngữ |
+| Khả năng đọc trực tiếp (browser, `curl`) | Dễ — JSON đọc được ngay | Khó — cần công cụ hỗ trợ gRPC, browser không gọi thẳng được (cần grpc-web) |
+| Hiệu năng | Tốt | **Cao hơn đáng kể** — cả về băng thông lẫn tốc độ serialize |
+| Use case phù hợp | Public API, API cho browser/mobile | Giao tiếp **nội bộ giữa Microservices** (server-to-server), nơi hiệu năng quan trọng hơn khả năng đọc trực tiếp |
+
+```protobuf
+// user.proto — hợp đồng API định nghĩa TRƯỚC, dùng chung cho cả client và server
+service UserService {
+  rpc GetUser (UserRequest) returns (UserResponse);
+}
+message UserRequest { int64 id = 1; }
+message UserResponse { int64 id = 1; string fullName = 2; string email = 3; }
+```
+
+Từ file `.proto` này, công cụ `protoc` **tự sinh code Java** (interface server cần implement, class client gọi trực tiếp như gọi method local) — loại bỏ hoàn toàn việc tự viết DTO + JSON mapping thủ công như REST.
+
+> **Khi nào chọn gRPC thay vì REST giữa các Microservice:** Khi hiệu năng/độ trễ giữa service là ưu tiên hàng đầu (VD: hệ thống có hàng nghìn request/giây giữa các service nội bộ), hoặc cần streaming dữ liệu 2 chiều. Với hệ thống vừa/nhỏ, hoặc khi API cần expose trực tiếp cho browser/bên thứ 3, REST/JSON (đã học ở Module 15) vẫn là lựa chọn đơn giản và phổ biến hơn — nhiều hệ thống thực tế dùng **REST cho API hướng ngoài + gRPC cho giao tiếp nội bộ**, không nhất thiết chọn 1 trong 2 cho toàn hệ thống.
 
 ### 5.2. Asynchronous — Message Queue (đã học ở Module 18)
 
@@ -483,6 +626,35 @@ Nếu Payment Service THẤT BẠI ở bước cuối, làm sao ROLLBACK lại
 những gì Order Service và Inventory Service ĐÃ COMMIT rồi (ở 2 DB khác nhau)?
 ```
 
+### 2PC (Two-Phase Commit) — giải pháp "đúng chuẩn ACID" nhưng ít dùng trong thực tế
+
+Trước khi tới Saga, cần biết có 1 giải pháp "kinh điển" khác từng được dùng cho Distributed Transaction: **Two-Phase Commit**, phối hợp bởi 1 Transaction Coordinator qua 2 giai đoạn:
+
+```
+Giai đoạn 1 (Prepare/Vote): Coordinator hỏi TẤT CẢ participant "sẵn sàng commit chưa?"
+  Order DB: "Sẵn sàng" (đã ghi log, khóa resource, chờ lệnh)
+  Inventory DB: "Sẵn sàng"
+  Payment DB: "Sẵn sàng"
+
+Giai đoạn 2 (Commit/Abort): CHỈ KHI TẤT CẢ đều "Sẵn sàng", Coordinator mới ra lệnh commit thật sự
+  -> Nếu bất kỳ participant nào "Không sẵn sàng" -> Coordinator ra lệnh ABORT cho TẤT CẢ
+```
+
+**Vì sao 2PC ít được dùng cho Microservices hiện đại:**
+- **Blocking:** mọi participant phải **khóa resource** (giữ transaction mở) trong suốt thời gian chờ giai đoạn 2 — nếu Coordinator crash giữa chừng, các participant có thể bị khóa tài nguyên **vô thời hạn**.
+- **Đòi hỏi mọi hệ thống tham gia hỗ trợ chuẩn XA/2PC** — nhiều DB hiện đại, đặc biệt NoSQL, không hỗ trợ.
+- **Hiệu năng thấp** — mọi participant phải đồng bộ chờ nhau, không tận dụng được lợi thế "độc lập" vốn là lý do chính để dùng Microservices.
+
+| | 2PC | Saga |
+|---|---|---|
+| Tính nhất quán | Mạnh (Strong Consistency) — hoặc tất cả commit, hoặc tất cả abort, không có trạng thái "nửa vời" | Yếu hơn (Eventual Consistency) — có khoảng thời gian ngắn dữ liệu ở trạng thái trung gian trước khi Compensating Transaction hoàn tất |
+| Cơ chế | Khóa resource, chờ đồng bộ (blocking) | Local transaction độc lập + Compensating Transaction khi lỗi (non-blocking) |
+| Hiệu năng | Thấp hơn (chờ đồng bộ mọi participant) | Cao hơn (mỗi service tự commit ngay, không chờ) |
+| Độ phức tạp triển khai | Cần hạ tầng hỗ trợ XA transaction | Cần tự viết Compensating Transaction cho từng bước |
+| Dùng trong Microservices hiện đại | Hiếm — chỉ vài hệ thống tài chính lõi đòi hỏi tuyệt đối | **Phổ biến** — lựa chọn mặc định cho Distributed Transaction |
+
+> **Kết luận thực chiến:** Saga được chọn phổ biến hơn 2PC trong kiến trúc Microservices không phải vì Saga "tốt hơn" về mặt lý thuyết (Saga chỉ đạt Eventual Consistency, yếu hơn 2PC) — mà vì cái giá của 2PC (blocking, phụ thuộc hạ tầng, hiệu năng thấp) thường đắt hơn nhiều so với việc chấp nhận độ trễ nhất quán ngắn hạn của Saga trong đa số bài toán nghiệp vụ thực tế (đơn hàng "PENDING" vài giây rồi mới "CONFIRMED" là chấp nhận được với hầu hết use case).
+
 ### Saga Pattern — giải pháp cho Distributed Transaction
 
 **Saga** chia 1 giao dịch lớn thành **chuỗi các giao dịch cục bộ (local transaction)** nhỏ hơn — mỗi bước tự commit vào DB riêng của nó, và nếu 1 bước thất bại, thực hiện **Compensating Transaction** (giao dịch bù trừ) để "hoàn tác" các bước ĐÃ thành công trước đó theo chiều ngược lại.
@@ -601,6 +773,66 @@ public OrderDetailResponse getOrderDetail(Long orderId) {
 ```
 
 **Giải pháp nâng cao hơn — CQRS (Command Query Responsibility Segregation):** Xây dựng 1 **Read Model** riêng (thường denormalized, tổng hợp sẵn dữ liệu từ nhiều service qua Event, lưu vào 1 DB đọc riêng tối ưu cho truy vấn) — tách biệt hoàn toàn luồng ghi (Command) và luồng đọc (Query). Đây là kỹ thuật nâng cao, thường chỉ cần thiết khi hệ thống đã rất lớn — nên biết khái niệm, không cần thành thạo ngay ở giai đoạn học này.
+
+### Event Sourcing — thường đi kèm CQRS, đổi hẳn cách lưu trạng thái
+
+Cách lưu dữ liệu truyền thống (kể cả trong Monolith lẫn Microservices bình thường) là lưu **trạng thái hiện tại** — `UPDATE orders SET status = 'SHIPPED' WHERE id = 5` ghi đè mất trạng thái cũ, không còn dấu vết đã từng là `PENDING` → `CONFIRMED` → `SHIPPED` ra sao.
+
+**Event Sourcing** đảo ngược hoàn toàn cách nghĩ: thay vì lưu trạng thái cuối cùng, lưu lại **toàn bộ chuỗi sự kiện (event) đã xảy ra** — trạng thái hiện tại chỉ là kết quả suy ra được (derived) bằng cách "replay" (phát lại) toàn bộ event theo thứ tự:
+
+```
+Thay vì bảng "orders" chỉ có 1 dòng trạng thái hiện tại:
+| id | status  |
+| 5  | SHIPPED |   <- Mất hết lịch sử, không biết đã qua những trạng thái nào, khi nào
+
+Event Sourcing lưu TOÀN BỘ chuỗi sự kiện (bảng "event_store", KHÔNG BAO GIỜ update/xóa, chỉ append):
+| id | aggregateId | eventType       | payload                  | timestamp |
+| 1  | order-5     | OrderCreated     | {...}                    | T1        |
+| 2  | order-5     | OrderConfirmed   | {...}                    | T2        |
+| 3  | order-5     | OrderShipped     | {...}                    | T3        |
+
+-> Trạng thái hiện tại của order-5 = replay lần lượt 3 event trên theo thứ tự
+-> Muốn biết trạng thái ở THỜI ĐIỂM BẤT KỲ trong quá khứ? Chỉ cần replay tới event đó là dừng
+```
+
+```java
+public class Order {
+    private OrderStatus status;
+    private final List<Object> uncommittedEvents = new ArrayList<>();
+
+    // "Replay" - tái tạo trạng thái hiện tại từ toàn bộ lịch sử event đã lưu
+    public static Order replay(List<Object> events) {
+        Order order = new Order();
+        for (Object event : events) {
+            order.apply(event); // Mỗi event áp lần lượt, biến đổi state dần dần
+        }
+        return order;
+    }
+
+    private void apply(Object event) {
+        if (event instanceof OrderCreated e) this.status = OrderStatus.PENDING;
+        else if (event instanceof OrderConfirmed e) this.status = OrderStatus.CONFIRMED;
+        else if (event instanceof OrderShipped e) this.status = OrderStatus.SHIPPED;
+    }
+
+    public void confirm() {
+        if (status != OrderStatus.PENDING) throw new IllegalStateException();
+        apply(new OrderConfirmed(...));            // Cập nhật state trong bộ nhớ
+        uncommittedEvents.add(new OrderConfirmed(...)); // Ghi nhận để lưu vào event_store khi persist
+    }
+}
+```
+
+**Lợi ích:**
+- **Audit log tự nhiên, không cần code thêm** — mọi thay đổi đều có dấu vết đầy đủ (ai/khi nào/thay đổi gì) vì bản chất event chính là log
+- **Time travel** — tái hiện trạng thái hệ thống tại BẤT KỲ thời điểm nào trong quá khứ (hữu ích khi debug production, hoặc yêu cầu nghiệp vụ tài chính cần biết "số dư tại ngày X")
+- Là nguồn dữ liệu tự nhiên để build **Read Model của CQRS** — mỗi event phát sinh có thể đồng thời cập nhật 1 hoặc nhiều Read Model khác nhau
+
+**Đánh đổi:**
+- Độ phức tạp tăng mạnh — truy vấn trạng thái hiện tại không còn là 1 `SELECT` đơn giản (cần replay, hoặc phải duy trì thêm "snapshot" định kỳ để tránh replay lại từ đầu mỗi lần)
+- Thay đổi cấu trúc event (schema evolution) theo thời gian là bài toán khó — event cũ đã lưu không thể sửa lại (immutable), code replay phải tương thích ngược với mọi phiên bản event từng tồn tại
+
+> **Mức độ ưu tiên học:** Giống CQRS, đây là kỹ thuật NÂNG CAO — chỉ thực sự cần thiết cho các domain có yêu cầu audit/lịch sử nghiêm ngặt (tài chính, kho vận) hoặc hệ thống cực lớn. Ở giai đoạn học này, hiểu đúng khái niệm và phân biệt được với cách lưu trạng thái truyền thống là đủ — không cần tự triển khai Event Sourcing đầy đủ trong dự án nhỏ.
 
 ### Contract Testing — kiểm thử ranh giới giữa các Service (liên hệ Module 17)
 
@@ -739,7 +971,11 @@ Giai đoạn N: Monolith gốc cuối cùng chỉ còn lại phần lõi nhỏ, 
 | Monolith vs Microservices | Đánh đổi giữa đơn giản (Monolith) và khả năng scale/deploy độc lập (Microservices) |
 | Monolith First | Nên bắt đầu Monolith module hóa tốt, tách Microservices khi thực sự cần |
 | Service Discovery | Đăng ký + tra cứu địa chỉ instance động (Eureka, hoặc Kubernetes Service) |
+| Config Server | Cấu hình tập trung qua Git, refresh động không cần restart service |
+| Bounded Context (DDD) | Ranh giới nơi 1 thuật ngữ nghiệp vụ có đúng 1 nghĩa — cơ sở chia Microservice đúng cách |
 | API Gateway | 1 điểm vào duy nhất — routing, auth tập trung, rate limiting |
+| Load Balancing | Round-robin/least-connections/weighted — server-side (Gateway/Nginx) hoặc client-side (Spring Cloud LoadBalancer) |
+| gRPC | Protocol Buffers + HTTP/2 — nhanh hơn REST/JSON, phù hợp giao tiếp nội bộ giữa Microservices |
 | BFF | Gateway riêng theo từng loại client (Web/Mobile) khi nhu cầu dữ liệu khác biệt lớn |
 | Distributed Monolith | Anti-pattern — gọi Synchronous chằng chịt như Monolith nhưng chịu độ trễ mạng |
 | Circuit Breaker | CLOSED → OPEN (fail-fast) → HALF_OPEN (thử lại) — ngăn Cascading Failure |

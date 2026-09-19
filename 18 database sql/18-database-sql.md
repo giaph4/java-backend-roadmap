@@ -19,12 +19,42 @@
 9. [Database Design — Chuẩn hóa dữ liệu (Normalization)](#9-database-design--chuẩn-hóa-dữ-liệu-normalization)
 10. [Khóa chính, khóa ngoại & ràng buộc toàn vẹn](#10-khóa-chính-khóa-ngoại--ràng-buộc-toàn-vẹn)
 11. [`EXPLAIN` — phân tích query chậm](#11-explain--phân-tích-query-chậm)
-12. [Tổng kết — Bảng ghi nhớ nhanh](#12-tổng-kết--bảng-ghi-nhớ-nhanh)
-13. [Bài tập luyện tập](#13-bài-tập-luyện-tập)
+12. [JDBC — Java kết nối Database](#12-jdbc--java-kết-nối-database)
+13. [Tổng kết — Bảng ghi nhớ nhanh](#13-tổng-kết--bảng-ghi-nhớ-nhanh)
+14. [Bài tập luyện tập](#14-bài-tập-luyện-tập)
 
 ---
 
 ## 1. SELECT cơ bản, thứ tự thực thi & NULL
+
+### Bốn nhóm lệnh SQL — DDL / DML / DCL / TCL
+
+Trước khi vào `SELECT`, cần định vị nó trong bức tranh toàn bộ ngôn ngữ SQL — SQL không phải một khối lệnh đồng nhất mà chia làm 4 nhóm theo **mục đích**:
+
+| Nhóm | Viết tắt của | Lệnh tiêu biểu | Mục đích |
+|---|---|---|---|
+| **DDL** | Data Definition Language | `CREATE`, `ALTER`, `DROP`, `TRUNCATE` | Định nghĩa/thay đổi **cấu trúc** (bảng, cột, index, ràng buộc) — không đụng tới dữ liệu bên trong |
+| **DML** | Data Manipulation Language | `SELECT`, `INSERT`, `UPDATE`, `DELETE` | Thao tác trên **dữ liệu** bên trong bảng đã có cấu trúc sẵn |
+| **DCL** | Data Control Language | `GRANT`, `REVOKE` | Cấp/thu hồi **quyền truy cập** (user nào được `SELECT`/`INSERT` bảng nào) |
+| **TCL** | Transaction Control Language | `COMMIT`, `ROLLBACK`, `SAVEPOINT`, `BEGIN` | Kiểm soát **ranh giới transaction** — xem trọn ở mục 6 |
+
+```sql
+-- DDL: định nghĩa cấu trúc, thường TỰ ĐỘNG COMMIT ngay (không rollback được ở hầu hết DB)
+CREATE TABLE products (id BIGINT PRIMARY KEY, name VARCHAR(100));
+ALTER TABLE products ADD COLUMN price DECIMAL(12,2);
+DROP TABLE products;
+
+-- DML: thao tác dữ liệu, nằm TRONG transaction, rollback được
+INSERT INTO products (id, name, price) VALUES (1, 'Laptop', 20000000);
+UPDATE products SET price = 19000000 WHERE id = 1;
+DELETE FROM products WHERE id = 1;
+
+-- DCL: quyền hạn
+GRANT SELECT, INSERT ON products TO app_readonly;
+REVOKE INSERT ON products FROM app_readonly;
+```
+
+> ⚠️ **`TRUNCATE` vs `DELETE`** — cả hai đều xóa dữ liệu nhưng khác bản chất: `DELETE FROM t` là DML (ghi log từng dòng, chạy trigger, rollback được, chậm hơn trên bảng lớn); `TRUNCATE TABLE t` là DDL (giải phóng toàn bộ storage ngay lập tức, không chạy trigger `DELETE`, ở nhiều DB **không** rollback được sau khi đã thực thi, nhanh hơn nhiều vì không ghi log từng dòng mà chỉ "cắt" file dữ liệu). Auto-increment/identity cũng thường bị reset về 0 sau `TRUNCATE`, khác `DELETE`.
 
 Giả sử bảng `employees(id, name, department, salary, hire_date)`:
 
@@ -643,7 +673,81 @@ EXPLAIN ANALYZE SELECT * FROM employees WHERE email = 'pho@example.com';
 
 ---
 
-## 12. Tổng kết — Bảng ghi nhớ nhanh
+## 12. JDBC — Java kết nối Database
+
+Toàn bộ SQL ở các mục trên phải được gửi tới DB từ code Java qua **JDBC (Java Database Connectivity)** — tầng API chuẩn mà mọi driver DB (PostgreSQL, MySQL, Oracle...) đều cài đặt, giúp code Java không phụ thuộc vào DB cụ thể nào. JPA/Hibernate (Module 11) **cũng chạy trên nền JDBC** — hiểu JDBC là hiểu "đáy" của mọi ORM.
+
+### `Connection` — phiên kết nối tới DB
+
+```java
+try (Connection conn = DriverManager.getConnection(
+        "jdbc:postgresql://localhost:5432/mydb", "user", "password")) {
+    // dùng conn ở đây
+} // tự động conn.close() — trả kết nối lại cho hệ thống
+```
+
+`Connection` là tài nguyên **đắt** (bắt tay TCP + xác thực) — không nên mở/đóng cho từng câu SQL; thực tế luôn dùng **Connection Pool** (xem cuối mục).
+
+### `Statement` vs `PreparedStatement` — vì sao luôn chọn `PreparedStatement`
+
+```java
+// ❌ Statement — nối chuỗi SQL trực tiếp, MỞ CỬA cho SQL Injection
+String email = userInput;   // giả sử userInput = "x' OR '1'='1"
+Statement st = conn.createStatement();
+ResultSet rs = st.executeQuery("SELECT * FROM users WHERE email = '" + email + "'");
+// Câu SQL thực tế chạy: SELECT * FROM users WHERE email = 'x' OR '1'='1'
+// → trả về TOÀN BỘ bảng users, bất kể email nhập gì — kẻ tấn công đọc được mọi dữ liệu
+
+// ✅ PreparedStatement — tham số hóa, driver tự escape, KHÔNG thể chèn SQL
+PreparedStatement ps = conn.prepareStatement("SELECT * FROM users WHERE email = ?");
+ps.setString(1, email);      // "x' OR '1'='1" được coi là MỘT chuỗi literal, không phải cú pháp SQL
+ResultSet rs = ps.executeQuery();
+```
+
+> ⚠️ **SQL Injection** là một trong những lỗ hổng bảo mật lâu đời và nguy hiểm nhất (OWASP Top 10 — Module 25). Nguyên tắc tuyệt đối: **không bao giờ** nối chuỗi trực tiếp giá trị người dùng nhập vào câu SQL — luôn dùng `?` placeholder của `PreparedStatement` (hoặc named parameter của JPA/MyBatis, về bản chất vẫn compile xuống `PreparedStatement`).
+
+Ngoài an toàn, `PreparedStatement` còn nhanh hơn khi gọi lặp lại: DB **biên dịch execution plan một lần**, tái sử dụng cho các lần gọi sau chỉ khác giá trị tham số (khác với `Statement`, DB phải phân tích cú pháp lại từ đầu mỗi câu SQL mới).
+
+### `ResultSet` — con trỏ duyệt kết quả
+
+```java
+try (PreparedStatement ps = conn.prepareStatement("SELECT id, name, salary FROM employees WHERE department = ?")) {
+    ps.setString(1, "IT");
+    try (ResultSet rs = ps.executeQuery()) {
+        while (rs.next()) {                       // di chuyển con trỏ tới dòng kế tiếp, false khi hết
+            long id = rs.getLong("id");
+            String name = rs.getString("name");
+            BigDecimal salary = rs.getBigDecimal("salary");
+        }
+    }
+}
+```
+
+- `rs.next()` phải gọi **trước khi** đọc dòng đầu tiên (con trỏ ban đầu nằm "trước dòng 1").
+- `Connection`, `Statement`, `ResultSet` đều implement `AutoCloseable` — luôn dùng **try-with-resources** (Module 04) lồng nhau như trên; quên đóng → rò rỉ kết nối/cursor, cạn pool sau một thời gian chạy.
+- `executeUpdate()` (cho `INSERT`/`UPDATE`/`DELETE`, trả về số dòng bị ảnh hưởng) khác `executeQuery()` (cho `SELECT`, trả về `ResultSet`).
+
+### Batch — gộp nhiều câu lệnh, giảm round-trip mạng
+
+```java
+try (PreparedStatement ps = conn.prepareStatement("INSERT INTO logs(message) VALUES (?)")) {
+    for (String msg : messages) {
+        ps.setString(1, msg);
+        ps.addBatch();              // gom vào lô, CHƯA gửi đi
+    }
+    ps.executeBatch();              // gửi TOÀN BỘ lô trong MỘT round-trip mạng
+}
+```
+
+Insert 10.000 dòng bằng 10.000 round-trip riêng lẻ rất chậm (độ trễ mạng nhân lên 10.000 lần); batch gộp thành vài chuyến đi, cải thiện hiệu năng đáng kể.
+
+### Connection Pool — vì sao không tự `DriverManager.getConnection()` mỗi lần
+
+Mở một `Connection` mới tốn hàng chục–hàng trăm mili-giây (TCP handshake, xác thực, cấp phát tài nguyên phía DB). Ứng dụng phục vụ hàng trăm request/giây không thể mở-đóng kết nối cho từng request. **Connection Pool** (ví dụ **HikariCP** — mặc định của Spring Boot) tạo sẵn một số lượng `Connection` cố định, cho request "mượn" khi cần và "trả lại" (không đóng thật) sau khi dùng xong — loại bỏ chi phí bắt tay lặp lại. Cấu hình pool quan trọng nhất: kích thước tối đa (`maximumPoolSize` — không phải càng lớn càng nhanh, vì DB cũng giới hạn số kết nối đồng thời xử lý hiệu quả) và timeout (chờ bao lâu nếu pool cạn). Chi tiết cấu hình HikariCP trong Spring Boot thuộc Module 20/24.
+
+---
+
+## 13. Tổng kết — Bảng ghi nhớ nhanh
 
 | Khái niệm | Điểm mấu chốt |
 |---|---|
@@ -661,10 +765,12 @@ EXPLAIN ANALYZE SELECT * FROM employees WHERE email = 'pho@example.com';
 | Chuẩn hóa | 1NF/2NF/3NF/BCNF giảm dư thừa; Denormalization đánh đổi có chủ đích cho tốc độ đọc |
 | Khóa chính | Surrogate key (mặc định) an toàn hơn natural key; `BIGINT` tự tăng nhỏ gọn hơn UUID; composite PK cho bảng trung gian |
 | `EXPLAIN` | `cost` tương đối, chỉ so giữa các plan; Nested Loop/Hash Join/Merge Join; `EXPLAIN ANALYZE` đo thật |
+| DDL/DML/DCL/TCL | Định nghĩa cấu trúc / thao tác dữ liệu / phân quyền / ranh giới transaction; `TRUNCATE` (DDL) khác `DELETE` (DML) |
+| JDBC | `PreparedStatement` bắt buộc (chống SQL Injection + cache execution plan); `ResultSet` cần `rs.next()` trước khi đọc; batch giảm round-trip; Connection Pool (HikariCP) tránh chi phí mở kết nối lặp lại |
 
 ---
 
-## 13. Bài tập luyện tập
+## 14. Bài tập luyện tập
 
 ### Phần A — Trắc nghiệm nhận định (giải thích lý do)
 

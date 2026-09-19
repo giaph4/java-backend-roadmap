@@ -16,10 +16,13 @@
 6. [Pattern Matching cho `switch` (Java 21+)](#6-pattern-matching-cho-switch-java-21)
 7. [Record Pattern — destructuring (Java 21+)](#7-record-pattern--destructuring-java-21)
 8. [Text Block (Java 15+)](#8-text-block-java-15)
-9. [Virtual Threads (Java 21 LTS)](#9-virtual-threads-java-21-lts)
-10. [String & API tiện ích mới (Java 9–17)](#10-string--api-tiện-ích-mới-java-9-17)
-11. [Tổng kết — Bảng ghi nhớ nhanh](#11-tổng-kết--bảng-ghi-nhớ-nhanh)
-12. [Bài tập luyện tập](#12-bài-tập-luyện-tập)
+9. [`java.time` — Date and Time API (Java 8)](#9-javatime--date-and-time-api-java-8)
+10. [Virtual Threads (Java 21 LTS)](#10-virtual-threads-java-21-lts)
+11. [String & API tiện ích mới (Java 9–17)](#11-string--api-tiện-ích-mới-java-9-17)
+12. [Java Platform Module System — JPMS (Java 9)](#12-java-platform-module-system--jpms-java-9)
+13. [Sequenced Collections (Java 21)](#13-sequenced-collections-java-21)
+14. [Tổng kết — Bảng ghi nhớ nhanh](#14-tổng-kết--bảng-ghi-nhớ-nhanh)
+15. [Bài tập luyện tập](#15-bài-tập-luyện-tập)
 
 ---
 
@@ -396,7 +399,81 @@ String greeting = """
 
 ---
 
-## 9. Virtual Threads (Java 21 LTS)
+## 9. `java.time` — Date and Time API (Java 8)
+
+Trước Java 8, xử lý ngày giờ trong Java dựa trên `java.util.Date` và `java.util.Calendar` — cả hai đều **mutable** (gây bug khi chia sẻ giữa nhiều nơi), **không thread-safe** (`SimpleDateFormat` là ví dụ kinh điển — Module 05.2), API lộn xộn (tháng đếm từ `0`, năm tính từ `1900`), và trộn lẫn khái niệm "thời điểm" với "ngày theo lịch". Java 8 thay bằng bộ API mới trong `java.time` (dựa trên thư viện Joda-Time), theo đúng tinh thần **bất biến** như `String`/`record` — mọi thao tác "sửa" đều trả về **object mới**.
+
+### Các lớp cốt lõi — phân biệt theo "có gắn múi giờ hay không"
+
+| Lớp | Đại diện cho | Ví dụ |
+|---|---|---|
+| `LocalDate` | Ngày theo lịch, **không giờ, không múi giờ** | `2026-09-19` |
+| `LocalTime` | Giờ trong ngày, không ngày, không múi giờ | `14:30:00` |
+| `LocalDateTime` | Ngày + giờ, **vẫn không múi giờ** | `2026-09-19T14:30:00` |
+| `ZonedDateTime` | Ngày + giờ + **múi giờ cụ thể** | `2026-09-19T14:30:00+07:00[Asia/Ho_Chi_Minh]` |
+| `Instant` | Một **thời điểm tuyệt đối** trên dòng thời gian (số giây/nano kể từ epoch UTC) | `2026-09-19T07:30:00Z` |
+| `Duration` | Khoảng cách thời gian tính bằng **giây/nano** (giữa hai `Instant`/`LocalTime`) | `PT2H30M` (2 giờ 30 phút) |
+| `Period` | Khoảng cách thời gian tính bằng **năm/tháng/ngày theo lịch** (giữa hai `LocalDate`) | `P1Y2M3D` (1 năm 2 tháng 3 ngày) |
+
+```java
+LocalDate today = LocalDate.now();                     // ngày hiện tại theo múi giờ hệ thống
+LocalDate birthday = LocalDate.of(2003, Month.MARCH, 15);  // tháng là ENUM, không phải số 0-11 như Calendar cũ
+LocalDateTime meeting = LocalDateTime.of(2026, 9, 20, 14, 30);
+ZonedDateTime zoned = ZonedDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh"));
+Instant now = Instant.now();                            // mốc tuyệt đối, dùng cho timestamp lưu DB/log
+```
+
+> **Quy tắc chọn lớp:** lưu **timestamp sự kiện** (log, `createdAt` trong DB) → `Instant`. Biểu diễn **ngày sinh nhật/hạn hợp đồng** (không phụ thuộc giờ/múi giờ) → `LocalDate`. Hiển thị cho người dùng theo múi giờ cụ thể → `ZonedDateTime`. Hầu hết trường hợp backend (không cần hiển thị múi giờ) → `LocalDateTime` là đủ.
+
+### Bất biến — mọi phép "cộng/trừ" trả về object mới
+
+```java
+LocalDate d1 = LocalDate.of(2026, 1, 31);
+LocalDate d2 = d1.plusMonths(1);     // 2026-02-28 (tự động xử lý tháng ngắn hơn — không có "31/2")
+d1.equals(LocalDate.of(2026, 1, 31));  // true — d1 KHÔNG bị đổi bởi plusMonths()
+
+LocalDate d3 = d1.plusDays(10).minusYears(1).withDayOfMonth(1);   // chuỗi (chaining) như StringBuilder nhưng luôn tạo object mới
+```
+
+> ⚠️ **Bẫy kinh điển:** `date.plusDays(5);` (không gán lại kết quả) — giống hệt bẫy `String` bất biến (Module 01.1) — dòng này **không có tác dụng gì**, vì `plusDays` trả về object mới thay vì sửa `date`.
+
+### So sánh, tính khoảng cách
+
+```java
+d1.isBefore(d2);  d1.isAfter(d2);  d1.isEqual(d2);
+long daysBetween = ChronoUnit.DAYS.between(d1, d2);
+Period p = Period.between(d1, d2);          // ví dụ: "2 năm 3 tháng 10 ngày"
+Duration dur = Duration.between(instant1, instant2);   // ví dụ: "PT36H" (36 giờ) — chính xác tới nano
+```
+
+### Định dạng & phân tích chuỗi — `DateTimeFormatter` (thread-safe, thay `SimpleDateFormat`)
+
+```java
+DateTimeFormatter fmt = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
+String s = LocalDateTime.now().format(fmt);          // "19/09/2026 14:30"
+LocalDateTime parsed = LocalDateTime.parse("19/09/2026 14:30", fmt);   // ngược lại — parse
+
+// Chuẩn ISO-8601 (mặc định toString(), không cần formatter):
+LocalDate.now().toString();     // "2026-09-19"
+```
+
+`DateTimeFormatter` là **immutable & thread-safe** — khai báo **một lần** dùng `static final`, chia sẻ an toàn giữa nhiều thread (khác hẳn `SimpleDateFormat` phải tạo mới mỗi lần hoặc bọc `ThreadLocal` — Module 05.2).
+
+### Chuyển đổi qua lại với API cũ (khi tích hợp thư viện/JDBC cũ)
+
+```java
+Date legacyDate = Date.from(instant);                       // java.time → java.util
+Instant back = legacyDate.toInstant();                       // java.util → java.time
+LocalDateTime ldt = LocalDateTime.ofInstant(instant, ZoneId.systemDefault());
+```
+
+### Liên hệ Spring/JPA
+
+`LocalDate`/`LocalDateTime`/`Instant` được Hibernate/JPA hỗ trợ ánh xạ trực tiếp (Module 20) sang `DATE`/`TIMESTAMP` của SQL mà không cần converter thủ công (khác `java.util.Date` cần cấu hình `@Temporal` rườm rà hơn); Jackson tự serialize/deserialize sang ISO-8601 JSON khi có `jackson-datatype-jsr310` (mặc định đã kèm trong Spring Boot).
+
+---
+
+## 10. Virtual Threads (Java 21 LTS)
 
 Thay đổi lớn nhất của Java nhiều năm (Project Loom). Liên hệ Module 05.
 
@@ -451,7 +528,7 @@ Xử lý: tạm thay `synchronized` bằng `ReentrantLock` (Module 05.2) ở đ�
 
 ---
 
-## 10. String & API tiện ích mới (Java 9–17)
+## 11. String & API tiện ích mới (Java 9–17)
 
 Những cải tiến nhỏ nhưng gặp hằng ngày:
 
@@ -480,7 +557,87 @@ Những cải tiến nhỏ nhưng gặp hằng ngày:
 
 ---
 
-## 11. Tổng kết — Bảng ghi nhớ nhanh
+## 12. Java Platform Module System — JPMS (Java 9)
+
+Trước Java 9, đơn vị đóng gói lớn nhất chỉ là **package** — mọi `public class` trong mọi JAR trên classpath đều nhìn thấy nhau, không có khái niệm "che" một package khỏi bên ngoài JAR. JPMS (còn gọi Project Jigsaw) thêm một tầng đóng gói **lớn hơn package**: **module**.
+
+### `module-info.java` — khai báo module
+
+```java
+// nằm ở thư mục gốc của source set, ngang hàng package gốc
+module com.pho.orderservice {
+    requires java.sql;                 // module này CẦN module java.sql để compile/chạy
+    requires transitive com.pho.core;  // ai requires orderservice thì cũng tự động thấy com.pho.core
+
+    exports com.pho.orderservice.api;      // package này PUBLIC cho module khác
+    exports com.pho.orderservice.dto to com.pho.orderservice.web;  // chỉ export CHO một module cụ thể (qualified export)
+
+    // com.pho.orderservice.internal — KHÔNG exports → dù class là public,
+    // module khác vẫn KHÔNG compile/reflect được vào nó (strong encapsulation thật sự)
+
+    opens com.pho.orderservice.entity to org.hibernate.orm.core;  // cho phép reflection sâu (Hibernate/Jackson cần)
+    uses com.pho.orderservice.spi.PaymentProvider;      // module này TIÊU THỤ một service (ServiceLoader)
+    provides com.pho.orderservice.spi.PaymentProvider with com.pho.orderservice.impl.VnPayProvider; // và CUNG CẤP implementation
+}
+```
+
+### Vì sao JPMS ra đời — hai vấn đề nó giải quyết
+
+| Vấn đề trước Java 9 | JPMS giải quyết thế nào |
+|---|---|
+| **"JAR Hell"/Classpath Hell**: hai JAR khác version cùng tên gói trên classpath → JVM chọn một cách không kiểm soát được, lỗi `NoSuchMethodError` khó hiểu lúc runtime | Module có tên duy nhất, khai báo `requires` tường minh — xung đột bị phát hiện sớm hơn (dù chưa giải quyết được đa version hoàn toàn) |
+| **`public` = mở toang cho cả thế giới**: muốn giấu class nội bộ chỉ có thể trông cậy vào convention (package `internal`) chứ compiler không chặn | `exports` là ranh giới **compiler enforce được** — package không export thì dù `public` vẫn không ai bên ngoài module gọi/compile vào được |
+| JDK tự nó là một khối `rt.jar` khổng lồ, ứng dụng nhỏ vẫn phải mang theo toàn bộ runtime | JDK chia thành hàng chục module (`java.base`, `java.sql`, `java.xml`...) → `jlink` tạo runtime image **tối giản**, chỉ chứa module thực sự dùng |
+
+### Vì sao module này KHÔNG đi sâu
+
+Phần lớn ứng dụng Spring Boot/thư viện thực tế **vẫn chạy trên classpath truyền thống** (không có `module-info.java`) — hệ sinh thái Spring/Hibernate dựa nhiều vào reflection xuyên package mà JPMS mặc định chặn (`opens`), nên việc modular hóa toàn bộ một ứng dụng Spring là hiếm và tốn công. JPMS phổ biến nhất ở: (1) chính JDK, (2) thư viện lõi ổn định muốn bảo vệ API nội bộ nghiêm ngặt, (3) `jlink` để đóng gói runtime tối giản cho ứng dụng CLI/desktop.
+
+> ⚠️ **Automatic module & unnamed module:** một JAR thường (không có `module-info.class`) khi được module khác `requires` sẽ tự động trở thành "automatic module" (tên suy từ tên file JAR, export mọi package) — cơ chế cầu nối để hệ sinh thái cũ dần tương thích ngược mà không phải sửa lại toàn bộ JAR cùng lúc.
+
+---
+
+## 13. Sequenced Collections (Java 21)
+
+Trước Java 21, các collection có "thứ tự" (`List`, `LinkedHashSet`, `LinkedHashMap`) mỗi loại có API lấy phần tử đầu/cuối **khác nhau** (`list.get(0)` vs `list.get(list.size()-1)`, không có gì tương tự cho `LinkedHashSet`) — không có một interface chung diễn đạt khái niệm "có thứ tự, có đầu có cuối".
+
+### Interface mới: `SequencedCollection`, `SequencedSet`, `SequencedMap`
+
+```java
+public interface SequencedCollection<E> extends Collection<E> {
+    SequencedCollection<E> reversed();      // view đảo ngược thứ tự — KHÔNG copy dữ liệu
+    void addFirst(E e);
+    void addLast(E e);
+    E getFirst();
+    E getLast();
+    E removeFirst();
+    E removeLast();
+}
+```
+
+`List`, `Deque`, `LinkedHashSet` giờ đều implement `SequencedCollection`. `LinkedHashMap`/`SortedMap` implement `SequencedMap` (thêm `firstEntry()`, `lastEntry()`, `sequencedKeySet()`...).
+
+```java
+List<Integer> nums = new ArrayList<>(List.of(1, 2, 3));
+nums.getFirst();          // 1 — trước đây phải nums.get(0)
+nums.getLast();           // 3 — trước đây phải nums.get(nums.size() - 1)
+nums.addFirst(0);         // [0, 1, 2, 3]
+List<Integer> rev = nums.reversed();   // view [3, 2, 1, 0] — sửa "nums" phản ánh ngay trên "rev" và ngược lại
+
+LinkedHashSet<String> tags = new LinkedHashSet<>(List.of("a", "b", "c"));
+tags.getFirst();          // "a" — LinkedHashSet trước đây KHÔNG có cách lấy phần tử đầu O(1) nào tường minh
+
+LinkedHashMap<String, Integer> scores = new LinkedHashMap<>();
+scores.put("An", 9); scores.put("Binh", 7);
+scores.firstEntry();       // Map.Entry["An"=9]
+scores.sequencedKeySet().reversed();   // duyệt key theo thứ tự chèn ngược
+```
+
+> **Lưu ý:** `reversed()` trả về **view** sống động (giống `Collections.unmodifiableList` là view, không phải bản sao) — thao tác ghi qua view phản ánh ngược lại collection gốc. `HashMap`/`HashSet` **không** implement các interface này vì bản chất chúng vốn không có thứ tự xác định.
+
+---
+
+## 14. Tổng kết — Bảng ghi nhớ nhanh
 
 | Tính năng | Java | Điểm mấu chốt |
 |---|---|---|
@@ -492,12 +649,15 @@ Những cải tiến nhỏ nhưng gặp hằng ngày:
 | Pattern `switch` | 21 | Theo kiểu + `when` guard + `case null`. Dominance = lỗi compile. Exhaustiveness cho sealed/enum. `MatchException` runtime. Arrow không fall-through. |
 | Record Pattern | 21 | `case Point(int x, int y)` tách component; lồng nhau; `var`; với `sealed` → không cần `default`. |
 | Text Block | 15 | `"""` mở phải xuống dòng. Xóa thụt lề chung (theo `"""` đóng) + khoảng trắng cuối dòng. `\s` giữ space, `\` nối dòng. Là hằng số compile-time. `.formatted()`. |
+| `java.time` | 8 | Thay `Date`/`Calendar` mutable, không thread-safe. `LocalDate`/`LocalDateTime` (không múi giờ), `ZonedDateTime` (có múi giờ), `Instant` (mốc tuyệt đối UTC). Bất biến — `plusDays()` không gán lại là no-op. `Duration` (giây/nano) vs `Period` (năm/tháng/ngày). `DateTimeFormatter` thread-safe thay `SimpleDateFormat`. |
 | Virtual Thread | 21 LTS | Siêu nhẹ, M:N trên carrier (ForkJoinPool). Unmount khi I/O/`j.u.c` lock; **pin** khi `synchronized`+blocking hoặc JNI (Java 21). Đừng pool; giới hạn bằng `Semaphore`; luôn daemon. I/O-bound only. |
 | String utils | 11/15 | `strip`, `isBlank`, `repeat`, `lines`, `formatted`, `stripIndent`. |
+| JPMS (module) | 9 | `module-info.java`: `requires`/`exports`/`opens`/`uses`/`provides`. `exports` là ranh giới đóng gói compiler enforce được, mạnh hơn `public`. Hiếm dùng trực tiếp trong app Spring (do reflection), phổ biến ở JDK/`jlink`. |
+| Sequenced Collections | 21 | `SequencedCollection`/`Set`/`Map` — `getFirst/getLast/addFirst/addLast/reversed()`. `reversed()` là **view** sống, không copy. `List`/`Deque`/`LinkedHashSet`/`LinkedHashMap` có; `HashMap`/`HashSet` thì không (vốn không có thứ tự). |
 
 ---
 
-## 12. Bài tập luyện tập
+## 15. Bài tập luyện tập
 
 ### Phần A — Trắc nghiệm nhận định (giải thích lý do)
 
