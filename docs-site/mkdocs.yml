@@ -26,9 +26,10 @@ exclude_docs: |
   *.java
   scripts/
   .markdownlint.yml
+  README.MD
 
 nav:
-  - Trang chủ: README.MD
+  - Trang chủ: index.md
   - Giai đoạn 1 — Ngôn ngữ Java:
       - "01 · Cú pháp & kiểu dữ liệu": 01-cu-phap-kieu-du-lieu/01-cu-phap-kieu-du-lieu.md
       - "02 · Cấu trúc điều khiển": 02-cau-truc-dieu-khien/02-cau-truc-dieu-khien.md
@@ -109,6 +110,8 @@ markdown_extensions:
   - md_in_html
   - toc:
       permalink: true
+  - pymdownx.snippets:
+      base_path: ["."]
   - pymdownx.superfences:
       custom_fences:
         - name: mermaid
