@@ -1,9 +1,9 @@
-# Module 21 — Observability
+# Module 30 — Observability
 
 > **Mức ưu tiên: 🟡 Trung bình (nhưng thiết yếu khi hệ thống chạy Microservices thật)**
-> **Vì sao quan trọng:** Khi hệ thống chỉ là 1 Monolith chạy trên 1 server, `System.out.println` và đọc log thủ công còn khả thi. Nhưng khi đã học tới Microservices (Module 19) — 1 request đi qua 5-10 service khác nhau — câu hỏi "request này bị lỗi/chậm ở đâu?" **không thể trả lời được** nếu không có Observability. Đây là "con mắt" của hệ thống production: không có nó, mọi sự cố đều là "mò kim đáy bể".
+> **Vì sao quan trọng:** Khi hệ thống chỉ là 1 Monolith chạy trên 1 server, `System.out.println` và đọc log thủ công còn khả thi. Nhưng khi đã học tới Microservices (Module 28) — 1 request đi qua 5-10 service khác nhau — câu hỏi "request này bị lỗi/chậm ở đâu?" **không thể trả lời được** nếu không có Observability. Đây là "con mắt" của hệ thống production: không có nó, mọi sự cố đều là "mò kim đáy bể".
 
-> **Phạm vi bài này:** Tập trung vào 3 trụ cột Observability (Logs, Metrics, Traces) và công cụ triển khai ở tầng ứng dụng Spring Boot. Không đi sâu vận hành hạ tầng Elasticsearch/Prometheus Cluster ở quy mô lớn, hay thiết kế hệ thống chịu tải (Load Balancing, Scaling, CDN — thuộc Module 22 System Design tiếp theo).
+> **Phạm vi bài này:** Tập trung vào 3 trụ cột Observability (Logs, Metrics, Traces) và công cụ triển khai ở tầng ứng dụng Spring Boot. Không đi sâu vận hành hạ tầng Elasticsearch/Prometheus Cluster ở quy mô lớn, hay thiết kế hệ thống chịu tải (Load Balancing, Scaling, CDN — thuộc Module 31 System Design tiếp theo).
 
 ---
 
@@ -156,7 +156,7 @@ log.info("Đơn hàng đã được tạo",
 | `DEBUG` | Chi tiết kỹ thuật hữu ích khi DEBUG (giá trị biến, luồng xử lý) — thường TẮT ở production (quá nhiều log) |
 | `TRACE` | Chi tiết cực kỳ sâu (từng bước nhỏ nhất) — hiếm khi bật, kể cả lúc debug |
 
-⚠️ **Bẫy quan trọng:** KHÔNG BAO GIỜ log thông tin nhạy cảm (password, token, số thẻ tín dụng, dữ liệu cá nhân) — đã cảnh báo ở Module 16, nhắc lại vì đây là lỗi rất dễ mắc khi debug rồi quên xóa log.
+⚠️ **Bẫy quan trọng:** KHÔNG BAO GIỜ log thông tin nhạy cảm (password, token, số thẻ tín dụng, dữ liệu cá nhân) — đã cảnh báo ở Module 25, nhắc lại vì đây là lỗi rất dễ mắc khi debug rồi quên xóa log.
 
 ---
 
@@ -331,7 +331,7 @@ OpenTelemetry Collector (tùy chọn - gom dữ liệu, xử lý trước khi g�
 
 ## 5. Metrics với Micrometer & Prometheus
 
-### Micrometer — lớp trừu tượng đo lường (giống Spring Cache Abstraction ở Module 18, nhưng cho Metrics)
+### Micrometer — lớp trừu tượng đo lường (giống Spring Cache Abstraction ở Module 27, nhưng cho Metrics)
 
 ```xml
 <dependency>
@@ -340,8 +340,8 @@ OpenTelemetry Collector (tùy chọn - gom dữ liệu, xử lý trước khi g�
 </dependency>
 ```
 
-**Micrometer tự động thu thập nhiều metric có sẵn** (nhờ tích hợp với Spring Boot Actuator đã học ở Module 13):
-- JVM Metrics: heap memory, GC pause time, thread count (liên hệ Module 07 — JVM Internals)
+**Micrometer tự động thu thập nhiều metric có sẵn** (nhờ tích hợp với Spring Boot Actuator đã học ở Module 22):
+- JVM Metrics: heap memory, GC pause time, thread count (liên hệ Module 15 — JVM Internals)
 - HTTP Metrics: số request/giây, response time, tỷ lệ status code (200/400/500)
 - DataSource Metrics: connection pool usage (liên hệ HikariCP)
 
@@ -423,7 +423,7 @@ Cho phép query bằng ngôn ngữ riêng PromQL
 ```
 
 ```yaml
-# application.yml - Bật endpoint /actuator/prometheus (liên hệ Module 13 - Actuator)
+# application.yml - Bật endpoint /actuator/prometheus (liên hệ Module 22 - Actuator)
 management:
   endpoints:
     web:
@@ -515,7 +515,7 @@ histogram_quantile(0.95, rate(http_server_requests_seconds_bucket[5m]))
 
 | Thành phần | Vai trò |
 |---|---|
-| **Elasticsearch** | Database chuyên biệt cho **tìm kiếm full-text** cực nhanh (đã giới thiệu khái niệm ở Module 10) — lưu trữ và đánh index log |
+| **Elasticsearch** | Database chuyên biệt cho **tìm kiếm full-text** cực nhanh (đã giới thiệu khái niệm ở Module 19) — lưu trữ và đánh index log |
 | **Logstash** (hoặc **Filebeat** nhẹ hơn) | Thu thập log từ nhiều nguồn, xử lý/chuẩn hóa (parse), rồi đẩy vào Elasticsearch |
 | **Kibana** | Giao diện web để tìm kiếm, lọc, tạo Dashboard trực quan từ dữ liệu trong Elasticsearch |
 
@@ -526,7 +526,7 @@ histogram_quantile(0.95, rate(http_server_requests_seconds_bucket[5m]))
 2. Filebeat (agent nhẹ, chạy cùng mỗi container/server) đọc file log, gửi sang Logstash/Elasticsearch
 3. Logstash (tùy chọn) xử lý thêm (parse, enrich, filter) trước khi lưu
 4. Elasticsearch lưu trữ, đánh index theo từng field (userId, correlationId, level...)
-5. Developer/DevOps vào Kibana, tìm kiếm: "correlationId: abc-123-def" 
+5. Developer/DevOps vào Kibana, tìm kiếm: "correlationId: abc-123-def"
    -> Thấy NGAY toàn bộ log liên quan tới request đó, xuyên suốt MỌI service
 ```
 
@@ -638,6 +638,58 @@ Nếu Error Budget còn dư nhiều:
 12. **Không có quy trình rõ ràng khi Error Budget cạn kiệt** — đặt ra SLO/Error Budget nhưng không có chính sách hành động cụ thể (VD: tạm dừng release) khi vi phạm, khiến khái niệm này chỉ tồn tại trên giấy mà không ảnh hưởng thực tế tới cách team ra quyết định.
 
 ---
+
+### Cardinality budget — metric label có thể làm sập hệ quan sát
+
+Mỗi tổ hợp label tạo một time series. `userId`, `orderId`, raw URL hoặc exception message là unbounded cardinality; volume nhỏ vẫn có thể làm Prometheus tốn RAM/CPU lớn. Dùng route template, error code hữu hạn và đưa ID chi tiết sang log/trace.
+
+> ⚠️ Histogram nhân số series theo bucket × label combinations. Chọn bucket theo SLO, không sao chép mặc định mà không đo.
+
+### Multi-window burn-rate alert
+
+Alert trực tiếp khi “error rate > 1%” dễ nhiễu và không gắn SLO. Burn rate đo tốc độ tiêu error budget: burn `1` nghĩa là tiêu đúng tốc độ cho phép; burn lớn trên cửa sổ ngắn báo sự cố nhanh, còn burn vừa trên cửa sổ dài bắt lỗi âm ỉ. Kết hợp hai cửa sổ giúp vừa nhanh vừa ít false positive.
+
+### Tail sampling và exemplar
+
+Head sampling quyết định trước khi biết request có lỗi; tail sampling giữ trace chậm/lỗi sau khi quan sát toàn trace nhưng tốn buffer và hạ tầng hơn. Exemplar gắn một trace ID mẫu vào bucket metric, tạo đường đi từ spike p99 → trace cụ thể → log tương quan.
+
+Thiết kế sampling phải ưu tiên error/high-latency/tenant quan trọng và vẫn giữ một mẫu ngẫu nhiên đại diện; nếu chỉ giữ lỗi, baseline “bình thường” biến mất.
+
+### Sequence diagram: trace xuyên nhiều service
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant A as API service
+    participant B as Order service
+    participant DB as Database
+    participant Q as Broker
+    C->>A: request với hoặc không có trace context
+    A->>A: tạo root/server span
+    A->>B: truyền traceparent, tạo client span
+    B->>DB: child span cho SQL
+    DB-->>B: result
+    B->>Q: publish kèm trace context
+    B-->>A: response
+    A-->>C: response
+    Note over Q: Consumer tiếp tục trace bằng messaging span/link
+```
+
+Trace ID nối toàn request; Span ID biểu diễn một operation và parent/links biểu diễn quan hệ nhân quả. Nếu context không được propagate qua HTTP/message, hệ thống chỉ có nhiều trace rời rạc dù mọi service đều “đã bật tracing”.
+
+### Mental model: từ tín hiệu tới hành động
+
+```mermaid
+flowchart LR
+    S["SLI từ metrics"] --> A["Alert theo SLO / burn rate"]
+    A --> D["Dashboard xác định phạm vi"]
+    D --> T["Trace tìm đường chậm/lỗi"]
+    T --> L["Log chi tiết tại component"]
+    L --> R["Runbook và remediation"]
+    R --> P["Postmortem, sửa instrumentation/SLO"]
+```
+
+Metrics cho biết **có vấn đề và quy mô**, trace cho biết **đường đi**, log cho biết **chi tiết cục bộ**. Thu thập cả ba nhưng không có liên kết ID/label nhất quán vẫn tạo ba silo dữ liệu.
 
 ## 11. Tổng kết — Bảng ghi nhớ nhanh
 
@@ -823,7 +875,7 @@ sum(rate(http_server_requests_seconds_count{application="payment-service"}[5m]))
 
 **Bước tiếp theo cần Distributed Tracing:** Xem 1 vài Trace cụ thể của các request `POST /orders` bị chậm trong khoảng thời gian đó — phát hiện: Span "Order Service gọi Inventory Service" đang chiếm **2800ms/3000ms tổng thời gian** (gần như toàn bộ độ trễ nằm ở bước gọi sang Inventory Service), trong khi các Span khác (validate, lưu Order DB) vẫn bình thường (~50-100ms).
 
-**Bước cuối cùng cần Logs:** Bây giờ đã biết "thủ phạm" là Inventory Service, vào xem **log chi tiết** của chính Inventory Service tại đúng khung thời gian đó (lọc theo `correlationId` của 1 trace cụ thể vừa tìm được) — phát hiện dòng log: `"Đang chờ Connection Pool - pool đã đạt maximum 10 connections"` — từ đó xác định NGUYÊN NHÂN GỐC RỄ: **HikariCP Connection Pool của Inventory Service bị cạn kiệt** (có thể do 1 query nào đó đang giữ connection quá lâu, hoặc traffic tăng đột biến vượt quá pool size đã cấu hình — liên hệ Module 10/15).
+**Bước cuối cùng cần Logs:** Bây giờ đã biết "thủ phạm" là Inventory Service, vào xem **log chi tiết** của chính Inventory Service tại đúng khung thời gian đó (lọc theo `correlationId` của 1 trace cụ thể vừa tìm được) — phát hiện dòng log: `"Đang chờ Connection Pool - pool đã đạt maximum 10 connections"` — từ đó xác định NGUYÊN NHÂN GỐC RỄ: **HikariCP Connection Pool của Inventory Service bị cạn kiệt** (có thể do 1 query nào đó đang giữ connection quá lâu, hoặc traffic tăng đột biến vượt quá pool size đã cấu hình — liên hệ Module 18/24).
 
 **Kết luận:** Chỉ với Metrics, ta biết "có vấn đề và mức độ nghiêm trọng". Chỉ với Tracing, ta thu hẹp được "vấn đề nằm ở service/bước nào". Chỉ với Logs chi tiết của đúng service/thời điểm đó (nhờ Correlation ID liên kết từ Trace), ta mới tìm ra được **nguyên nhân kỹ thuật cụ thể** để khắc phục (tăng pool size, tối ưu query đang giữ connection lâu...). Đây chính là lý do 3 trụ cột Observability phải đi CÙNG NHAU, không thể chỉ dựa vào 1 trụ cột duy nhất khi debug sự cố production phức tạp.
 
@@ -867,4 +919,4 @@ Còn lại: ~4.3 phút cho 10 ngày còn lại của tháng -> RẤT MỎNG, r�
 
 ---
 
-*File tiếp theo trong lộ trình: **Module 22 — System Design cơ bản cho Backend** (Load Balancing, Horizontal vs Vertical Scaling, Database Replication & Sharding, CDN, Rate Limiting, thiết kế hệ thống quy mô lớn: URL Shortener/News Feed — bài toán phỏng vấn kinh điển).*
+*File tiếp theo trong lộ trình: **Module 31 — System Design cơ bản cho Backend** (Load Balancing, Horizontal vs Vertical Scaling, Database Replication & Sharding, CDN, Rate Limiting, thiết kế hệ thống quy mô lớn: URL Shortener/News Feed — bài toán phỏng vấn kinh điển).*

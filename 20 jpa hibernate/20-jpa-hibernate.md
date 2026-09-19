@@ -1,9 +1,9 @@
-# Module 11 — ORM: JPA & Hibernate
+# Module 20 — ORM: JPA & Hibernate
 
 > **Mức ưu tiên: 🔴 Cao**
 > **Vì sao quan trọng:** Đây là cầu nối trực tiếp giữa Java Core/OOP và Spring Boot thực chiến. Gần như 100% backend Java hiện đại dùng Spring Data JPA (built trên Hibernate) để thao tác database. Không hiểu rõ cơ chế ORM — đặc biệt là **N+1 Query Problem** và **Lazy/Eager loading** — là nguyên nhân số 1 khiến ứng dụng Spring Boot chạy chậm bất thường trong production, và cũng là câu hỏi phỏng vấn "phân loại" ứng viên Junior vs Mid/Senior.
 >
-> **Phạm vi bài này:** cơ chế ORM/Hibernate và các annotation JPA nền tảng. Bài **không** đi sâu cấu hình Spring Boot Application Context/IoC (Module 12) hay REST API layer (module sau) — chỉ dùng `@Service`/`@Repository` như ví dụ minh họa cách JPA được dùng trong Spring.
+> **Phạm vi bài này:** cơ chế ORM/Hibernate và các annotation JPA nền tảng. Bài **không** đi sâu cấu hình Spring Boot Application Context/IoC (Module 21) hay REST API layer (module sau) — chỉ dùng `@Service`/`@Repository` như ví dụ minh họa cách JPA được dùng trong Spring.
 
 ---
 
@@ -94,7 +94,7 @@ User user = entityManager.find(User.class, id);
 
 ### JDBC vẫn nằm dưới cùng — Hibernate không "thay thế" JDBC
 
-Dù dùng ORM, cuối cùng Hibernate vẫn phải mở `Connection`, tạo `PreparedStatement` và chạy SQL thật qua JDBC (Module 10) — Hibernate chỉ **tự động hóa** phần sinh SQL + map ResultSet, chứ không loại bỏ tầng JDBC. Hiểu điều này giúp lý giải vì sao mọi khái niệm đã học ở Module 10 (Connection Pool, Transaction, Isolation Level, Index) vẫn áp dụng nguyên vẹn khi dùng JPA — JPA chỉ là 1 lớp trừu tượng (abstraction) phía trên, không phải 1 thế giới hoàn toàn khác.
+Dù dùng ORM, cuối cùng Hibernate vẫn phải mở `Connection`, tạo `PreparedStatement` và chạy SQL thật qua JDBC (Module 18) — Hibernate chỉ **tự động hóa** phần sinh SQL + map ResultSet, chứ không loại bỏ tầng JDBC. Hiểu điều này giúp lý giải vì sao mọi khái niệm đã học ở Module 18 (Connection Pool, Transaction, Isolation Level, Index) vẫn áp dụng nguyên vẹn khi dùng JPA — JPA chỉ là 1 lớp trừu tượng (abstraction) phía trên, không phải 1 thế giới hoàn toàn khác.
 
 ---
 
@@ -209,7 +209,7 @@ public class Address {
     private String street;
     private String city;
     private String country;
-    // constructor, getters, equals/hashCode theo giá trị (Value Object nên so sánh theo NỘI DUNG, Module 03.1)
+    // constructor, getters, equals/hashCode theo giá trị (Value Object nên so sánh theo NỘI DUNG, Module 08)
 }
 
 @Entity
@@ -252,7 +252,7 @@ public class Post {
     private List<String> tags;
 }
 ```
-> **So với `JSONB`/Array của PostgreSQL (Module 10, mục 3):** nếu DB hỗ trợ sẵn kiểu native (JSONB, Array), ưu tiên dùng kiểu native đó (hiệu năng tốt hơn, truy vấn được trực tiếp trong SQL) — `@Converter` phù hợp hơn khi cần logic chuyển đổi tùy biến (mã hóa, nén dữ liệu) hoặc DB không hỗ trợ kiểu phức tạp (MySQL với danh sách đơn giản).
+> **So với `JSONB`/Array của PostgreSQL (Module 18, mục 3):** nếu DB hỗ trợ sẵn kiểu native (JSONB, Array), ưu tiên dùng kiểu native đó (hiệu năng tốt hơn, truy vấn được trực tiếp trong SQL) — `@Converter` phù hợp hơn khi cần logic chuyển đổi tùy biến (mã hóa, nén dữ liệu) hoặc DB không hỗ trợ kiểu phức tạp (MySQL với danh sách đơn giản).
 
 ---
 
@@ -355,13 +355,13 @@ public void demo() {
 }
 // Transaction commit -> flush LẦN CUỐI (nếu còn thay đổi chưa flush) -> COMMIT thật ở tầng DB
 ```
-> **Liên hệ:** đây chính là lý do vì sao có thể "batch" nhiều INSERT/UPDATE lại thành ít round-trip DB hơn (liên hệ Buffer Pool/gom ghi ở Module 10, mục 2) — Hibernate không nhất thiết chạy SQL ngay khi code gọi method, mà tối ưu hóa thời điểm gửi SQL xuống DB.
+> **Liên hệ:** đây chính là lý do vì sao có thể "batch" nhiều INSERT/UPDATE lại thành ít round-trip DB hơn (liên hệ Buffer Pool/gom ghi ở Module 18, mục 2) — Hibernate không nhất thiết chạy SQL ngay khi code gọi method, mà tối ưu hóa thời điểm gửi SQL xuống DB.
 
 ---
 
 ## 5. Mapping quan hệ
 
-Đây là phần **quan trọng nhất** và cũng dễ gây bug nhất của JPA. 4 loại quan hệ chính, ánh xạ với thiết kế database quan hệ mà bạn đã học ở Module 10.
+Đây là phần **quan trọng nhất** và cũng dễ gây bug nhất của JPA. 4 loại quan hệ chính, ánh xạ với thiết kế database quan hệ mà bạn đã học ở Module 18.
 
 ### 5.1. @ManyToOne — "Nhiều thuộc về Một" (phổ biến nhất)
 
@@ -562,7 +562,7 @@ CREATE TABLE payment (
 ```
 | Ưu điểm | Nhược điểm |
 |---|---|
-| **Nhanh nhất** — không cần JOIN khi truy vấn | Nhiều cột `NULL` nếu các lớp con khác biệt lớn (giống Anti-pattern Sparse Table, Module 10 mục 3) |
+| **Nhanh nhất** — không cần JOIN khi truy vấn | Nhiều cột `NULL` nếu các lớp con khác biệt lớn (giống Anti-pattern Sparse Table, Module 18 mục 3) |
 | Query đơn giản | Không áp được `NOT NULL` cho field riêng của lớp con ở tầng DB |
 
 ### 6.2. JOINED — mỗi class 1 bảng, liên kết bằng khóa ngoại = khóa chính
@@ -912,7 +912,7 @@ List<User> results = userRepository.findAll(spec);
 
 ### Vì sao cần Transaction?
 
-Đảm bảo tính **ACID** (đã học ở Module 10) khi thực hiện nhiều thao tác DB liên quan — hoặc tất cả cùng thành công, hoặc tất cả cùng rollback.
+Đảm bảo tính **ACID** (đã học ở Module 18) khi thực hiện nhiều thao tác DB liên quan — hoặc tất cả cùng thành công, hoặc tất cả cùng rollback.
 
 ```java
 @Service
@@ -1012,7 +1012,7 @@ public class AuditLogService {
 ### Isolation Level trong @Transactional
 
 ```java
-@Transactional(isolation = Isolation.READ_COMMITTED) // Đã học chi tiết ở Module 10
+@Transactional(isolation = Isolation.READ_COMMITTED) // Đã học chi tiết ở Module 18
 public void someMethod() { ... }
 ```
 
@@ -1062,7 +1062,7 @@ user.getOrders().remove(order1); // Bỏ order1 ra khỏi list trong bộ nhớ
 
 ## 12. Optimistic & Pessimistic Locking
 
-Khi nhiều transaction/nhiều instance backend cùng truy cập 1 record (bài toán Lost Update đã học ở Module 10, mục 7), JPA cung cấp 2 cơ chế khóa ở tầng Entity để giải quyết.
+Khi nhiều transaction/nhiều instance backend cùng truy cập 1 record (bài toán Lost Update đã học ở Module 18, mục 7), JPA cung cấp 2 cơ chế khóa ở tầng Entity để giải quyết.
 
 ### Optimistic Locking — `@Version`
 
@@ -1095,11 +1095,11 @@ public void reduceStock(Long productId, int quantity) {
     // -> code gọi cần CATCH exception này và retry hoặc báo lỗi cho người dùng
 }
 ```
-> **Liên hệ trực tiếp:** đây chính là cơ chế cụ thể của khái niệm "optimistic locking qua cột `version`" đã được nhắc tới ở Module 10, mục 7 — giờ hiện thực hóa bằng 1 annotation duy nhất, Hibernate lo toàn bộ phần sinh SQL kiểm tra version.
+> **Liên hệ trực tiếp:** đây chính là cơ chế cụ thể của khái niệm "optimistic locking qua cột `version`" đã được nhắc tới ở Module 18, mục 7 — giờ hiện thực hóa bằng 1 annotation duy nhất, Hibernate lo toàn bộ phần sinh SQL kiểm tra version.
 
 ### Pessimistic Locking — `@Lock`
 
-**Ý tưởng:** "bi quan" rằng va chạm rất có thể xảy ra — khóa row **ngay khi đọc**, chặn transaction khác đọc/ghi cho tới khi mình commit, tương đương `SELECT ... FOR UPDATE` (Module 10, mục 7):
+**Ý tưởng:** "bi quan" rằng va chạm rất có thể xảy ra — khóa row **ngay khi đọc**, chặn transaction khác đọc/ghi cho tới khi mình commit, tương đương `SELECT ... FOR UPDATE` (Module 18, mục 7):
 
 ```java
 public interface ProductRepository extends JpaRepository<Product, Long> {
@@ -1120,7 +1120,7 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
 | Trải nghiệm khi thất bại | Người dùng thấy lỗi, có thể cần thử lại thao tác | Người dùng chỉ chờ lâu hơn 1 chút, không thấy lỗi |
 | Ví dụ phù hợp | Sửa hồ sơ cá nhân, cập nhật thông tin ít khi 2 người sửa cùng lúc | Trừ tồn kho vé flash-sale — va chạm gần như CHẮC CHẮN xảy ra |
 
-> **Liên hệ capstone:** bài toán "trừ số lượng vé còn lại" trong flash-sale là ví dụ kinh điển của va chạm **cực cao** — Pessimistic Locking (hoặc giải pháp ở tầng cache/Redis đã bàn ở Module 10, mục 10) thường phù hợp hơn Optimistic Locking thuần túy, vì retry liên tục hàng chục nghìn request cùng lúc sẽ gây "thundering herd" (dồn ứ do tất cả cùng retry gần như đồng thời).
+> **Liên hệ capstone:** bài toán "trừ số lượng vé còn lại" trong flash-sale là ví dụ kinh điển của va chạm **cực cao** — Pessimistic Locking (hoặc giải pháp ở tầng cache/Redis đã bàn ở Module 18, mục 10) thường phù hợp hơn Optimistic Locking thuần túy, vì retry liên tục hàng chục nghìn request cùng lúc sẽ gây "thundering herd" (dồn ứ do tất cả cùng retry gần như đồng thời).
 
 ---
 
@@ -1148,9 +1148,9 @@ spring:
           use_second_level_cache: true
           region.factory_class: org.hibernate.cache.jcache.JCacheRegionFactory
 ```
-> **Khi nào dùng:** phù hợp cho dữ liệu **đọc nhiều, ghi ít, ít khi đổi** (danh mục sản phẩm, cấu hình hệ thống) — giống chính xác tiêu chí chọn dữ liệu để cache bằng Redis đã bàn ở Module 10, mục 6. **Không nên** bật tràn lan cho mọi Entity — dữ liệu thay đổi thường xuyên (đơn hàng, tồn kho) mà cache sai cách dễ dẫn tới đọc dữ liệu CŨ, gây bug khó phát hiện hơn cả N+1.
+> **Khi nào dùng:** phù hợp cho dữ liệu **đọc nhiều, ghi ít, ít khi đổi** (danh mục sản phẩm, cấu hình hệ thống) — giống chính xác tiêu chí chọn dữ liệu để cache bằng Redis đã bàn ở Module 18, mục 6. **Không nên** bật tràn lan cho mọi Entity — dữ liệu thay đổi thường xuyên (đơn hàng, tồn kho) mà cache sai cách dễ dẫn tới đọc dữ liệu CŨ, gây bug khó phát hiện hơn cả N+1.
 >
-> **Phân biệt với Redis (Module 10):** Second-Level Cache là cache **ở tầng Hibernate**, tự động, gắn liền vòng đời Entity — còn dùng Redis làm cache là **tự tay** cache kết quả ở tầng ứng dụng (Service), kiểm soát rõ ràng hơn nhưng phải tự viết logic invalidate. Nhiều dự án production ưu tiên tự cache bằng Redis ở tầng Service (`@Cacheable` của Spring Cache) hơn là bật L2 Cache của Hibernate, vì dễ kiểm soát và debug hơn.
+> **Phân biệt với Redis (Module 18):** Second-Level Cache là cache **ở tầng Hibernate**, tự động, gắn liền vòng đời Entity — còn dùng Redis làm cache là **tự tay** cache kết quả ở tầng ứng dụng (Service), kiểm soát rõ ràng hơn nhưng phải tự viết logic invalidate. Nhiều dự án production ưu tiên tự cache bằng Redis ở tầng Service (`@Cacheable` của Spring Cache) hơn là bật L2 Cache của Hibernate, vì dễ kiểm soát và debug hơn.
 
 ### Auditing — tự động ghi "ai/khi nào" tạo và sửa dữ liệu
 
@@ -1220,6 +1220,57 @@ public class JpaConfig {
 13. **Chọn `SINGLE_TABLE` cho cây kế thừa có quá nhiều lớp con khác biệt lớn** → bảng có hàng chục cột phần lớn là `NULL`, khó đọc, khó áp ràng buộc `NOT NULL` đúng nghĩa cho từng loại.
 
 ---
+
+### Flush mode — đồng bộ Persistence Context không đồng nghĩa commit
+
+`flush()` gửi SQL để đồng bộ state trong Persistence Context với database nhưng transaction vẫn có thể rollback. Với `AUTO`, Hibernate có thể flush trước query để kết quả query phản ánh thay đổi đang chờ; `COMMIT` trì hoãn hơn nhưng semantics query giữa transaction cần được hiểu rõ.
+
+> ⚠️ `save()` không bảo đảm SQL chạy ngay. Constraint violation có thể chỉ xuất hiện lúc flush/commit. Trong test cần xác minh lỗi DB, gọi `flush()` ở điểm mong đợi thay vì để rollback cuối test che mất hành vi.
+
+Bulk JPQL/SQL update/delete đi thẳng database, bỏ qua entity đang managed, callback và dirty checking. Sau bulk operation cần `clear()` hoặc refresh có chủ đích để tránh đọc state cũ.
+
+### Open Session in View (OSIV): tiện lợi đổi lấy query ngoài service
+
+OSIV giữ Persistence Context tới hết web request nên serialization/view có thể lazy-load. Điều này che boundary transaction, tạo N+1 ngoài service và giữ connection lâu hơn khi xen network I/O. Với API production, thường nên fetch/projection đầy đủ trong service transaction rồi map DTO; nếu bật OSIV, phải đo query count và cấm lazy access ngoài boundary bằng convention/test.
+
+Liên hệ Module 24: `EntityGraph`, fetch join và projection là công cụ diễn đạt read model; không nên dùng EAGER toàn cục để “chữa” `LazyInitializationException`.
+
+### State diagram: vòng đời JPA Entity
+
+```mermaid
+stateDiagram-v2
+    [*] --> Transient: new
+    Transient --> Managed: persist
+    Managed --> Managed: dirty checking và flush
+    Managed --> Removed: remove
+    Managed --> Detached: clear, detach hoặc close
+    Detached --> Managed: merge trả về managed copy
+    Removed --> [*]: commit / flush DELETE
+    Managed --> [*]: commit rồi context đóng
+```
+
+`merge(detached)` không “gắn lại chính object truyền vào”; nó copy state sang instance managed và trả instance đó. Tiếp tục sửa object detached cũ là bẫy phổ biến. Dirty checking chỉ theo dõi instance managed trong Persistence Context.
+
+### Sequence diagram: N+1 query hình thành thế nào
+
+```mermaid
+sequenceDiagram
+    participant App as Service
+    participant ORM as Hibernate
+    participant DB as Database
+    App->>ORM: findAllOrders()
+    ORM->>DB: SELECT orders
+    DB-->>ORM: N orders
+    loop Mỗi order khi truy cập lazy customer
+        ORM->>DB: SELECT customer WHERE id = ?
+        DB-->>ORM: one customer
+    end
+    ORM-->>App: object graph
+```
+
+N+1 là lỗi **shape của read model**, không chỉ là lazy loading. Fetch join, `EntityGraph`, batch fetching hoặc projection chọn cách lấy dữ liệu theo use case; chuyển association sang EAGER toàn cục dễ tạo over-fetch và Cartesian product ở chỗ khác.
+
+> ⚠️ Luôn đo số query trong integration test/log; dataset nhỏ có thể che N+1 vì kết quả vẫn đúng.
 
 ## 15. Tổng kết — Bảng ghi nhớ nhanh
 
@@ -1581,4 +1632,4 @@ public class ProductFacadeService {
 
 ---
 
-*File tiếp theo trong lộ trình: **Module 12 — Spring Framework Core** (IoC Container, Dependency Injection, Bean Lifecycle, ApplicationContext, @Component/@Autowired, Spring AOP).*
+*File tiếp theo trong lộ trình: **Module 21 — Spring Framework Core** (IoC Container, Dependency Injection, Bean Lifecycle, ApplicationContext, @Component/@Autowired, Spring AOP).*

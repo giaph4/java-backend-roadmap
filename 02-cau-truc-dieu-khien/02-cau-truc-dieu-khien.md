@@ -1,8 +1,8 @@
-# Module 01.2 — Cấu trúc điều khiển (Control Flow) trong Java
+# Module 02 — Cấu trúc điều khiển (Control Flow) trong Java
 
 > **Mức độ ưu tiên: Cao** — Đây là công cụ để viết ra *logic* thực sự. Nắm chắc `switch expression` + pattern matching (Java 14/21), phân tích luồng của compiler (unreachable code, definite assignment), và hiểu vì sao Java **không** tối ưu đệ quy đuôi (tail call) là những điểm tạo khác biệt so với lập trình viên chỉ quen cú pháp cũ.
 
-> **Phạm vi bài học:** biểu thức điều kiện & kiểu `boolean`, `if/else`, ternary, `switch` (statement + expression + pattern matching), 4 loại vòng lặp, `break`/`continue`/nhãn, phân tích luồng lúc biên dịch, đệ quy & chuyển đệ quy → vòng lặp. Các chủ đề: exception/`try-finally` (Module 01.11), `Iterator`/`ConcurrentModificationException` chi tiết (Module 01.8 Collections), Stream/`forEach` (Module 01.10) **không** thuộc bài này — chỉ nhắc khi liên quan trực tiếp.
+> **Phạm vi bài học:** biểu thức điều kiện & kiểu `boolean`, `if/else`, ternary, `switch` (statement + expression + pattern matching), 4 loại vòng lặp, `break`/`continue`/nhãn, phân tích luồng lúc biên dịch, đệ quy & chuyển đệ quy → vòng lặp. Các chủ đề: exception/`try-finally` (Module 11), `Iterator`/`ConcurrentModificationException` chi tiết (Module 08 Collections), Stream/`forEach` (Module 10) **không** thuộc bài này — chỉ nhắc khi liên quan trực tiếp.
 
 ---
 
@@ -59,7 +59,7 @@ if (flag) { ... }                        // NullPointerException nếu flag == n
 
 ### Short-circuit — thứ tự đặt điều kiện có ý nghĩa
 
-`&&` và `||` chỉ tính vế phải khi cần (xem Module 01.1 §5.2). Dùng để *bảo vệ*:
+`&&` và `||` chỉ tính vế phải khi cần (xem Module 01 §5.2). Dùng để *bảo vệ*:
 
 ```java
 if (user != null && user.isActive()) { ... }        // an toàn
@@ -167,7 +167,7 @@ int max = (a > b) ? a : b;
 - Kết hợp **phải sang trái**: `a ? b : c ? d : e` ≡ `a ? b : (c ? d : e)`.
 - Chỉ dùng cho biểu thức đơn giản; lồng nhiều tầng làm giảm khả năng đọc nghiêm trọng.
 
-> ⚠️ **Kiểu của biểu thức ternary tính lúc biên dịch, có áp dụng binary numeric promotion** (xem Module 01.1 §4.4):
+> ⚠️ **Kiểu của biểu thức ternary tính lúc biên dịch, có áp dụng binary numeric promotion** (xem Module 01 §4.4):
 > ```java
 > Object o = true ? Integer.valueOf(1) : Double.valueOf(2); // o = 1.0 (Double!) — cả 2 nhánh nâng về double rồi box
 > Integer i = null;
@@ -673,7 +673,7 @@ Luật đặc biệt:
 
 ### Definite assignment kết hợp với luồng điều khiển
 
-Biến `final` (kể cả blank final) và biến local phải được compiler chứng minh là **đã gán chính xác trên mọi nhánh** trước khi đọc (xem Module 01.1 §1):
+Biến `final` (kể cả blank final) và biến local phải được compiler chứng minh là **đã gán chính xác trên mọi nhánh** trước khi đọc (xem Module 01 §1):
 
 ```java
 final int grade;
@@ -841,6 +841,50 @@ void subsets(int[] nums, int idx, List<Integer> path, List<List<Integer>> out) {
 | Chia để trị: Merge Sort, Quick Sort, tìm kiếm nhị phân trên cây | Cần hiệu năng/bộ nhớ tối đa, tránh overhead stack frame |
 | Định nghĩa toán học đệ quy tự nhiên (tổ hợp, Hanoi, backtracking) | Độ sâu có thể rất lớn (nguy cơ `StackOverflowError`) |
 | Code phản ánh đúng bản chất bài toán, dễ đọc hơn | Đệ quy đuôi đơn giản — Java không tối ưu, viết loop luôn |
+
+---
+
+### Độ phức tạp điều khiển và guard clause trong code review
+
+Mỗi nhánh `if`, vòng lặp, `case` và điều kiện logic độc lập làm tăng số đường chạy cần hiểu và kiểm thử. Cyclomatic complexity có thể ước lượng bằng `số điểm rẽ nhánh + 1`; nó không phải “điểm chất lượng” tuyệt đối, nhưng là tín hiệu một method đang gánh quá nhiều quyết định.
+
+```java
+Money calculate(Order order) {
+    if (order == null) throw new IllegalArgumentException("order");
+    if (order.isCancelled()) return Money.ZERO;
+    if (order.items().isEmpty()) return Money.ZERO;
+    return pricingPolicy.price(order); // happy path không bị lồng sâu
+}
+```
+
+Guard clause phù hợp cho validation và trường hợp thoát sớm; `switch` expression phù hợp khi ánh xạ **một tập trạng thái hữu hạn** sang giá trị. Khi cùng một chuỗi `if/switch` theo loại đối tượng xuất hiện ở nhiều nơi, đó thường là tín hiệu chuyển sang đa hình (Module 04), không phải tiếp tục thêm nhánh.
+
+> ⚠️ Đừng tách method chỉ để “làm đẹp chỉ số”. Tách khi tên method mới diễn đạt được một ý nghiệp vụ, giảm số trạng thái phải giữ trong đầu, hoặc cho phép kiểm thử độc lập.
+
+### Sơ đồ mental model: từ điều kiện tới control-flow graph
+
+```mermaid
+flowchart TD
+    S(["Entry"]) --> V{"Input hợp lệ?"}
+    V -- "Không" --> E["Throw / return sớm"]
+    V -- "Có" --> C{"Trường hợp nghiệp vụ"}
+    C -- "A" --> A["Xử lý A"]
+    C -- "B" --> B["Xử lý B"]
+    C -- "Khác" --> D["Default policy"]
+    A --> M["Merge point"]
+    B --> M
+    D --> M
+    M --> O(["Return result"])
+```
+
+Compiler, coverage tool và con người đều có thể nhìn method như một đồ thị gồm **basic block** và cạnh chuyển điều khiển. `if/switch/loop` thêm cạnh; `return/throw/break/continue` kết thúc hoặc chuyển cạnh; merge point là nơi các đường chạy gặp lại.
+
+Mental model này giúp trả lời “vì sao”:
+
+- definite assignment là phân tích xem biến đã được gán trên **mọi đường** đi tới điểm sử dụng chưa;
+- unreachable code là block không có đường hợp lệ đi vào;
+- branch coverage cần đi qua từng cạnh, không chỉ chạy từng dòng;
+- guard clause giảm nesting vì loại các cạnh lỗi trước khi đi vào happy path.
 
 ---
 
@@ -1062,7 +1106,7 @@ In với `n = 5`:
 1 2 3 4
 1 2 3 4 5
 ```
-Chỉ dùng vòng lặp lồng và `StringBuilder` (không nối `+` trong vòng lặp — xem Module 01.1 §8).
+Chỉ dùng vòng lặp lồng và `StringBuilder` (không nối `+` trong vòng lặp — xem Module 01 §8).
 
 **Bài 5 — Tìm trong ma trận bằng labeled break.**
 `int[] findFirst(int[][] m, int target)` trả về `{row, col}` của ô đầu tiên bằng `target` (duyệt theo hàng), hoặc `{-1, -1}` nếu không có. Dùng **labeled break**, không dùng biến cờ `boolean`.
@@ -1192,4 +1236,4 @@ String result = switch (grade) {
 
 ---
 
-*File tiếp theo trong lộ trình: **Module 01.3 — Class, Object, Method** (constructor, `this`, static vs instance, access modifier).*
+*File tiếp theo trong lộ trình: **Module 03 — Class, Object, Method** (constructor, `this`, static vs instance, access modifier).*

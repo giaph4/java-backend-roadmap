@@ -1,4 +1,4 @@
-# Module 18 — Caching & Messaging
+# Module 27 — Caching & Messaging
 
 > **Mức ưu tiên: 🔴 Cao**
 > **Vì sao quan trọng:** Đây là 2 kỹ thuật cốt lõi để hệ thống chịu tải cao (high-throughput) và tách rời (decouple) các thành phần — nền tảng trực tiếp cho Module Microservices sắp tới. Caching sai cách (đặc biệt là **Cache Invalidation** — "one of the two hard things in Computer Science") gây ra bug hiển thị dữ liệu cũ khó phát hiện; dùng Message Queue sai (không hiểu Delivery Guarantee, không xử lý message trùng lặp) gây mất dữ liệu hoặc xử lý nghiệp vụ 2 lần (VD: gửi email 2 lần, trừ tiền 2 lần).
@@ -125,7 +125,7 @@ public Product updateProduct(Product product) {
 }
 ```
 
-⚠️ **Bẫy self-invocation — LẶP LẠI đúng vấn đề đã học ở Module 12/16:** `@Cacheable`/`@CachePut`/`@CacheEvict` cũng hoạt động dựa trên **Spring AOP Proxy** — gọi qua `this.method()` trong cùng class sẽ **bỏ qua hoàn toàn** cơ chế cache.
+⚠️ **Bẫy self-invocation — LẶP LẠI đúng vấn đề đã học ở Module 21/25:** `@Cacheable`/`@CachePut`/`@CacheEvict` cũng hoạt động dựa trên **Spring AOP Proxy** — gọi qua `this.method()` trong cùng class sẽ **bỏ qua hoàn toàn** cơ chế cache.
 
 ```java
 @Service
@@ -187,7 +187,7 @@ Dùng Redis (cache tập trung, chia sẻ):
                     └─────────────┘
 ```
 
-> **Liên hệ Module 10:** Redis đã được giới thiệu ở phần NoSQL — ở đây là ứng dụng cụ thể nhất và phổ biến nhất của Redis trong thực tế: **làm Cache layer** cho ứng dụng Backend.
+> **Liên hệ Module 19:** Redis đã được giới thiệu ở phần NoSQL — ở đây là ứng dụng cụ thể nhất và phổ biến nhất của Redis trong thực tế: **làm Cache layer** cho ứng dụng Backend.
 
 ### Cấu trúc dữ liệu (data structure) của Redis — không chỉ là "key-value" đơn giản
 
@@ -523,7 +523,7 @@ public class ProductCacheService {
 }
 ```
 
-> **Liên hệ Module 05 (Concurrency):** Đây chính là ứng dụng thực tế của **Double-Checked Locking pattern** đã có nền tảng lý thuyết từ Module Thread cơ bản — kiểm tra điều kiện trước và sau khi lấy lock để tránh khóa không cần thiết.
+> **Liên hệ Module 12–13 (Concurrency):** Đây chính là ứng dụng thực tế của **Double-Checked Locking pattern** đã có nền tảng lý thuyết từ Module Thread cơ bản — kiểm tra điều kiện trước và sau khi lấy lock để tránh khóa không cần thiết.
 
 ### Bảng phân biệt 3 vấn đề (dễ nhầm lẫn tên gọi)
 
@@ -798,7 +798,7 @@ public class OrderEventConsumer {
 
 > **Thực tế:** Đa số hệ thống dùng **At-least-once** (đơn giản, hiệu năng tốt) và tự xử lý vấn đề trùng lặp ở tầng Consumer bằng **Idempotent Consumer Pattern** — thay vì cố gắng đạt "Exactly-once" tuyệt đối ở tầng hạ tầng (rất tốn kém, phức tạp).
 
-### Idempotent Consumer — đảm bảo xử lý message trùng lặp KHÔNG gây tác dụng phụ (liên hệ trực tiếp Idempotency Key ở Module 14)
+### Idempotent Consumer — đảm bảo xử lý message trùng lặp KHÔNG gây tác dụng phụ (liên hệ trực tiếp Idempotency Key ở Module 23)
 
 ```java
 @Component
@@ -988,7 +988,7 @@ public class AsyncConfig {
         executor.setThreadNamePrefix("async-task-");
         executor.initialize();
         return executor;
-        // Liên hệ Module 05.2 (Concurrency Utilities) - đây chính là ThreadPoolExecutor
+        // Liên hệ Module 13 (Concurrency Utilities) - đây chính là ThreadPoolExecutor
         // đã học, được Spring "bọc" lại tiện dùng hơn qua @Async
     }
 }
@@ -1040,6 +1040,62 @@ public class NotificationService {
 12. **Không có Dead Letter Queue** — message lỗi bị RabbitMQ requeue vô hạn (nghẽn Queue) hoặc bị Consumer log rồi bỏ qua âm thầm, không ai phát hiện được nghiệp vụ đã thất bại.
 
 ---
+
+### Consumer lag và backpressure
+
+Queue depth/consumer lag tăng nghĩa là tốc độ đến lớn hơn tốc độ xử lý trong một khoảng đủ dài. Scale consumer chỉ hiệu quả tới giới hạn partition, database và downstream; vượt quá có thể làm nghẽn DB nhanh hơn.
+
+Runbook nên theo dõi arrival rate, processing rate, p95/p99 duration, retry/DLQ rate và tuổi message cũ nhất. Biện pháp theo thứ tự: giảm công việc mỗi message/batch hợp lý → sửa downstream bottleneck → tăng partition/consumer → admission control hoặc làm chậm producer.
+
+> ⚠️ Lag bằng 0 không chứng minh khỏe nếu producer đã lỗi. Alert phải kết hợp input rate kỳ vọng và business throughput.
+
+### Schema evolution cho event tồn tại lâu
+
+Event đã ghi trong Kafka hoặc nằm ở DLQ có thể được đọc bởi code mới nhiều tháng sau. Thay đổi nên additive: thêm field optional/default, không đổi nghĩa field cũ, không tái sử dụng field đã bỏ. Producer mới phải tương thích consumer cũ trong thời gian rolling deploy.
+
+Schema Registry kiểm tra compatibility nhưng không hiểu semantic. Contract test và versioned event type cần khi thay đổi nghĩa lớn; upcaster có thể chuyển event cũ sang model mới lúc đọc.
+
+### Sequence diagram: Cache-Aside và race khi miss
+
+```mermaid
+sequenceDiagram
+    participant A as Application
+    participant C as Cache
+    participant DB as Database
+    A->>C: GET key
+    alt cache hit
+        C-->>A: value
+    else cache miss
+        C-->>A: null
+        A->>DB: SELECT
+        DB-->>A: value
+        A->>C: SET key với TTL
+    end
+```
+
+Cache-aside để application sở hữu read model và TTL, nhưng nhiều request miss cùng lúc có thể tạo cache stampede. Request coalescing/single-flight, jitter TTL và stale-while-revalidate giảm tải; distributed lock chỉ dùng khi cost miss đủ lớn và phải có timeout/fencing phù hợp.
+
+### Sequence diagram: Transactional Outbox tới idempotent consumer
+
+```mermaid
+sequenceDiagram
+    participant S as Business service
+    participant DB as Business DB
+    participant R as Outbox relay
+    participant B as Broker
+    participant C as Consumer
+    S->>DB: transaction ghi aggregate + outbox row
+    DB-->>S: commit atomically
+    R->>DB: đọc outbox chưa publish
+    R->>B: publish event
+    B-->>R: ack
+    R->>DB: đánh dấu đã publish
+    B->>C: deliver event
+    C->>C: deduplicate bằng eventId
+    C-->>B: ack sau side effect thành công
+```
+
+Relay có thể publish trùng nếu crash sau broker ack trước khi đánh dấu DB; vì vậy Outbox giải quyết **mất event do dual-write**, không tự cho exactly-once end-to-end. Consumer idempotent vẫn là bắt buộc.
 
 ## 14. Tổng kết — Bảng ghi nhớ nhanh
 
@@ -1310,7 +1366,7 @@ public class PushNotificationService {
 
 3. **Không có Delivery Guarantee:** Message Queue (RabbitMQ/Kafka) có cơ chế persist + retry + dead-letter-queue để đảm bảo giao dịch quan trọng **chắc chắn được xử lý** (ít nhất 1 lần), trong khi `@Async` hoàn toàn không có các cơ chế bảo vệ này.
 
-**Kết luận:** Nghiệp vụ tài chính (trừ tiền, thanh toán) **bắt buộc** phải xử lý đồng bộ trong 1 transaction rõ ràng (có thể kết hợp Pessimistic/Optimistic Locking đã học ở Module 15), hoặc nếu cần bất đồng bộ thì phải dùng Message Queue với cơ chế đảm bảo tin cậy đầy đủ (kèm Idempotent Consumer), tuyệt đối không dùng `@Async` đơn thuần.
+**Kết luận:** Nghiệp vụ tài chính (trừ tiền, thanh toán) **bắt buộc** phải xử lý đồng bộ trong 1 transaction rõ ràng (có thể kết hợp Pessimistic/Optimistic Locking đã học ở Module 24), hoặc nếu cần bất đồng bộ thì phải dùng Message Queue với cơ chế đảm bảo tin cậy đầy đủ (kèm Idempotent Consumer), tuyệt đối không dùng `@Async` đơn thuần.
 
 </details>
 
@@ -1387,4 +1443,4 @@ public class OutboxPoller {
 
 ---
 
-*File tiếp theo trong lộ trình: **Module 19 — Microservices** (Monolith vs Microservices, Service Discovery, API Gateway, Circuit Breaker/Resilience4j, Distributed Transaction/Saga Pattern, Inter-service Communication).*
+*File tiếp theo trong lộ trình: **Module 28 — Microservices** (Monolith vs Microservices, Service Discovery, API Gateway, Circuit Breaker/Resilience4j, Distributed Transaction/Saga Pattern, Inter-service Communication).*

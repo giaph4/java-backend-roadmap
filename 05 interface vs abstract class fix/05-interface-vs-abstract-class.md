@@ -1,8 +1,8 @@
-# Module 01.5 — Interface vs Abstract Class
+# Module 05 — Interface vs Abstract Class
 
 > **Mức độ ưu tiên: Cao** — Câu hỏi "Khi nào dùng interface, khi nào dùng abstract class?" gần như chắc chắn có trong phỏng vấn Java. Nhưng câu trả lời "xịn" cần thêm: quy tắc **class thắng interface**, **re-abstraction**, vì sao `default` method **không** override được `equals`/`hashCode`, và vì sao *constant interface* là anti-pattern. Đây cũng là kiến thức bắt buộc để đọc source Spring (`JpaRepository`, `UserDetailsService`, `PasswordEncoder`... đều là interface).
 
-> **Phạm vi bài học:** interface & abstract class (thành phần, modifier ngầm định, `sealed`), `default` / `static` / `private` method trong interface, đa kế thừa hành vi & type, quy tắc phân giải xung đột (3 rules), re-abstraction, marker interface, constant interface anti-pattern, cây quyết định "dùng cái nào". Các chủ đề: lambda & functional interface chi tiết (Module 01.10), SOLID (Module 01.6), `equals`/`hashCode` (Module 01.7), Generics trên interface (Module 01.9) **không** thuộc bài này — chỉ nhắc khi liên quan. Kiến thức nền: kế thừa, override, đa hình (Module 01.4).
+> **Phạm vi bài học:** interface & abstract class (thành phần, modifier ngầm định, `sealed`), `default` / `static` / `private` method trong interface, đa kế thừa hành vi & type, quy tắc phân giải xung đột (3 rules), re-abstraction, marker interface, constant interface anti-pattern, cây quyết định "dùng cái nào". Các chủ đề: lambda & functional interface chi tiết (Module 10), SOLID (Module 06), `equals`/`hashCode` (Module 07), Generics trên interface (Module 09) **không** thuộc bài này — chỉ nhắc khi liên quan. Kiến thức nền: kế thừa, override, đa hình (Module 04).
 
 ---
 
@@ -22,8 +22,9 @@
 12. [Lambda vs Anonymous Class khi cài Functional Interface](#12-lambda-vs-anonymous-class-khi-cài-functional-interface)
 13. [Dưới lớp bytecode: `invokeinterface` vs `invokevirtual`](#13-dưới-lớp-bytecode-invokeinterface-vs-invokevirtual)
 14. [Vì sao interface không có field instance — quyết định thiết kế](#14-vì-sao-interface-không-có-field-instance--quyết-định-thiết-kế)
-15. [Tổng kết — Bảng ghi nhớ nhanh](#15-tổng-kết--bảng-ghi-nhớ-nhanh)
-16. [Bài tập luyện tập](#16-bài-tập-luyện-tập)
+15. [Tiến hóa API: source compatibility khác binary compatibility](#15-tiến-hóa-api-source-compatibility-khác-binary-compatibility)
+16. [Tổng kết — Bảng ghi nhớ nhanh](#16-tổng-kết--bảng-ghi-nhớ-nhanh)
+17. [Bài tập luyện tập](#17-bài-tập-luyện-tập)
 
 ---
 
@@ -59,7 +60,7 @@ public interface Flyable {
 public sealed interface Shape permits Circle, Square, Rectangle { }
 ```
 
-Giới hạn **danh sách đóng** các kiểu được `implements`/`extends` → `switch` pattern matching kiểm tra được tính bao phủ (Module 01.2 §5). Lớp con phải là `final`, `sealed`, hoặc `non-sealed`.
+Giới hạn **danh sách đóng** các kiểu được `implements`/`extends` → `switch` pattern matching kiểm tra được tính bao phủ (Module 02 §5). Lớp con phải là `final`, `sealed`, hoặc `non-sealed`.
 
 ### Marker interface — interface rỗng
 
@@ -135,7 +136,7 @@ public interface Discount {
     double apply(double price);
 
     static Discount percentage(double pct) {         // static factory method
-        return price -> price - price * pct / 100;   // trả về một lambda (Module 01.10)
+        return price -> price - price * pct / 100;   // trả về một lambda (Module 10)
     }
     static Discount none() { return price -> price; }
 }
@@ -293,7 +294,7 @@ public interface Shape {
 }
 ```
 
-### Mẫu 3 — Functional interface (xem Module 01.10)
+### Mẫu 3 — Functional interface (xem Module 10)
 
 Interface có **đúng một** abstract method → dùng được với lambda. Đánh dấu `@FunctionalInterface` để compiler canh giữ:
 
@@ -488,7 +489,41 @@ Khác biệt về cơ chế tra cứu method tại runtime:
 
 ---
 
-## 15. Tổng kết — Bảng ghi nhớ nhanh
+## 15. Tiến hóa API: source compatibility khác binary compatibility
+
+Thêm abstract method vào interface làm source cũ không compile lại được. `default method` được tạo ra một phần để thư viện có thể bổ sung hành vi mà implementation đã biên dịch vẫn chạy, nhưng không bảo đảm mọi thay đổi đều an toàn:
+
+| Thay đổi | Rủi ro chính |
+|---|---|
+| Thêm `default method` mới | Có thể tạo xung đột diamond với interface khác |
+| Đổi abstract → default | Thường tương thích hơn, nhưng semantics có thể đổi |
+| Xóa/đổi chữ ký method | Phá source và thường phá binary |
+| Thêm method vào abstract class | Có thể cung cấp implementation mặc định và state hỗ trợ |
+
+Với public library, cần test cả client **compile lại** và client dùng JAR cũ. `sealed interface` giúp đóng tập implementation để `switch` exhaustive (Module 14), nhưng đổi danh sách `permits` cũng là thay đổi contract cần cân nhắc.
+
+> ⚠️ `default method` nên là hành vi có default hợp lý cho mọi implementation. Nếu default chỉ ném `UnsupportedOperationException`, interface có thể đang vi phạm ISP (Module 06).
+
+### Sơ đồ phân giải `default method`
+
+```mermaid
+flowchart TD
+    S["Một lời gọi có nhiều implementation khả dĩ"] --> C{"Class hoặc superclass có method cụ thể?"}
+    C -- "Có" --> CW["Class wins"]
+    C -- "Không" --> M{"Một interface cụ thể hơn interface còn lại?"}
+    M -- "Có" --> MW["Most-specific interface wins"]
+    M -- "Không" --> X["Xung đột compile-time"]
+    X --> R["Class phải override và chọn/gộp hành vi"]
+    R --> Q["Có thể gọi InterfaceName.super.method()"]
+```
+
+Thứ tự này bảo vệ hai mục tiêu thiết kế: class hierarchy cũ không bị default method mới âm thầm đổi hành vi, đồng thời interface con vẫn có thể tinh chỉnh contract của interface cha. Java từ chối tự chọn khi hai interface ngang hàng vì lựa chọn dựa trên thứ tự khai báo sẽ mong manh và khó đọc.
+
+Mental model: interface mô tả **capability/contract**, abstract class cung cấp **partial implementation + state/lifecycle**. Chỉ dùng kế thừa class khi các subtype thật sự chia sẻ invariant; nếu chỉ muốn tái sử dụng vài hàm, composition thường rõ hơn.
+
+---
+
+## 16. Tổng kết — Bảng ghi nhớ nhanh
 
 | Chủ đề | Điểm mấu chốt |
 |---|---|
@@ -514,7 +549,7 @@ Khác biệt về cơ chế tra cứu method tại runtime:
 
 ---
 
-## 16. Bài tập luyện tập
+## 17. Bài tập luyện tập
 
 ### Phần A — Trắc nghiệm nhận định (giải thích lý do)
 
@@ -704,4 +739,4 @@ class Report extends LegacyPrinter implements ModernPrinter { }
 
 ---
 
-*File tiếp theo trong lộ trình: **Module 01.6 — SOLID Principles** (5 nguyên lý thiết kế nền tảng, và vì sao Spring thiết kế IoC/DI như vậy).*
+*File tiếp theo trong lộ trình: **Module 06 — SOLID Principles** (5 nguyên lý thiết kế nền tảng, và vì sao Spring thiết kế IoC/DI như vậy).*

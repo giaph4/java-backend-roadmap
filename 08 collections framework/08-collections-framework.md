@@ -1,8 +1,8 @@
-# Module 03.1 — Collections Framework
+# Module 08 — Collections Framework
 
 > **Mức độ ưu tiên: Cao** — Chọn sai cấu trúc dữ liệu (dùng `ArrayList` cho thao tác chèn/xóa đầu danh sách liên tục, dùng `LinkedList` rồi `get(i)` trong vòng lặp, quên `hashCode()` khiến `HashMap` tụt xuống O(n)...) là nguyên nhân phổ biến nhất gây bug hiệu năng âm thầm trong backend. "So sánh `ArrayList` và `LinkedList`", "`HashMap` hoạt động thế nào", "`ConcurrentModificationException` xảy ra khi nào" gần như chắc chắn xuất hiện ở mọi vòng phỏng vấn kỹ thuật.
 
-> **Phạm vi bài này:** các interface và class trong `java.util` cho cấu trúc dữ liệu **đơn luồng**: `Collection` (List/Set/Queue/Deque), `Map`, lớp tiện ích `Collections`/`Arrays`, iterator fail-fast, và cách chọn cấu trúc theo độ phức tạp Big-O. **Chỉ nhắc tên, không đi sâu:** collection đồng bộ/đồng thời (`ConcurrentHashMap`, `CopyOnWriteArrayList`, `BlockingQueue` — Module 09 Concurrency), Generics (`<T>`, wildcard — Module 03.2), Stream/Collector (Module 03.3). Những chỗ chạm tới chủ đề khác chỉ nêu đủ để bài này trọn vẹn.
+> **Phạm vi bài này:** các interface và class trong `java.util` cho cấu trúc dữ liệu **đơn luồng**: `Collection` (List/Set/Queue/Deque), `Map`, lớp tiện ích `Collections`/`Arrays`, iterator fail-fast, và cách chọn cấu trúc theo độ phức tạp Big-O. **Chỉ nhắc tên, không đi sâu:** collection đồng bộ/đồng thời (`ConcurrentHashMap`, `CopyOnWriteArrayList`, `BlockingQueue` — Module 13 Concurrency), Generics (`<T>`, wildcard — Module 09), Stream/Collector (Module 10). Những chỗ chạm tới chủ đề khác chỉ nêu đủ để bài này trọn vẹn.
 
 ---
 
@@ -21,14 +21,15 @@
 11. [Cây quyết định: chọn cấu trúc dữ liệu nào?](#11-cây-quyết-định-chọn-cấu-trúc-dữ-liệu-nào)
 12. [Comparable vs Comparator — đào sâu](#12-comparable-vs-comparator--đào-sâu)
 13. [Chi phí Autoboxing trong Collection — đào sâu](#13-chi-phí-autoboxing-trong-collection--đào-sâu)
-14. [Tổng kết — Bảng ghi nhớ nhanh](#14-tổng-kết--bảng-ghi-nhớ-nhanh)
-15. [Bài tập luyện tập](#15-bài-tập-luyện-tập)
+14. [Spliterator, Sequenced Collections & cơ chế `HashMap.put`](#14-spliterator-sequenced-collections--cơ-chế-hashmapput)
+15. [Tổng kết — Bảng ghi nhớ nhanh](#15-tổng-kết--bảng-ghi-nhớ-nhanh)
+16. [Bài tập luyện tập](#16-bài-tập-luyện-tập)
 
 ---
 
 ## 1. Tổng quan Collections Framework
 
-Collections Framework (`java.util`) chuẩn hóa các cấu trúc dữ liệu **động** — tự mở rộng/thu hẹp — giải quyết hạn chế "kích thước cố định" của mảng (Module 01.1).
+Collections Framework (`java.util`) chuẩn hóa các cấu trúc dữ liệu **động** — tự mở rộng/thu hẹp — giải quyết hạn chế "kích thước cố định" của mảng (Module 01).
 
 ### Cây kế thừa interface
 
@@ -57,7 +58,7 @@ Collections Framework (`java.util`) chuẩn hóa các cấu trúc dữ liệu **
 | `Iterable<E>` | Gốc của mọi thứ duyệt được bằng `for (E e : c)`. Chỉ yêu cầu `iterator()`. |
 | `Collection<E>` | "Một nhóm phần tử". Cha chung của `List`, `Set`, `Queue`. |
 | `List<E>` | Có thứ tự theo **vị trí (index)**, cho **trùng lặp**, truy cập qua `get(i)`. |
-| `Set<E>` | **Không trùng lặp** (theo `equals`/`hashCode` — Module 02.4). |
+| `Set<E>` | **Không trùng lặp** (theo `equals`/`hashCode` — Module 07). |
 | `SortedSet` / `NavigableSet` | `Set` luôn sắp xếp + truy vấn "phần tử gần nhất" (`ceiling`, `floor`...). |
 | `Queue<E>` | Thường FIFO; có cặp method "ném exception" và "trả giá trị đặc biệt" (mục 8). |
 | `Deque<E>` | Thêm/xóa **cả hai đầu**; dùng làm Queue **hoặc** Stack. |
@@ -70,7 +71,7 @@ Collections Framework (`java.util`) chuẩn hóa các cấu trúc dữ liệu **
 
 | Nhóm | Thành viên | Ghi chú |
 |---|---|---|
-| Skeletal — cài sẵn phần lặp lại, kế thừa để tự viết collection | `AbstractList`, `AbstractSet`, `AbstractMap`, `AbstractQueue` | Liên hệ "skeletal implementation" ở Module 01.5. |
+| Skeletal — cài sẵn phần lặp lại, kế thừa để tự viết collection | `AbstractList`, `AbstractSet`, `AbstractMap`, `AbstractQueue` | Liên hệ "skeletal implementation" ở Module 05. |
 | Legacy — có từ Java 1.0/1.1, **đồng bộ hóa cứng**, nên tránh | `Vector`, `Stack` (kế thừa `Vector`), `Hashtable`, `Enumeration`, `Properties` | Thay bằng `ArrayList`, `ArrayDeque`, `HashMap`. `Properties` vẫn dùng cho file `.properties`. |
 
 ### Lớp tiện ích tĩnh
@@ -166,7 +167,7 @@ fixed.add(4);                  // ✗ UnsupportedOperationException
 
 ## 3. Set — HashSet, LinkedHashSet, TreeSet, EnumSet
 
-`Set` **không cho trùng lặp** — dựa trực tiếp vào `equals()`/`hashCode()` (`HashSet`, `LinkedHashSet`) hoặc `compareTo`/`Comparator` (`TreeSet`) — xem Module 02.4.
+`Set` **không cho trùng lặp** — dựa trực tiếp vào `equals()`/`hashCode()` (`HashSet`, `LinkedHashSet`) hoặc `compareTo`/`Comparator` (`TreeSet`) — xem Module 07.
 
 ### `HashSet` — nhanh nhất, KHÔNG thứ tự
 
@@ -202,7 +203,7 @@ s.descendingSet(); // view duyệt ngược
 
 Cây tìm kiếm nhị phân tự cân bằng — mọi thao tác O(log n).
 
-> ⚠️ `TreeSet`/`TreeMap` định nghĩa "trùng nhau" **hoàn toàn bằng `compareTo`/`Comparator`**, phớt lờ `equals()`. Comparator trả `0` cho hai phần tử khác nhau → một trong hai **bị mất** khi thêm vào `TreeSet` (Module 02.4, mục 11).
+> ⚠️ `TreeSet`/`TreeMap` định nghĩa "trùng nhau" **hoàn toàn bằng `compareTo`/`Comparator`**, phớt lờ `equals()`. Comparator trả `0` cho hai phần tử khác nhau → một trong hai **bị mất** khi thêm vào `TreeSet` (Module 07, mục 11).
 
 ### `EnumSet` — Set của hằng enum, cực nhanh
 
@@ -312,7 +313,7 @@ table[11] → (TreeNode ... )            // bucket đã "tree hóa" thành cây 
 
 ### Va chạm (collision) — vì sao vẫn O(1) trung bình?
 
-`hashCode()` phân tán tốt ⇒ số phần tử mỗi bucket ≈ hằng số ⇒ duyệt trong bucket ≈ O(1). Ngược lại, `hashCode()` tồi (ví dụ luôn trả hằng số) ⇒ **mọi** phần tử vào **một** bucket ⇒ `HashMap` thoái hóa thành danh sách liên kết O(n). Đây chính là lý do **contract `equals`/`hashCode`** (Module 02.4) quan trọng đến vậy.
+`hashCode()` phân tán tốt ⇒ số phần tử mỗi bucket ≈ hằng số ⇒ duyệt trong bucket ≈ O(1). Ngược lại, `hashCode()` tồi (ví dụ luôn trả hằng số) ⇒ **mọi** phần tử vào **một** bucket ⇒ `HashMap` thoái hóa thành danh sách liên kết O(n). Đây chính là lý do **contract `equals`/`hashCode`** (Module 07) quan trọng đến vậy.
 
 ### Tree hóa bucket (Java 8+)
 
@@ -445,7 +446,7 @@ PriorityQueue<Task> maxByPriority =
 - ⚠️ **Duyệt (`for`, `iterator`, `toString`) KHÔNG theo thứ tự sắp xếp** — chỉ `poll()` liên tiếp mới ra thứ tự đúng.
 - Không cho `null`; comparator/`Comparable` phải nhất quán, nếu không thứ tự `poll` sai.
 
-### Thuật toán sắp xếp phía sau (nhắc từ Module 02.4)
+### Thuật toán sắp xếp phía sau (nhắc từ Module 07)
 
 `Collections.sort` / `List.sort` → **TimSort**, ổn định, ~O(n) với dữ liệu gần sắp sẵn. `Arrays.sort(primitive[])` → dual-pivot quicksort, không ổn định.
 
@@ -459,7 +460,7 @@ PriorityQueue<Task> maxByPriority =
 |---|---|---|
 | **Không đồng bộ** (mặc định) | `ArrayList`, `HashMap`, `HashSet`, `ArrayDeque` | Nhanh nhất. Chỉ dùng trong 1 thread, hoặc có khóa ngoài. |
 | **Bọc đồng bộ** | `Collections.synchronizedList/Map/Set(...)` | Mỗi method `synchronized`. **Vẫn phải tự `synchronized (coll)` khi *duyệt*** — nếu không, CME/đọc bẩn. |
-| **Đồng thời (concurrent)** | `ConcurrentHashMap`, `CopyOnWriteArrayList`, `ConcurrentLinkedQueue`, `BlockingQueue` | Thiết kế cho nhiều thread: khóa mịn hoặc lock-free, iterator fail-safe. Chi tiết ở **Module 09**. |
+| **Đồng thời (concurrent)** | `ConcurrentHashMap`, `CopyOnWriteArrayList`, `ConcurrentLinkedQueue`, `BlockingQueue` | Thiết kế cho nhiều thread: khóa mịn hoặc lock-free, iterator fail-safe. Chi tiết ở **Module 13**. |
 
 > `Vector`/`Hashtable` cũng "đồng bộ" nhưng là legacy — khóa toàn cục thô, đừng dùng cho code mới.
 
@@ -481,7 +482,7 @@ src.add(5);       // immut không đổi
 List<Integer> lit = List.of(1, 2, 3);
 ```
 
-Trả collection ra ngoài class (getter) → dùng `List.copyOf(...)` hoặc `Collections.unmodifiableList(new ArrayList<>(...))` để giữ **đóng gói** (Module 02.1 — defensive copy).
+Trả collection ra ngoài class (getter) → dùng `List.copyOf(...)` hoặc `Collections.unmodifiableList(new ArrayList<>(...))` để giữ **đóng gói** (Module 04 — defensive copy).
 
 ---
 
@@ -524,11 +525,11 @@ List<String> mut = new ArrayList<>(Arrays.asList("a", "b"));   // cần bọc n�
 
 ### 10.6. Key mutable trong `HashMap` / phần tử mutable trong `HashSet`
 
-Đổi field tham gia `hashCode()` sau khi đã bỏ vào map/set → phần tử "mất tích" (Module 02.4, mục 8.3). Key nên **bất biến** (`String`, `Integer`, `record`, enum).
+Đổi field tham gia `hashCode()` sau khi đã bỏ vào map/set → phần tử "mất tích" (Module 07, mục 8.3). Key nên **bất biến** (`String`, `Integer`, `record`, enum).
 
 ### 10.7. `Comparator` không nhất quán với `equals` trong `TreeSet`/`TreeMap`
 
-Comparator chỉ so một field → hai object khác nhau nhưng "ngang hàng" → `TreeSet` chỉ giữ **một**. Muốn giữ cả hai, thêm `thenComparing` cho tới khi phân biệt được (Module 02.4, mục 11).
+Comparator chỉ so một field → hai object khác nhau nhưng "ngang hàng" → `TreeSet` chỉ giữ **một**. Muốn giữ cả hai, thêm `thenComparing` cho tới khi phân biệt được (Module 07, mục 11).
 
 ### 10.8. Stream `.toList()` (Java 16+) trả list **bất biến**
 
@@ -544,7 +545,7 @@ Lưu cặp key → value?
 │        ├── Key là enum?                         → EnumMap
 │        ├── Cần sắp xếp / truy vấn khoảng theo key? → TreeMap
 │        ├── Cần giữ thứ tự thêm vào (hoặc LRU)?  → LinkedHashMap
-│        ├── Nhiều thread ghi song song?          → ConcurrentHashMap        (Module 09)
+│        ├── Nhiều thread ghi song song?          → ConcurrentHashMap        (Module 13)
 │        └── Còn lại — nhanh nhất                  → HashMap  ← mặc định
 │
 └── KHÔNG → Cần loại trùng lặp?
@@ -685,7 +686,58 @@ if (a.equals(b)) { ... }   // ✅ đúng luôn — hoặc unbox: a.intValue() ==
 
 ---
 
-## 14. Tổng kết — Bảng ghi nhớ nhanh
+## 14. Spliterator, Sequenced Collections & cơ chế `HashMap.put`
+
+### `Spliterator` — cầu nối giữa collection và parallel stream
+
+`Spliterator` vừa duyệt vừa có thể chia dữ liệu qua `trySplit()`. Các characteristic như `ORDERED`, `SIZED`, `SORTED`, `DISTINCT`, `IMMUTABLE`, `CONCURRENT` giúp Stream quyết định cách tối ưu. Một custom collection muốn chạy parallel tốt cần chia tương đối cân bằng; chỉ bọc `Iterator` thường khiến overhead lớn hơn lợi ích.
+
+> ⚠️ `parallelStream()` không tự làm collection thread-safe. Characteristic mô tả nguồn dữ liệu, không thay thế đồng bộ hóa cho mutation đồng thời (xem Module 10 và 13).
+
+### Sequenced Collections (Java 21)
+
+Java 21 bổ sung `SequencedCollection`, `SequencedSet`, `SequencedMap` để thống nhất thao tác đầu/cuối và view đảo chiều: `getFirst()`, `getLast()`, `addFirst()`, `reversed()`, `firstEntry()`... `List`, `LinkedHashSet`, `LinkedHashMap`, `SortedSet/Map` được nối vào hierarchy này.
+
+```java
+SequencedMap<Long, Order> timeline = new LinkedHashMap<>();
+timeline.put(1L, first);
+timeline.put(2L, second);
+Order newest = timeline.lastEntry().getValue();
+Map<Long, Order> newestFirst = timeline.reversed(); // view, không phải copy
+```
+
+> ⚠️ `reversed()` thường là view: sửa collection gốc có thể phản ánh sang view và ngược lại. Đừng nhầm với snapshot độc lập.
+
+### Sơ đồ `HashMap.put`: bucket, collision, treeify và resize
+
+```mermaid
+flowchart TD
+    P["put key, value"] --> H["Tính và trộn hash"]
+    H --> B["Chọn bucket theo capacity"]
+    B --> E{"Bucket trống?"}
+    E -- "Có" --> A["Tạo node mới"]
+    E -- "Không" --> K{"Có key bằng nhau?"}
+    K -- "Có" --> U["Thay value cũ"]
+    K -- "Không" --> L["Nối node hoặc chèn vào tree bin"]
+    L --> T{"Bucket đủ đông và table đủ lớn?"}
+    T -- "Có" --> R["Treeify để giảm lookup xấu"]
+    T -- "Không" --> S["Giữ cấu trúc hiện tại"]
+    A --> Z{"size vượt threshold?"}
+    L --> Z
+    R --> Z
+    Z -- "Có" --> X["Resize và phân bố lại bucket"]
+    Z -- "Không" --> D(["Hoàn tất"])
+    X --> D
+    U --> D
+```
+
+Load factor mặc định `0.75` là điểm cân bằng thực dụng: thấp hơn tốn nhiều bucket rỗng/resize sớm; cao hơn tiết kiệm memory nhưng collision tăng. Đây không phải hằng số tối ưu cho mọi workload, song thay đổi tùy tiện thường kém hiệu quả hơn chọn initial capacity đúng.
+
+> ⚠️ Resize có chi phí dồn cục. Nếu biết gần đúng số phần tử, cấp capacity ban đầu phù hợp; nhưng đừng “tối ưu” trước khi profiler cho thấy map allocation/resize là bottleneck.
+
+---
+
+## 15. Tổng kết — Bảng ghi nhớ nhanh
 
 | Khái niệm | Điểm mấu chốt |
 |---|---|
@@ -703,7 +755,7 @@ if (a.equals(b)) { ... }   // ✅ đúng luôn — hoặc unbox: a.intValue() ==
 | fail-fast / CME | `modCount` lệch → `ConcurrentModificationException`. Sửa: `Iterator.remove()`, `removeIf`, `ListIterator`, hoặc duyệt bản sao. |
 | `ArrayDeque` | Thay cho `Stack` (LIFO) và `LinkedList`-as-Queue (FIFO). Không `null`, không giới hạn. |
 | `PriorityQueue` | `offer`/`poll` O(log n); **duyệt KHÔNG theo thứ tự** — chỉ `poll` liên tiếp. |
-| An toàn luồng | Mặc định: không. `Collections.synchronizedXxx` (tự khóa khi duyệt). Đa luồng thật → concurrent collections (Module 09). |
+| An toàn luồng | Mặc định: không. `Collections.synchronizedXxx` (tự khóa khi duyệt). Đa luồng thật → concurrent collections (Module 13). |
 | Chỉ đọc | `unmodifiableList` = view (nguồn đổi thì rò rỉ); `List.copyOf` / `List.of` = bất biến thật. |
 | Bẫy | `list.remove(int)` vs `remove(Object)`; `Arrays.asList` cố định kích thước; `capacity ≠ size`; autobox trong `contains`; `stream().toList()` bất biến. |
 | `Comparable` vs `Comparator` | `Comparable` = 1 thứ tự tự nhiên, sửa trong class gốc. `Comparator` = nhiều thứ tự, truyền từ ngoài, ghép bằng `comparing().reversed().thenComparing()`. Không bao giờ `a.getX() - b.getX()` để so `int` (tràn số) — dùng `Integer.compare`. |
@@ -711,7 +763,7 @@ if (a.equals(b)) { ... }   // ✅ đúng luôn — hoặc unbox: a.intValue() ==
 
 ---
 
-## 15. Bài tập luyện tập
+## 16. Bài tập luyện tập
 
 ### Phần A — Trắc nghiệm nhận định (giải thích lý do)
 
@@ -721,7 +773,7 @@ List<Integer> nums = new ArrayList<>();
 for (int i = 0; i < 100_000; i++) nums.add(0, i);   // luôn chèn ĐẦU
 ```
 
-**Câu 2.** `HashSet<Student>` hoạt động sai nếu `Student` thiếu điều gì? (liên hệ Module 02.4). Nếu `Student` có `hashCode()` đúng nhưng là field **mutable** và bị đổi sau khi `add`, chuyện gì xảy ra?
+**Câu 2.** `HashSet<Student>` hoạt động sai nếu `Student` thiếu điều gì? (liên hệ Module 07). Nếu `Student` có `hashCode()` đúng nhưng là field **mutable** và bị đổi sau khi `add`, chuyện gì xảy ra?
 
 **Câu 3.** Đoạn này in thứ tự nào? Vì sao **không** được giả định `HashMap` giữ thứ tự `put`? Đổi sang loại `Map` nào để giữ thứ tự chèn? Loại nào để in ra `apple, banana, cherry`?
 ```java
@@ -849,4 +901,4 @@ Cho bảng điểm chữ theo mốc: `0→F, 50→D, 65→C, 75→B, 85→A`. D�
 
 ---
 
-*File tiếp theo trong lộ trình: **Module 03.2 — Generics** (generic class/method, bounded type, wildcard `? extends`/`? super`, type erasure).*
+*File tiếp theo trong lộ trình: **Module 09 — Generics** (generic class/method, bounded type, wildcard `? extends`/`? super`, type erasure).*

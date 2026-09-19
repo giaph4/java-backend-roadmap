@@ -1,7 +1,7 @@
-# Module 19 — Microservices
+# Module 28 — Microservices
 
 > **Mức ưu tiên: 🔴 Cao**
-> **Vì sao quan trọng:** Đây là module tổng hợp toàn bộ kiến thức từ Module 12-18 (Spring Core, Spring Boot, REST API, Persistence, Security, Testing, Caching/Messaging) và áp dụng vào 1 kiến trúc hệ thống **phân tán (distributed)**. Microservices không phải "công nghệ mới cần học" — nó là **cách tổ chức hệ thống** giải quyết vấn đề khi Monolith trở nên quá lớn để phát triển/scale. Hiểu đúng khi nào NÊN và KHÔNG NÊN dùng Microservices, cùng các vấn đề cố hữu của hệ phân tán (Network không đáng tin cậy, Distributed Transaction, Service Discovery) là kiến thức phân biệt rõ ràng Junior và Senior Backend Developer.
+> **Vì sao quan trọng:** Đây là module tổng hợp toàn bộ kiến thức từ Module 21–27 (Spring Core, Spring Boot, REST API, Persistence, Security, Testing, Caching/Messaging) và áp dụng vào 1 kiến trúc hệ thống **phân tán (distributed)**. Microservices không phải "công nghệ mới cần học" — nó là **cách tổ chức hệ thống** giải quyết vấn đề khi Monolith trở nên quá lớn để phát triển/scale. Hiểu đúng khi nào NÊN và KHÔNG NÊN dùng Microservices, cùng các vấn đề cố hữu của hệ phân tán (Network không đáng tin cậy, Distributed Transaction, Service Discovery) là kiến thức phân biệt rõ ràng Junior và Senior Backend Developer.
 
 > **Phạm vi bài này:** Tập trung vào **kiến trúc và các pattern** cần biết khi thiết kế/vận hành hệ thống Microservices ở tầng ứng dụng Spring Boot. Không đi sâu vào cấu hình hạ tầng cụ thể (Kubernetes YAML chi tiết, Service Mesh/Istio, CI/CD pipeline) — những chủ đề đó thuộc Module DevOps tiếp theo; ở đây chỉ nhắc tới mức đủ hiểu vai trò của chúng trong bức tranh tổng thể.
 
@@ -42,7 +42,7 @@
        Deploy: 1 file .jar/.war DUY NHẤT
 ```
 
-Đây chính là những gì bạn đã xây dựng xuyên suốt Module 12-18 — 1 ứng dụng Spring Boot với nhiều package (`user/`, `order/`, `payment/`...) nhưng **build và deploy như 1 khối thống nhất**.
+Đây chính là những gì bạn đã xây dựng xuyên suốt Module 21–27 — 1 ứng dụng Spring Boot với nhiều package (`user/`, `order/`, `payment/`...) nhưng **build và deploy như 1 khối thống nhất**.
 
 ### Microservices (Kiến trúc vi dịch vụ)
 
@@ -55,7 +55,7 @@
 │  User DB   │   │  Order DB  │   │ Payment DB │   │Inventory DB│
 └───────────┘   └───────────┘   └───────────┘   └───────────┘
      Mỗi service: Deploy ĐỘC LẬP, Database RIÊNG, có thể viết bằng ngôn ngữ khác nhau
-     Giao tiếp qua mạng: REST API / Message Queue (đã học ở Module 14, 18)
+     Giao tiếp qua mạng: REST API / Message Queue (đã học ở Module 23 và 27)
 ```
 
 ### So sánh chi tiết
@@ -603,7 +603,7 @@ public PaymentResult processPayment(Order order) { ... }
 
 ## 7. Distributed Transaction & Saga Pattern
 
-### Vấn đề: Không còn ACID Transaction đơn giản như Module 11/15
+### Vấn đề: Không còn ACID Transaction đơn giản như Module 20/24
 
 Trong Monolith, đặt hàng có thể là **1 transaction duy nhất** (nhờ `@Transactional`, tất cả cùng commit hoặc cùng rollback):
 
@@ -750,7 +750,7 @@ public class OrderSagaOrchestrator {
 ### Vì sao mỗi Service cần DB riêng?
 
 - Đảm bảo **loose coupling** thực sự — Service A không thể "lách" gọi thẳng vào DB của Service B, buộc phải giao tiếp qua API/Event đã định nghĩa (tránh phá vỡ encapsulation ở cấp độ hệ thống)
-- Cho phép mỗi service chọn loại DB phù hợp nhất với nhu cầu riêng (VD: Order Service dùng PostgreSQL, Product Search Service dùng Elasticsearch, Session Service dùng Redis — **Polyglot Persistence** đã học ở Module 10)
+- Cho phép mỗi service chọn loại DB phù hợp nhất với nhu cầu riêng (VD: Order Service dùng PostgreSQL, Product Search Service dùng Elasticsearch, Session Service dùng Redis — **Polyglot Persistence** đã học ở Module 19)
 - Scale DB độc lập theo tải riêng của từng service
 
 ### Vấn đề: Query dữ liệu xuyên nhiều Service (JOIN không còn khả thi)
@@ -834,9 +834,9 @@ public class Order {
 
 > **Mức độ ưu tiên học:** Giống CQRS, đây là kỹ thuật NÂNG CAO — chỉ thực sự cần thiết cho các domain có yêu cầu audit/lịch sử nghiêm ngặt (tài chính, kho vận) hoặc hệ thống cực lớn. Ở giai đoạn học này, hiểu đúng khái niệm và phân biệt được với cách lưu trạng thái truyền thống là đủ — không cần tự triển khai Event Sourcing đầy đủ trong dự án nhỏ.
 
-### Contract Testing — kiểm thử ranh giới giữa các Service (liên hệ Module 17)
+### Contract Testing — kiểm thử ranh giới giữa các Service (liên hệ Module 26)
 
-Module 17 đã đề cập Test Pyramid có tầng Integration Test — nhưng với Microservices, Integration Test truyền thống (khởi động thật cả 2 service để test) **chậm và khó vận hành trong CI** (phải chạy song song nhiều service). **Contract Testing** giải quyết vấn đề này bằng cách kiểm tra Producer và Consumer **có tuân thủ đúng 1 "hợp đồng" (contract) đã thỏa thuận** — mà **không cần** khởi động cả 2 service cùng lúc:
+Module 26 đã đề cập Test Pyramid có tầng Integration Test — nhưng với Microservices, Integration Test truyền thống (khởi động thật cả 2 service để test) **chậm và khó vận hành trong CI** (phải chạy song song nhiều service). **Contract Testing** giải quyết vấn đề này bằng cách kiểm tra Producer và Consumer **có tuân thủ đúng 1 "hợp đồng" (contract) đã thỏa thuận** — mà **không cần** khởi động cả 2 service cùng lúc:
 
 ```
 1. Consumer (VD: Order Service) định nghĩa "hợp đồng" nó MONG ĐỢI từ Provider (User Service):
@@ -890,7 +890,7 @@ Payment Service (nhận Trace ID abc-123, tạo span-3)
 - **Trace:** Toàn bộ hành trình của 1 request, từ đầu tới cuối, qua mọi service
 - **Span:** 1 đơn vị công việc cụ thể trong Trace đó (VD: "Order Service xử lý request" là 1 span, "Order Service gọi Payment Service" là 1 span con)
 
-> **Cách triển khai cụ thể (Micrometer Tracing + Zipkin/Jaeger, cấu hình sampling, propagate Trace ID qua log) thuộc phạm vi Module 21 — Observability**, nơi Distributed Tracing là 1 trong 3 trụ cột chính cùng Logs và Metrics. Ở module này chỉ cần nắm **vì sao** Microservices bắt buộc phải có Tracing — thiếu nó, debug lỗi xuyên nhiều service gần như "mò kim đáy bể" như minh họa ở trên.
+> **Cách triển khai cụ thể (Micrometer Tracing + Zipkin/Jaeger, cấu hình sampling, propagate Trace ID qua log) thuộc phạm vi Module 30 — Observability**, nơi Distributed Tracing là 1 trong 3 trụ cột chính cùng Logs và Metrics. Ở module này chỉ cần nắm **vì sao** Microservices bắt buộc phải có Tracing — thiếu nó, debug lỗi xuyên nhiều service gần như "mò kim đáy bể" như minh họa ở trên.
 
 ---
 
@@ -964,6 +964,59 @@ Giai đoạn N: Monolith gốc cuối cùng chỉ còn lại phần lõi nhỏ, 
 
 ---
 
+### CAP không phải lý do mặc định để chấp nhận dữ liệu sai
+
+CAP chỉ buộc chọn khi có network partition; trong trạng thái bình thường PACELC nhắc thêm trade-off latency/consistency (Module 19). Mỗi invariant cần quyết định riêng: số dư/unique allocation thường cần consistency mạnh trong một boundary; search/feed có thể eventual.
+
+Saga bảo đảm chuỗi compensation nghiệp vụ, không tạo isolation như ACID. Concurrent saga có thể xen kẽ, nên step cần idempotency, optimistic version và rule chống trạng thái không hợp lệ.
+
+### Cell-based architecture — giới hạn blast radius
+
+Thay vì mọi tenant dùng chung một cụm service/database khổng lồ, chia hệ thống thành các cell gần như độc lập; routing layer ánh xạ tenant/user vào cell. Sự cố hoặc deploy lỗi chỉ ảnh hưởng một phần khách hàng, scale theo cell và diễn tập failover dễ hơn.
+
+Đổi lại cần automation provisioning, routing metadata, chiến lược di chuyển tenant và observability có dimension `cell`. Shared control plane phải tối giản, nếu không nó lại thành single point of failure.
+
+> ⚠️ Cell không đồng nghĩa microservice nhỏ hơn. Đây là ranh giới vận hành/failure domain; có thể áp dụng cho modular monolith hoặc một nhóm service.
+
+### State diagram: Circuit Breaker
+
+```mermaid
+stateDiagram-v2
+    [*] --> Closed
+    Closed --> Open: failure hoặc slow-call threshold vượt ngưỡng
+    Open --> HalfOpen: wait duration hết
+    HalfOpen --> Closed: probe đủ và thành công
+    HalfOpen --> Open: probe thất bại
+    Open --> Open: fail fast khi chưa tới thời gian probe
+```
+
+Circuit breaker bảo vệ caller và downstream khỏi tiếp tục tiêu resource khi xác suất thành công thấp. Nó không sửa lỗi và không thay timeout: timeout giới hạn một call, breaker tổng hợp lịch sử để quyết định có nên thử call mới. Fallback phải có semantics nghiệp vụ an toàn, không biến mọi lỗi thành dữ liệu giả “thành công”.
+
+### Sequence diagram: Saga orchestration và compensation
+
+```mermaid
+sequenceDiagram
+    participant O as Saga orchestrator
+    participant Order as Order service
+    participant Pay as Payment service
+    participant Stock as Inventory service
+    O->>Order: create pending order
+    Order-->>O: created
+    O->>Pay: authorize payment
+    Pay-->>O: authorized
+    O->>Stock: reserve inventory
+    alt reserve thành công
+        Stock-->>O: reserved
+        O->>Order: confirm order
+    else reserve thất bại
+        Stock-->>O: rejected
+        O->>Pay: void/refund payment
+        O->>Order: cancel order
+    end
+```
+
+Compensation là hành động nghiệp vụ mới, không phải rollback kỹ thuật; nó cũng có thể lỗi và cần retry/idempotency. Orchestrator làm state/timeout quan sát rõ nhưng trở thành component cần độ tin cậy cao; choreography giảm trung tâm nhưng flow khó nhìn và dễ cycle.
+
 ## 12. Tổng kết — Bảng ghi nhớ nhanh
 
 | Khái niệm | Ghi nhớ nhanh |
@@ -985,7 +1038,7 @@ Giai đoạn N: Monolith gốc cuối cùng chỉ còn lại phần lõi nhỏ, 
 | Eventual Consistency | Hệ quả tất yếu của Distributed Transaction — không còn Strong Consistency như ACID |
 | Database per Service | Mỗi service 1 DB riêng — JOIN thay bằng API Composition/CQRS |
 | Contract Testing | Kiểm tra Producer/Consumer tuân thủ hợp đồng API mà không cần chạy cả 2 service |
-| Distributed Tracing | Trace ID xuyên suốt request qua nhiều service — triển khai cụ thể ở Module 21 |
+| Distributed Tracing | Trace ID xuyên suốt request qua nhiều service — triển khai cụ thể ở Module 30 |
 | Strangler Fig Pattern | Tách Microservices dần từng domain, Monolith vẫn chạy song song — an toàn hơn viết lại từ đầu |
 
 ---
@@ -1129,7 +1182,7 @@ public class OrderPaymentService {
         order.setStatus(OrderStatus.PAYMENT_PENDING); // Đánh dấu trạng thái chờ xử lý
         orderRepository.save(order);
 
-        // Có thể publish event để retry xử lý payment sau qua Message Queue (đã học Module 18)
+        // Có thể publish event để retry xử lý payment sau qua Message Queue (đã học Module 27)
         return PaymentResult.pending("Hệ thống thanh toán đang bận, đơn hàng của bạn sẽ được xử lý sớm nhất");
     }
 }
@@ -1243,4 +1296,4 @@ Gateway được đặt phía trước Monolith **ngay từ giai đoạn đầu 
 
 ---
 
-*File tiếp theo trong lộ trình: **Module 20 — DevOps cơ bản cho Backend Developer** (Docker: Image/Container/Dockerfile/docker-compose, CI/CD cơ bản với GitHub Actions/GitLab CI, giới thiệu Kubernetes, Linux command line cần thiết).*
+*File tiếp theo trong lộ trình: **Module 29 — DevOps cơ bản cho Backend Developer** (Docker: Image/Container/Dockerfile/docker-compose, CI/CD cơ bản với GitHub Actions/GitLab CI, giới thiệu Kubernetes, Linux command line cần thiết).*

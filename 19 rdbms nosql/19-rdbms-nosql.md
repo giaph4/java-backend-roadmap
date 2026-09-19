@@ -1,8 +1,8 @@
-# Module 10 (tiếp) — RDBMS phổ biến & NoSQL
+# Module 19 — RDBMS phổ biến & NoSQL
 
-> **Mức độ ưu tiên: Trung bình (RDBMS thực hành) → Bổ sung (NoSQL)** — Biết cú pháp SQL chuẩn (Module 10) là chưa đủ, cần thành thạo **ít nhất 1 RDBMS thực tế** để làm việc được ngay khi đi thực tập/đi làm. NoSQL không phải "thay thế" SQL mà là **công cụ bổ sung** cho đúng bài toán — hiểu **khi nào** dùng loại nào quan trọng hơn việc thuộc lòng cú pháp MongoDB.
+> **Mức độ ưu tiên: Trung bình (RDBMS thực hành) → Bổ sung (NoSQL)** — Biết cú pháp SQL chuẩn (Module 18) là chưa đủ, cần thành thạo **ít nhất 1 RDBMS thực tế** để làm việc được ngay khi đi thực tập/đi làm. NoSQL không phải "thay thế" SQL mà là **công cụ bổ sung** cho đúng bài toán — hiểu **khi nào** dùng loại nào quan trọng hơn việc thuộc lòng cú pháp MongoDB.
 >
-> **Phạm vi bài này:** so sánh MySQL/PostgreSQL ở mức thực hành, cơ chế lưu trữ bên trong (InnoDB, kiểu dữ liệu PostgreSQL nâng cao), tổng quan NoSQL (MongoDB, Redis) và tư duy chọn công nghệ. Bài **không** đi sâu ORM/JPA — đó là Module 11 (@Entity, N+1, Lazy/Eager) — và **không** đi sâu kiến trúc Microservices/System Design — đó là các module 18–22 phía sau; bài chỉ **gieo mầm tư duy** để chuẩn bị cho các module đó.
+> **Phạm vi bài này:** so sánh MySQL/PostgreSQL ở mức thực hành, cơ chế lưu trữ bên trong (InnoDB, kiểu dữ liệu PostgreSQL nâng cao), tổng quan NoSQL (MongoDB, Redis) và tư duy chọn công nghệ. Bài **không** đi sâu ORM/JPA — đó là Module 20 (`@Entity`, N+1, Lazy/Eager) — và **không** đi sâu kiến trúc Microservices/System Design — đó là Module 28 và 31; bài chỉ **gieo mầm tư duy** để chuẩn bị cho các module đó.
 
 ---
 
@@ -25,20 +25,20 @@
 
 ## 1. MySQL vs PostgreSQL — so sánh thực hành
 
-Cả 2 đều là **RDBMS mã nguồn mở phổ biến nhất thế giới**, đều tuân thủ chuẩn SQL đã học ở Module 10 — nhưng có những khác biệt quan trọng cần biết khi chọn dùng thực tế.
+Cả 2 đều là **RDBMS mã nguồn mở phổ biến nhất thế giới**, đều tuân thủ chuẩn SQL đã học ở Module 18 — nhưng có những khác biệt quan trọng cần biết khi chọn dùng thực tế.
 
 | Tiêu chí | MySQL | PostgreSQL |
 |---|---|---|
 | Triết lý thiết kế | Ưu tiên **tốc độ, đơn giản**, dễ dùng cho web application truyền thống | Ưu tiên **tuân thủ chuẩn SQL nghiêm ngặt**, tính năng phong phú, "đúng đắn" về mặt học thuật |
 | Kiểu dữ liệu | Cơ bản, ít kiểu nâng cao | **Phong phú hơn hẳn**: JSON/JSONB, Array, UUID nguyên sinh, ENUM, Range Type... (mục 3) |
 | Full-Text Search | Có, nhưng hạn chế hơn | Mạnh hơn đáng kể, tích hợp sẵn (`tsvector`/`tsquery`) |
-| Xử lý đồng thời (Concurrency) | Dùng khóa (locking) truyền thống, InnoDB cũng có MVCC nhưng cài đặt đơn giản hơn | Dùng **MVCC (Multi-Version Concurrency Control)** đầy đủ và tinh vi hơn — cho phép đọc/ghi đồng thời hiệu quả mà ít gây khóa chờ (chi tiết cơ chế MVCC nói chung: Module 10, mục 7) |
+| Xử lý đồng thời (Concurrency) | Dùng khóa (locking) truyền thống, InnoDB cũng có MVCC nhưng cài đặt đơn giản hơn | Dùng **MVCC (Multi-Version Concurrency Control)** đầy đủ và tinh vi hơn — cho phép đọc/ghi đồng thời hiệu quả mà ít gây khóa chờ (chi tiết cơ chế MVCC nói chung: Module 18, mục 7) |
 | Mở rộng (Extensibility) | Hạn chế | **Extension system** mạnh — `PostGIS` (dữ liệu địa lý), `pg_trgm` (fuzzy search), `TimescaleDB` (time-series) cài như plugin |
 | Replication | Master-Slave (binlog-based) đơn giản, dễ cấu hình | Streaming Replication + Logical Replication linh hoạt hơn, hỗ trợ replica đọc gần như đồng bộ |
 | Độ phổ biến tại Việt Nam | RẤT phổ biến — đặc biệt ở startup, dự án web truyền thống, framework PHP (WordPress, Laravel mặc định) | Ngày càng phổ biến ở dự án MỚI, đặc biệt ưa chuộng trong hệ sinh thái backend hiện đại (nhiều công ty công nghệ, dự án Spring Boot) |
 | License | GPL (Oracle sở hữu) | PostgreSQL License (rất "mở", gần giống MIT) |
 
-> **Khuyến nghị thực tế cho người mới:** cả 2 đều là lựa chọn tốt và **kiến thức SQL chuẩn học được ở Module 10 áp dụng được cho cả hai** (khác biệt chủ yếu ở 1 số tính năng mở rộng, cú pháp function đặc thù). Nếu phải chọn 1 để thực hành sâu trước, **PostgreSQL** đang là xu hướng được nhiều dự án Spring Boot hiện đại và các công ty công nghệ ưa chuộng hơn nhờ tính năng phong phú và độ tuân thủ chuẩn cao — nhưng biết cả 2 (ít nhất ở mức thực hành cơ bản) là lợi thế lớn khi đi phỏng vấn, vì mỗi công ty có stack công nghệ khác nhau.
+> **Khuyến nghị thực tế cho người mới:** cả 2 đều là lựa chọn tốt và **kiến thức SQL chuẩn học được ở Module 18 áp dụng được cho cả hai** (khác biệt chủ yếu ở 1 số tính năng mở rộng, cú pháp function đặc thù). Nếu phải chọn 1 để thực hành sâu trước, **PostgreSQL** đang là xu hướng được nhiều dự án Spring Boot hiện đại và các công ty công nghệ ưa chuộng hơn nhờ tính năng phong phú và độ tuân thủ chuẩn cao — nhưng biết cả 2 (ít nhất ở mức thực hành cơ bản) là lợi thế lớn khi đi phỏng vấn, vì mỗi công ty có stack công nghệ khác nhau.
 
 ### Một số khác biệt cú pháp hay gặp khi chuyển đổi qua lại
 
@@ -50,7 +50,7 @@ Cả 2 đều là **RDBMS mã nguồn mở phổ biến nhất thế giới**, �
 | Phân biệt hoa/thường khi so sánh chuỗi | Mặc định **không phân biệt** (tùy collation) | Mặc định **CÓ phân biệt** hoa/thường (`'A' <> 'a'`) |
 | Kiểu boolean | Không có kiểu riêng, dùng `TINYINT(1)` | Có kiểu `BOOLEAN` thật sự (`TRUE`/`FALSE`) |
 
-> **Vì sao cần biết bảng này:** trong thực tế đi làm, việc đọc migration script hoặc code JPA/Hibernate viết cho MySQL rồi phải chạy trên PostgreSQL (hoặc ngược lại) không hiếm — Hibernate tự sinh SQL theo `dialect` cấu hình nên phần lớn khác biệt được che giấu, nhưng khi viết **native query** (`@Query(nativeQuery = true)`, sẽ gặp ở Module 11) thì các khác biệt này lộ ra ngay.
+> **Vì sao cần biết bảng này:** trong thực tế đi làm, việc đọc migration script hoặc code JPA/Hibernate viết cho MySQL rồi phải chạy trên PostgreSQL (hoặc ngược lại) không hiếm — Hibernate tự sinh SQL theo `dialect` cấu hình nên phần lớn khác biệt được che giấu, nhưng khi viết **native query** (`@Query(nativeQuery = true)`, sẽ gặp ở Module 20) thì các khác biệt này lộ ra ngay.
 
 ---
 
@@ -60,20 +60,20 @@ MySQL có khái niệm **Storage Engine** (cơ chế lưu trữ) — có thể c
 
 | Storage Engine | Hỗ trợ Transaction (ACID)? | Hỗ trợ Foreign Key? | Khi nào dùng |
 |---|---|---|---|
-| **InnoDB** (mặc định từ MySQL 5.5+) | ✅ Có | ✅ Có | **LUÔN LUÔN nên dùng** cho ứng dụng backend thông thường — hỗ trợ đầy đủ ACID (Module 10) |
+| **InnoDB** (mặc định từ MySQL 5.5+) | ✅ Có | ✅ Có | **LUÔN LUÔN nên dùng** cho ứng dụng backend thông thường — hỗ trợ đầy đủ ACID (Module 18) |
 | **MyISAM** (cũ, hiếm dùng ngày nay) | ❌ Không | ❌ Không | Chỉ phù hợp bài toán đọc RẤT nhiều, ghi RẤT ít, KHÔNG cần transaction — hiếm gặp trong backend hiện đại |
 
 > **Lưu ý quan trọng khi phỏng vấn:** nếu được hỏi "MySQL có hỗ trợ Transaction không?" — câu trả lời chính xác là **"Có, NẾU dùng storage engine InnoDB"** (là mặc định hiện nay) — không nên trả lời "Có" hay "Không" một cách tuyệt đối mà không nhắc đến ngữ cảnh storage engine, vì đây chính là điểm mà nhiều tài liệu cũ hay gây nhầm lẫn.
 
 ### Bên trong InnoDB hoạt động thế nào — 3 cơ chế cốt lõi
 
-Hiểu 3 cơ chế này giúp trả lời được câu "vì sao commit lại nhanh dù dữ liệu đã ghi xuống đĩa an toàn" — câu hỏi phỏng vấn khá phổ biến khi đã học xong Durability ở Module 10.
+Hiểu 3 cơ chế này giúp trả lời được câu "vì sao commit lại nhanh dù dữ liệu đã ghi xuống đĩa an toàn" — câu hỏi phỏng vấn khá phổ biến khi đã học xong Durability ở Module 18.
 
 **a) Buffer Pool — vùng nhớ đệm trong RAM.** InnoDB không đọc/ghi trực tiếp xuống đĩa cho mỗi câu lệnh — dữ liệu (data page, index page) được cache trong 1 vùng RAM gọi là **Buffer Pool**. Đọc dữ liệu đã có trong Buffer Pool nhanh hơn đọc đĩa hàng trăm lần; đây là lý do `innodb_buffer_pool_size` là tham số tuning quan trọng bậc nhất khi vận hành MySQL production.
 
-**b) Redo Log — hiện thực hóa WAL (Write-Ahead Log).** Đây chính là cơ chế WAL đã nhắc ở Module 10 mục 6 (Durability): khi transaction COMMIT, InnoDB **không** ghi ngay các trang dữ liệu đã sửa xuống đĩa (chậm, vì phải ghi ngẫu nhiên nhiều vị trí) — mà chỉ ghi 1 bản ghi nhỏ, tuần tự (nhanh hơn nhiều) vào **Redo Log**, rồi trả lời "commit thành công" ngay. Các trang dữ liệu thật trong Buffer Pool được đồng bộ xuống đĩa **sau đó**, theo tiến trình nền (gọi là **checkpoint**). Nếu server crash giữa chừng, khi khởi động lại InnoDB **replay lại Redo Log** để khôi phục đúng trạng thái đã commit — đây là cách Durability được đảm bảo mà vẫn nhanh.
+**b) Redo Log — hiện thực hóa WAL (Write-Ahead Log).** Đây chính là cơ chế WAL đã nhắc ở Module 18 mục 6 (Durability): khi transaction COMMIT, InnoDB **không** ghi ngay các trang dữ liệu đã sửa xuống đĩa (chậm, vì phải ghi ngẫu nhiên nhiều vị trí) — mà chỉ ghi 1 bản ghi nhỏ, tuần tự (nhanh hơn nhiều) vào **Redo Log**, rồi trả lời "commit thành công" ngay. Các trang dữ liệu thật trong Buffer Pool được đồng bộ xuống đĩa **sau đó**, theo tiến trình nền (gọi là **checkpoint**). Nếu server crash giữa chừng, khi khởi động lại InnoDB **replay lại Redo Log** để khôi phục đúng trạng thái đã commit — đây là cách Durability được đảm bảo mà vẫn nhanh.
 
-**c) Undo Log — hỗ trợ MVCC và ROLLBACK.** Khi 1 row bị UPDATE, InnoDB giữ lại phiên bản CŨ trong **Undo Log** — phục vụ 2 việc: (1) `ROLLBACK` — quay lại giá trị cũ nếu transaction hủy; (2) **MVCC** (Module 10, mục 7) — một transaction khác đang đọc ở isolation level REPEATABLE READ có thể vẫn nhìn thấy phiên bản CŨ của row (snapshot tại thời điểm bắt đầu), lấy từ Undo Log, dù transaction hiện tại đã sửa xong.
+**c) Undo Log — hỗ trợ MVCC và ROLLBACK.** Khi 1 row bị UPDATE, InnoDB giữ lại phiên bản CŨ trong **Undo Log** — phục vụ 2 việc: (1) `ROLLBACK` — quay lại giá trị cũ nếu transaction hủy; (2) **MVCC** (Module 18, mục 7) — một transaction khác đang đọc ở isolation level REPEATABLE READ có thể vẫn nhìn thấy phiên bản CŨ của row (snapshot tại thời điểm bắt đầu), lấy từ Undo Log, dù transaction hiện tại đã sửa xong.
 
 ```
 Transaction COMMIT
@@ -85,11 +85,11 @@ Ghi Redo Log (tuần tự, nhanh) ──► trả lời "OK" cho client NGAY
 Đồng bộ trang dữ liệu từ Buffer Pool xuống đĩa thật (checkpoint)
 ```
 
-> **Liên hệ:** đây chính là ví dụ cụ thể nhất cho khái niệm WAL đã học ở Module 10 — nếu đã hiểu WAL ở mức khái niệm, đọc lại 3 cơ chế trên chỉ là gắn tên riêng (Redo Log, Undo Log, Buffer Pool) vào đúng vai trò đã biết.
+> **Liên hệ:** đây chính là ví dụ cụ thể nhất cho khái niệm WAL đã học ở Module 18 — nếu đã hiểu WAL ở mức khái niệm, đọc lại 3 cơ chế trên chỉ là gắn tên riêng (Redo Log, Undo Log, Buffer Pool) vào đúng vai trò đã biết.
 
 ### Khóa ở tầng row (Row-Level Locking)
 
-InnoDB khóa ở mức **từng dòng (row)** bị ảnh hưởng, chứ không khóa nguyên bảng như MyISAM — đây là lý do InnoDB cho phép nhiều transaction ghi đồng thời vào các row khác nhau của cùng 1 bảng mà không chặn nhau, khác hẳn `synchronized` ở tầng ứng dụng (Module 05.1) vốn khóa nguyên đối tượng. Cơ chế khóa dòng cụ thể (`SELECT ... FOR UPDATE`, gap lock chống Phantom Read) đã được trình bày ở Module 10, mục 7.
+InnoDB khóa ở mức **từng dòng (row)** bị ảnh hưởng, chứ không khóa nguyên bảng như MyISAM — đây là lý do InnoDB cho phép nhiều transaction ghi đồng thời vào các row khác nhau của cùng 1 bảng mà không chặn nhau, khác hẳn `synchronized` ở tầng ứng dụng (Module 12) vốn khóa nguyên đối tượng. Cơ chế khóa dòng cụ thể (`SELECT ... FOR UPDATE`, gap lock chống Phantom Read) đã được trình bày ở Module 18, mục 7.
 
 ---
 
@@ -135,7 +135,7 @@ CREATE TABLE orders (
     ...
 );
 ```
-> **Liên hệ thực tế:** UUID phù hợp hơn `AUTO_INCREMENT`/`SERIAL` khi hệ thống có **nhiều service/instance cùng tạo dữ liệu độc lập** — tránh xung đột ID khi gộp dữ liệu từ nhiều nguồn, và không để lộ thông tin nghiệp vụ qua ID tuần tự (ví dụ ID tăng dần lộ ra "công ty có bao nhiêu đơn hàng" cho đối thủ cạnh tranh). Đánh đổi (kích thước, phân mảnh B-Tree index) đã phân tích chi tiết ở Module 10, mục 10.
+> **Liên hệ thực tế:** UUID phù hợp hơn `AUTO_INCREMENT`/`SERIAL` khi hệ thống có **nhiều service/instance cùng tạo dữ liệu độc lập** — tránh xung đột ID khi gộp dữ liệu từ nhiều nguồn, và không để lộ thông tin nghiệp vụ qua ID tuần tự (ví dụ ID tăng dần lộ ra "công ty có bao nhiêu đơn hàng" cho đối thủ cạnh tranh). Đánh đổi (kích thước, phân mảnh B-Tree index) đã phân tích chi tiết ở Module 18, mục 10.
 
 ### ENUM — ràng buộc giá trị hợp lệ ngay ở tầng kiểu dữ liệu
 
@@ -147,7 +147,7 @@ CREATE TABLE orders (
     status order_status NOT NULL DEFAULT 'PENDING' -- CHỈ chấp nhận 4 giá trị đã định nghĩa, chèn giá trị khác báo lỗi ngay
 );
 ```
-> So với dùng `VARCHAR` + `CHECK (status IN (...))`, kiểu `ENUM` gọn hơn và PostgreSQL lưu trữ hiệu quả hơn (bên trong là số nguyên). Nhược điểm: thêm 1 giá trị mới vào ENUM sau này cần lệnh `ALTER TYPE ... ADD VALUE` — kém linh hoạt hơn `CHECK` một chút. Trong code Java/JPA, kiểu này ánh xạ tự nhiên với `enum` (sẽ gặp lại ở Module 11 với `@Enumerated`).
+> So với dùng `VARCHAR` + `CHECK (status IN (...))`, kiểu `ENUM` gọn hơn và PostgreSQL lưu trữ hiệu quả hơn (bên trong là số nguyên). Nhược điểm: thêm 1 giá trị mới vào ENUM sau này cần lệnh `ALTER TYPE ... ADD VALUE` — kém linh hoạt hơn `CHECK` một chút. Trong code Java/JPA, kiểu này ánh xạ tự nhiên với `enum` (sẽ gặp lại ở Module 20 với `@Enumerated`).
 
 ### Range Type — lưu 1 khoảng giá trị trong 1 cột
 
@@ -166,7 +166,7 @@ SELECT * FROM room_bookings WHERE room_id = 1 AND during && '[2026-01-11 00:00, 
 ALTER TABLE room_bookings ADD CONSTRAINT no_overlap
     EXCLUDE USING GIST (room_id WITH =, during WITH &&);
 ```
-> **Ứng dụng thực tế:** bài toán "đặt phòng/đặt lịch không được trùng khung giờ" thường bị lập trình viên tự viết logic kiểm tra overlap ở tầng Java (dễ có race condition khi nhiều request đồng thời — liên hệ khái niệm check-then-act ở Module 05.1) — PostgreSQL Range Type + `EXCLUDE CONSTRAINT` giải quyết bài toán này **ngay ở tầng database**, đảm bảo đúng đắn tuyệt đối kể cả dưới tải đồng thời cao.
+> **Ứng dụng thực tế:** bài toán "đặt phòng/đặt lịch không được trùng khung giờ" thường bị lập trình viên tự viết logic kiểm tra overlap ở tầng Java (dễ có race condition khi nhiều request đồng thời — liên hệ khái niệm check-then-act ở Module 12) — PostgreSQL Range Type + `EXCLUDE CONSTRAINT` giải quyết bài toán này **ngay ở tầng database**, đảm bảo đúng đắn tuyệt đối kể cả dưới tải đồng thời cao.
 
 ---
 
@@ -275,15 +275,15 @@ db.users.deleteOne({ email: "an@example.com" });                // Delete
 
 ### Index trong MongoDB — cùng tư duy với SQL
 
-Không có index, MongoDB phải **quét toàn bộ collection** (`COLLSCAN`) cho mỗi query — giống hệt Seq Scan đã học ở Module 10, mục 11.
+Không có index, MongoDB phải **quét toàn bộ collection** (`COLLSCAN`) cho mỗi query — giống hệt Seq Scan đã học ở Module 18, mục 11.
 
 ```javascript
 db.users.createIndex({ email: 1 });                    // Single-field index, 1 = tăng dần
 db.users.createIndex({ "address.city": 1, name: 1 });   // Compound index — thứ tự trường QUAN TRỌNG,
-                                                          // giống nguyên tắc Leftmost Prefix đã học ở Module 10
+                                                          // giống nguyên tắc Leftmost Prefix đã học ở Module 18
 db.users.find({ email: "pho@example.com" }).explain();   // Tương đương EXPLAIN của SQL — xem query có dùng index không (IXSCAN hay COLLSCAN)
 ```
-> **Liên hệ:** nguyên tắc chọn cột để đánh index (cardinality cao, cột hay dùng trong điều kiện lọc/sắp xếp) và cách đọc `explain()` **giống hệt tư duy** đã học kỹ với B-Tree Index ở Module 10, mục 8 và 11 — chỉ khác cú pháp khai báo.
+> **Liên hệ:** nguyên tắc chọn cột để đánh index (cardinality cao, cột hay dùng trong điều kiện lọc/sắp xếp) và cách đọc `explain()` **giống hệt tư duy** đã học kỹ với B-Tree Index ở Module 18, mục 8 và 11 — chỉ khác cú pháp khai báo.
 
 ### Aggregation Pipeline — tương đương GROUP BY/JOIN nâng cao của MongoDB
 
@@ -295,7 +295,7 @@ db.users.aggregate([
   { $sort: { total: -1 } }                                 // giống ORDER BY ... DESC
 ]);
 ```
-> Dữ liệu chảy qua từng **stage** (`$match` → `$group` → `$sort`) giống một pipeline xử lý tuần tự — tư duy tương tự Stream API (Module 03.2: `filter` → `collect` → `sorted`), chỉ khác là chạy trên server database thay vì trong JVM.
+> Dữ liệu chảy qua từng **stage** (`$match` → `$group` → `$sort`) giống một pipeline xử lý tuần tự — tư duy tương tự Stream API (Module 09: `filter` → `collect` → `sorted`), chỉ khác là chạy trên server database thay vì trong JVM.
 
 ### Multi-Document Transaction & Replica Set/Sharding — kiến trúc phân tán
 
@@ -343,13 +343,13 @@ SET session:abc123 "user_id=1" EX 3600  # "EX 3600" — TỰ ĐỘNG hết hạn
 TTL session:abc123             # xem còn bao nhiêu giây nữa key này hết hạn
 
 EXISTS user:1:name             # kiểm tra key có tồn tại không (trả về 1/0)
-INCR page:views                # TĂNG giá trị số nguyên lên 1 — ATOMIC, an toàn đa luồng/đa client (liên hệ AtomicInteger, Module 05.2!)
+INCR page:views                # TĂNG giá trị số nguyên lên 1 — ATOMIC, an toàn đa luồng/đa client (liên hệ AtomicInteger, Module 13!)
 ```
 
 ### Vì sao Redis nhanh đến vậy?
 
 1. **Lưu trữ hoàn toàn trong RAM** (không phải đĩa cứng) — RAM nhanh hơn đĩa cứng/SSD hàng nghìn lần về độ trễ truy cập.
-2. **Đơn luồng (single-threaded)** cho việc xử lý lệnh (dù có thể có thread phụ cho I/O ở phiên bản mới) — tránh hoàn toàn overhead của việc quản lý lock/đồng bộ hóa đa luồng (liên hệ Module 05.1 — mọi lệnh Redis tự động là "atomic" vì chỉ 1 luồng xử lý lệnh tại 1 thời điểm, không có Race Condition ở tầng Redis).
+2. **Đơn luồng (single-threaded)** cho việc xử lý lệnh (dù có thể có thread phụ cho I/O ở phiên bản mới) — tránh hoàn toàn overhead của việc quản lý lock/đồng bộ hóa đa luồng (liên hệ Module 12 — mọi lệnh Redis tự động là "atomic" vì chỉ 1 luồng xử lý lệnh tại 1 thời điểm, không có Race Condition ở tầng Redis).
 3. Cấu trúc dữ liệu được **tối ưu hóa đặc biệt** cho từng loại thao tác (mục 7).
 
 ### Redis vẫn "bền" được không nếu chỉ lưu trong RAM? — Persistence
@@ -383,7 +383,7 @@ RAM có giới hạn (`maxmemory`) — khi đầy, Redis phải **loại bỏ (e
 | **Caching** | Lưu kết quả tính toán/truy vấn database TỐN KÉM để tránh tính lại — liên hệ trực tiếp `@Cacheable` sẽ học ở các module sau về Caching |
 | **Session Storage** | Lưu session người dùng đăng nhập — đặc biệt quan trọng khi có **NHIỀU instance** backend chạy song song, cần nơi lưu session **DÙNG CHUNG** thay vì lưu trong bộ nhớ của TỪNG instance riêng lẻ |
 | **Rate Limiting** | Đếm số request từ 1 user/IP trong khoảng thời gian, chặn nếu vượt ngưỡng — dùng `INCR` + `EXPIRE` |
-| **Distributed Lock** | Khóa phân tán — mở rộng khái niệm `synchronized` (Module 05.1) ra **NHIỀU instance backend khác nhau** cùng truy cập 1 tài nguyên chung (ví dụ: đảm bảo chỉ 1 instance xử lý 1 tác vụ định kỳ cụ thể tại 1 thời điểm) |
+| **Distributed Lock** | Khóa phân tán — mở rộng khái niệm `synchronized` (Module 12) ra **NHIỀU instance backend khác nhau** cùng truy cập 1 tài nguyên chung (ví dụ: đảm bảo chỉ 1 instance xử lý 1 tác vụ định kỳ cụ thể tại 1 thời điểm) |
 | **Pub/Sub Messaging** | Cơ chế publish/subscribe đơn giản, dù đơn giản hơn nhiều so với các hệ thống Message Queue chuyên dụng (Kafka/RabbitMQ) |
 
 ### Redis Cluster/Replication — mở rộng khi 1 server không đủ
@@ -394,10 +394,10 @@ Giống MongoDB, Redis production thường không chạy đơn lẻ: **Replicat
 
 ## 7. Redis — cấu trúc dữ liệu nâng cao
 
-Redis không chỉ lưu String đơn giản — hỗ trợ nhiều cấu trúc dữ liệu, mỗi loại tối ưu cho 1 nhóm bài toán cụ thể (liên hệ trực tiếp Module 03.1 — Collections Framework, cùng tư duy "chọn đúng cấu trúc dữ liệu cho đúng bài toán"):
+Redis không chỉ lưu String đơn giản — hỗ trợ nhiều cấu trúc dữ liệu, mỗi loại tối ưu cho 1 nhóm bài toán cụ thể (liên hệ trực tiếp Module 08 — Collections Framework, cùng tư duy "chọn đúng cấu trúc dữ liệu cho đúng bài toán"):
 
 ```
-LPUSH queue:tasks "task1"     # List — thêm vào ĐẦU danh sách, tương tự LinkedList (Module 03.1)
+LPUSH queue:tasks "task1"     # List — thêm vào ĐẦU danh sách, tương tự LinkedList (Module 08)
 RPOP queue:tasks               # lấy ra từ CUỐI — kết hợp LPUSH+RPOP tạo thành QUEUE (FIFO)
 
 SADD tags:post123 "java" "spring"  # Set — tương tự HashSet, tự động loại trùng lặp
@@ -424,7 +424,7 @@ BITCOUNT user:1:login_days        # đếm số bit = 1 — cực tiết kiệm 
 ```
 > **HyperLogLog** đánh đổi độ chính xác tuyệt đối lấy hiệu quả bộ nhớ — đúng tinh thần "trade-off" đã gặp xuyên suốt các module trước (ví dụ CAP Theorem ở mục 8), chỉ khác là đánh đổi ở phạm vi 1 cấu trúc dữ liệu cụ thể thay vì kiến trúc toàn hệ thống.
 
-> **Liên hệ trực tiếp:** nếu đã nắm chắc Module 03.1 (Collections Framework), việc học các cấu trúc dữ liệu của Redis sẽ **cực kỳ nhanh** — vì bản chất tư duy chọn cấu trúc phù hợp bài toán **giống hệt nhau**, chỉ khác là Redis chạy trên **bộ nhớ chia sẻ giữa nhiều tiến trình/server**, thay vì chỉ trong 1 JVM process như Collection thông thường.
+> **Liên hệ trực tiếp:** nếu đã nắm chắc Module 08 (Collections Framework), việc học các cấu trúc dữ liệu của Redis sẽ **cực kỳ nhanh** — vì bản chất tư duy chọn cấu trúc phù hợp bài toán **giống hệt nhau**, chỉ khác là Redis chạy trên **bộ nhớ chia sẻ giữa nhiều tiến trình/server**, thay vì chỉ trong 1 JVM process như Collection thông thường.
 
 ---
 
@@ -525,13 +525,58 @@ Trong thực tế, hệ thống backend **quy mô lớn hiếm khi chỉ dùng 1
 
 ---
 
+### Quorum và consistency có thể điều chỉnh
+
+Trong một hệ replicated có `N` bản sao, client có thể yêu cầu ghi thành công ở `W` replica và đọc từ `R` replica. Điều kiện `R + W > N` làm tập đọc/ghi giao nhau, nhưng **không tự động** tạo linearizability: còn phụ thuộc version conflict, concurrent write, clock và cơ chế repair.
+
+| Chọn cấu hình | Trade-off điển hình |
+|---|---|
+| `W` cao | Ghi chậm/ít available hơn, dữ liệu bền và mới hơn |
+| `R` cao | Đọc chậm/ít available hơn, tăng cơ hội thấy bản mới |
+| `R=1, W=1` | Latency thấp nhưng dễ đọc stale/conflict |
+
+Read repair và anti-entropy đồng bộ replica sau đó; hinted handoff giữ tạm write khi node đích lỗi. Đây là eventual consistency có **cơ chế hội tụ**, không phải “đợi rồi dữ liệu tự đúng”.
+
+### Consistent hashing và hot partition
+
+Consistent hashing giảm số key phải di chuyển khi thêm/bớt node; virtual node giúp phân bố đều hơn. Nhưng key popularity lệch vẫn tạo hot partition dù hash phân bố tốt. Cần đo per-partition QPS/size, thiết kế partition key đủ entropy, và khi cần tách key nóng hoặc cache/replicate read.
+
+> ⚠️ Chọn partition key là quyết định data model dài hạn: query xuyên partition, transaction và rebalance đều chịu ảnh hưởng. Liên hệ Module 31 khi ước lượng tải và thiết kế sharding.
+
+### Sơ đồ CAP: quyết định chỉ bị ép khi có partition
+
+```mermaid
+flowchart TD
+    R["Request tới replicated datastore"] --> P{"Network partition đang xảy ra?"}
+    P -- "Không" --> E["Tối ưu latency và consistency theo PACELC"]
+    P -- "Có" --> C{"Ưu tiên gì cho operation này?"}
+    C -- "Consistency" --> CP["Từ chối / chờ nếu không đủ quorum"]
+    C -- "Availability" --> AP["Chấp nhận response có thể stale/conflict"]
+    AP --> H["Reconcile bằng version, read repair hoặc business rule"]
+```
+
+CAP không phân loại toàn bộ database thành ba hộp cố định; lựa chọn có thể khác theo operation và topology. “AP” vẫn cần định nghĩa conflict/convergence, còn “CP” vẫn có thể phục vụ request ở partition chứa quorum.
+
+### Consistent hashing và virtual node
+
+```mermaid
+flowchart LR
+    K["hash key"] --> R["Đặt key lên vòng hash"]
+    R --> N["Đi theo chiều kim đồng hồ tới virtual node kế tiếp"]
+    N --> O["Virtual node ánh xạ physical node"]
+    J["Node tham gia/rời cụm"] --> M["Chỉ vùng lân cận cần di chuyển key"]
+    M --> R
+```
+
+Virtual node giúp cân bằng phân bố và cho node mạnh nhận nhiều token hơn, nhưng không chữa hot key do popularity. Phải tách bài toán **phân bố key space** khỏi **phân bố traffic**.
+
 ## 11. Tổng kết — Bảng ghi nhớ nhanh
 
 | Khái niệm | Điểm mấu chốt cần nhớ |
 |---|---|
 | MySQL vs PostgreSQL | Cả 2 đều tốt; PostgreSQL có nhiều kiểu dữ liệu nâng cao hơn (JSONB, Array, UUID, ENUM, Range Type), MySQL phổ biến truyền thống hơn |
 | InnoDB | Storage Engine MẶC ĐỊNH của MySQL hiện đại — LUÔN nên dùng vì hỗ trợ đầy đủ Transaction/ACID |
-| Buffer Pool / Redo Log / Undo Log | Cache RAM + WAL để commit nhanh mà vẫn Durable + hỗ trợ MVCC/Rollback — cơ chế cụ thể hiện thực hóa WAL đã học ở Module 10 |
+| Buffer Pool / Redo Log / Undo Log | Cache RAM + WAL để commit nhanh mà vẫn Durable + hỗ trợ MVCC/Rollback — cơ chế cụ thể hiện thực hóa WAL đã học ở Module 18 |
 | JSONB (PostgreSQL) | Kết hợp linh hoạt như NoSQL NHƯNG vẫn trong RDBMS, vẫn có Transaction đầy đủ; `JSONB` nhanh hơn `JSON` vì lưu dạng nhị phân đã phân giải |
 | Range Type + EXCLUDE | Chống overlap lịch/đặt phòng ngay ở tầng database, không cần tự viết logic dễ race condition ở tầng ứng dụng |
 | MongoDB | Document DB, schema-less, phù hợp dữ liệu lồng nhau/cấu trúc linh hoạt; có Index + Aggregation Pipeline + Multi-Document Transaction (cần Replica Set); mở rộng bằng Sharding |
@@ -576,7 +621,7 @@ Trong thực tế, hệ thống backend **quy mô lớn hiếm khi chỉ dùng 1
 Thiết kế bảng `products` cho hệ thống e-commerce đa dạng loại sản phẩm (đã mô tả ở Câu 2 Phần A) — dùng cột cố định cho thông tin CHUNG (`id`, `name`, `price`, `category`), và cột `JSONB` cho thuộc tính RIÊNG từng loại. Viết 2-3 câu `INSERT` mẫu cho các loại sản phẩm khác nhau, và 1 câu `SELECT` truy vấn theo thuộc tính bên trong JSONB (ví dụ tìm điện thoại có RAM >= 8GB).
 
 **Bài 2 — Thiết kế Document MongoDB cho hệ thống Blog.**
-So sánh với thiết kế SQL chuẩn hóa đã làm ở Module 10 (Bài 3 Phần B — hệ thống blog với `users`, `posts`, `tags`, bảng trung gian `post_tags`) — thiết kế LẠI theo phong cách MongoDB: viết ra 1 document mẫu cho `posts` collection, **nhúng (embed)** trực tiếp thông tin tác giả và danh sách tag NGAY TRONG document (không cần bảng trung gian/JOIN). Phân tích ngắn gọn: cách thiết kế này có ưu điểm gì (tốc độ đọc) và nhược điểm gì (dữ liệu tác giả bị LẶP LẠI ở nhiều bài viết, khó đồng bộ khi tác giả đổi tên).
+So sánh với thiết kế SQL chuẩn hóa đã làm ở Module 18 (Bài 3 Phần B — hệ thống blog với `users`, `posts`, `tags`, bảng trung gian `post_tags`) — thiết kế LẠI theo phong cách MongoDB: viết ra 1 document mẫu cho `posts` collection, **nhúng (embed)** trực tiếp thông tin tác giả và danh sách tag NGAY TRONG document (không cần bảng trung gian/JOIN). Phân tích ngắn gọn: cách thiết kế này có ưu điểm gì (tốc độ đọc) và nhược điểm gì (dữ liệu tác giả bị LẶP LẠI ở nhiều bài viết, khó đồng bộ khi tác giả đổi tên).
 
 **Bài 3 — Thiết kế chiến lược Cache bằng Redis.**
 Cho bài toán: API `GET /api/products/{id}` được gọi RẤT NHIỀU LẦN, nhưng dữ liệu sản phẩm ít khi thay đổi. Mô tả (bằng lời + pseudo-code) chiến lược cache: (a) khi có request, kiểm tra Redis trước bằng key nào; (b) nếu có (cache hit) thì làm gì; (c) nếu không có (cache miss) thì làm gì, và cần set thời gian hết hạn (TTL) bao lâu là hợp lý, giải thích lý do; (d) khi sản phẩm được CẬP NHẬT (`PUT /api/products/{id}`), cần làm gì với cache để tránh trả về dữ liệu CŨ (gợi ý: tìm hiểu khái niệm "Cache Invalidation"); (e) nếu Redis dùng chính sách `allkeys-lru` và RAM gần đầy, điều gì có thể xảy ra với các key cache ít được truy cập?
@@ -585,7 +630,7 @@ Cho bài toán: API `GET /api/products/{id}` được gọi RẤT NHIỀU LẦN,
 Mô tả bằng lệnh Redis (giống cú pháp ở mục 7) cách xây dựng 1 bảng xếp hạng (leaderboard) cho hệ thống game/quiz: mỗi khi người chơi ghi điểm, cập nhật điểm số của họ; viết lệnh lấy TOP 10 người chơi có điểm cao nhất; viết lệnh lấy THỨ HẠNG (rank) cụ thể của 1 người chơi bất kỳ trong bảng xếp hạng (gợi ý: tìm hiểu thêm lệnh `ZREVRANK`).
 
 **Bài 5 — Bài toán tổng hợp: thiết kế Polyglot Persistence cho hệ thống Flash-Sale (liên hệ trực tiếp capstone).**
-Dựa trên hiểu biết về capstone "High-Concurrency Event Ticketing & Flash-Sale Engine" của bạn, đề xuất kiến trúc Polyglot Persistence phù hợp: (a) dữ liệu nào (vé, đơn hàng, thanh toán, user) nên nằm ở PostgreSQL/MySQL và tại sao; (b) Redis nên đóng vai trò gì trong việc giải quyết bài toán **oversold** (bán vượt số lượng vé — đã mô phỏng ở Module 05.1 và 05.2 bằng `synchronized`/`AtomicInteger` ở tầng ứng dụng, giờ hãy suy nghĩ thêm về giải pháp ở TẦNG DATABASE/CACHE cho hệ thống có NHIỀU instance backend chạy song song — liên hệ khái niệm Distributed Lock đã nhắc ở mục 6); (c) có cần MongoDB trong hệ thống này không, cho trường hợp dữ liệu nào (nếu có)?
+Dựa trên hiểu biết về capstone "High-Concurrency Event Ticketing & Flash-Sale Engine" của bạn, đề xuất kiến trúc Polyglot Persistence phù hợp: (a) dữ liệu nào (vé, đơn hàng, thanh toán, user) nên nằm ở PostgreSQL/MySQL và tại sao; (b) Redis nên đóng vai trò gì trong việc giải quyết bài toán **oversold** (bán vượt số lượng vé — đã mô phỏng ở Module 12–13 bằng `synchronized`/`AtomicInteger` ở tầng ứng dụng, giờ hãy suy nghĩ thêm về giải pháp ở TẦNG DATABASE/CACHE cho hệ thống có NHIỀU instance backend chạy song song — liên hệ khái niệm Distributed Lock đã nhắc ở mục 6); (c) có cần MongoDB trong hệ thống này không, cho trường hợp dữ liệu nào (nếu có)?
 
 **Bài 6 — Chống overlap bằng PostgreSQL Range Type.**
 Cho bài toán đặt phòng họp công ty (1 phòng không được đặt trùng khung giờ). Viết schema dùng `TSTZRANGE` và `EXCLUDE CONSTRAINT` như ví dụ ở mục 3 để đảm bảo KHÔNG THỂ chèn 2 booking trùng giờ cho cùng 1 phòng — kể cả khi 2 request đến gần như đồng thời. So sánh ngắn gọn với cách làm "tự kiểm tra overlap bằng code Java trước khi INSERT" — cách nào an toàn hơn dưới tải đồng thời cao, tại sao?
@@ -611,14 +656,14 @@ Cho bài toán đặt phòng họp công ty (1 phòng không được đặt tr�
 <summary>Bấm để xem gợi ý đáp án Phần B</summary>
 
 - **Bài 1:** Ví dụ query: `SELECT * FROM products WHERE category = 'phone' AND (attributes->>'ram_gb')::int >= 8;` (cần ép kiểu `::int` vì giá trị trong JSONB mặc định là kiểu text/JSON, không phải số nguyên trực tiếp).
-- **Bài 2:** Đây là minh họa trực quan cho khái niệm **Embedding vs Referencing** trong thiết kế MongoDB — Embedding (nhúng trực tiếp) tối ưu tốc độ ĐỌC (không cần JOIN/lookup), nhưng đánh đổi bằng khả năng dữ liệu bị **trùng lặp và khó đồng bộ** khi thông tin gốc (tên tác giả) thay đổi — đây chính là sự đánh đổi ngược lại hoàn toàn với triết lý chuẩn hóa 3NF đã học kỹ ở Module 10, thể hiện rõ MongoDB và SQL có TRIẾT LÝ THIẾT KẾ khác nhau căn bản, không chỉ khác cú pháp.
+- **Bài 2:** Đây là minh họa trực quan cho khái niệm **Embedding vs Referencing** trong thiết kế MongoDB — Embedding (nhúng trực tiếp) tối ưu tốc độ ĐỌC (không cần JOIN/lookup), nhưng đánh đổi bằng khả năng dữ liệu bị **trùng lặp và khó đồng bộ** khi thông tin gốc (tên tác giả) thay đổi — đây chính là sự đánh đổi ngược lại hoàn toàn với triết lý chuẩn hóa 3NF đã học kỹ ở Module 18, thể hiện rõ MongoDB và SQL có TRIẾT LÝ THIẾT KẾ khác nhau căn bản, không chỉ khác cú pháp.
 - **Bài 3:** TTL hợp lý cho dữ liệu sản phẩm ít thay đổi có thể là vài phút đến vài giờ (tùy tần suất cập nhật thực tế của nghiệp vụ) — không nên quá ngắn (mất tác dụng cache) hay quá dài (dữ liệu cũ tồn tại lâu nếu quên invalidate). Phần (d) — Cache Invalidation: khi `PUT /api/products/{id}` thành công, cần **XÓA (DEL)** key cache tương ứng trong Redis NGAY LẬP TỨC (thay vì chờ TTL tự hết hạn) — đảm bảo lần đọc TIẾP THEO sẽ là "cache miss", buộc phải đọc lại dữ liệu MỚI từ database chính rồi mới cache lại. Phần (e): với `allkeys-lru`, các key sản phẩm ít được truy cập gần đây sẽ bị **loại bỏ (evict)** khi RAM gần đầy để nhường chỗ cho key mới/hay dùng hơn — lần truy vấn tiếp theo tới sản phẩm đó sẽ là cache miss, phải đọc lại từ database; đây là hành vi BÌNH THƯỜNG và chấp nhận được của cache (khác với mất dữ liệu thật — vì dữ liệu gốc vẫn còn nguyên trong PostgreSQL/MongoDB).
 - **Bài 4:** Ví dụ lệnh: `ZADD game:leaderboard 1500 "player_pho"`; lấy TOP 10: `ZREVRANGE game:leaderboard 0 9 WITHSCORES` (REVRANGE vì mặc định ZRANGE sắp XĂNG DẦN, cần REV để lấy điểm CAO nhất trước); lấy rank cụ thể: `ZREVRANK game:leaderboard "player_pho"`.
-- **Bài 5:** Đây là bài tập **tổng hợp và mang tính định hướng kiến trúc quan trọng nhất** của module — (a) toàn bộ dữ liệu nghiệp vụ CỐT LÕI (vé, đơn hàng, thanh toán, user) nên nằm ở PostgreSQL/MySQL vì cần Transaction chặt chẽ, tránh oversold/mất tiền — đúng như đã phân tích ở Module 10; (b) Redis có thể đóng vai trò **Distributed Lock** hoặc dùng lệnh `DECR`/cơ chế atomic của Redis để kiểm tra-và-giảm số lượng vé còn lại ở TẦNG CACHE TRƯỚC KHI chạm đến database — giúp giảm tải cực lớn cho database chính trong thời điểm traffic đỉnh điểm của flash-sale (hàng chục nghìn request cùng lúc tranh mua vài trăm vé), đồng thời đảm bảo tính đúng đắn NGAY CẢ KHI có NHIỀU instance backend chạy song song (điều mà `AtomicInteger` ở Module 05.2 KHÔNG giải quyết được, vì `AtomicInteger` chỉ an toàn trong PHẠM VI 1 JVM process/instance duy nhất); (c) MongoDB có thể phù hợp cho dữ liệu **log hành vi người dùng** (ai đã xem trang vé nào, thời điểm nào, để phân tích sau sự kiện) — dữ liệu này KHÔNG cần Transaction chặt, khối lượng có thể rất lớn, và không ảnh hưởng trực tiếp đến tính đúng đắn của nghiệp vụ bán vé cốt lõi. Đây chính là bức tranh kiến trúc tổng thể sẽ được hiện thực hóa dần qua các module phía sau trong lộ trình (ORM/JPA, Caching & Messaging, Microservices).
-- **Bài 6:** Schema mẫu: `CREATE TABLE room_bookings (id BIGINT PRIMARY KEY, room_id BIGINT, during TSTZRANGE, EXCLUDE USING GIST (room_id WITH =, during WITH &&));`. Cách này **an toàn hơn hẳn** so với tự kiểm tra bằng code Java, vì: ràng buộc được **database tự động thực thi NGUYÊN TỬ (atomic)** ngay tại thời điểm INSERT/UPDATE — không có khoảng hở thời gian giữa "kiểm tra" và "ghi" (check-then-act, Module 05.1) để 2 request đồng thời cùng "lọt qua" bước kiểm tra rồi cùng ghi đè lên nhau; trong khi nếu tự kiểm tra bằng code (`SELECT` xem có overlap không, rồi mới `INSERT` nếu không có), 2 request đến gần như đồng thời hoàn toàn có thể CÙNG đọc thấy "chưa có overlap" trước khi request nào kịp ghi — dẫn đến cả 2 đều chèn thành công, tạo ra 2 booking trùng giờ — đúng bản chất Race Condition đã học ở Module 05.1, giờ được giải quyết triệt để ở TẦNG DATABASE thay vì phải tự đồng bộ hóa ở tầng ứng dụng.
+- **Bài 5:** Đây là bài tập **tổng hợp và mang tính định hướng kiến trúc quan trọng nhất** của module — (a) toàn bộ dữ liệu nghiệp vụ CỐT LÕI (vé, đơn hàng, thanh toán, user) nên nằm ở PostgreSQL/MySQL vì cần Transaction chặt chẽ, tránh oversold/mất tiền — đúng như đã phân tích ở Module 18; (b) Redis có thể đóng vai trò **Distributed Lock** hoặc dùng lệnh `DECR`/cơ chế atomic của Redis để kiểm tra-và-giảm số lượng vé còn lại ở TẦNG CACHE TRƯỚC KHI chạm đến database — giúp giảm tải cực lớn cho database chính trong thời điểm traffic đỉnh điểm của flash-sale (hàng chục nghìn request cùng lúc tranh mua vài trăm vé), đồng thời đảm bảo tính đúng đắn NGAY CẢ KHI có NHIỀU instance backend chạy song song (điều mà `AtomicInteger` ở Module 13 KHÔNG giải quyết được, vì `AtomicInteger` chỉ an toàn trong PHẠM VI 1 JVM process/instance duy nhất); (c) MongoDB có thể phù hợp cho dữ liệu **log hành vi người dùng** (ai đã xem trang vé nào, thời điểm nào, để phân tích sau sự kiện) — dữ liệu này KHÔNG cần Transaction chặt, khối lượng có thể rất lớn, và không ảnh hưởng trực tiếp đến tính đúng đắn của nghiệp vụ bán vé cốt lõi. Đây chính là bức tranh kiến trúc tổng thể sẽ được hiện thực hóa dần qua các module phía sau trong lộ trình (ORM/JPA, Caching & Messaging, Microservices).
+- **Bài 6:** Schema mẫu: `CREATE TABLE room_bookings (id BIGINT PRIMARY KEY, room_id BIGINT, during TSTZRANGE, EXCLUDE USING GIST (room_id WITH =, during WITH &&));`. Cách này **an toàn hơn hẳn** so với tự kiểm tra bằng code Java, vì: ràng buộc được **database tự động thực thi NGUYÊN TỬ (atomic)** ngay tại thời điểm INSERT/UPDATE — không có khoảng hở thời gian giữa "kiểm tra" và "ghi" (check-then-act, Module 12) để 2 request đồng thời cùng "lọt qua" bước kiểm tra rồi cùng ghi đè lên nhau; trong khi nếu tự kiểm tra bằng code (`SELECT` xem có overlap không, rồi mới `INSERT` nếu không có), 2 request đến gần như đồng thời hoàn toàn có thể CÙNG đọc thấy "chưa có overlap" trước khi request nào kịp ghi — dẫn đến cả 2 đều chèn thành công, tạo ra 2 booking trùng giờ — đúng bản chất Race Condition đã học ở Module 12, giờ được giải quyết triệt để ở TẦNG DATABASE thay vì phải tự đồng bộ hóa ở tầng ứng dụng.
 
 </details>
 
 ---
 
-*File tiếp theo trong lộ trình: **Module 11 — ORM: JPA & Hibernate** (@Entity, mapping quan hệ, N+1 Query Problem, Lazy/Eager loading, @Transactional).*
+*File tiếp theo trong lộ trình: **Module 20 — ORM: JPA & Hibernate** (@Entity, mapping quan hệ, N+1 Query Problem, Lazy/Eager loading, @Transactional).*

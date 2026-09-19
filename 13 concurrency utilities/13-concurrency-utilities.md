@@ -1,8 +1,8 @@
-# Module 05.2 — Concurrency Utilities
+# Module 13 — Concurrency Utilities
 
-> **Mức độ ưu tiên: Cao trong thực tế** — Backend **không bao giờ** `new Thread()` thủ công (Module 05.1) — luôn dùng `ExecutorService`. Đây là kiến thức áp dụng trực tiếp cho `@Async` của Spring, gọi API song song, và là nền tảng bắt buộc trước capstone Flash-Sale.
+> **Mức độ ưu tiên: Cao trong thực tế** — Backend **không bao giờ** `new Thread()` thủ công (Module 12) — luôn dùng `ExecutorService`. Đây là kiến thức áp dụng trực tiếp cho `@Async` của Spring, gọi API song song, và là nền tảng bắt buộc trước capstone Flash-Sale.
 
-> **Phạm vi bài này:** toàn bộ `java.util.concurrent` ở mức ứng dụng — thread pool (`ExecutorService`, `ThreadPoolExecutor`), `BlockingQueue`, `Future`/`CompletableFuture`, `CountDownLatch`/`CyclicBarrier`/`Semaphore`, `Atomic*`, `Lock`/`ReadWriteLock`/`Condition`, `ConcurrentHashMap`. **Chỉ nhắc tên, không đi sâu:** cơ chế `synchronized`/`volatile`/`wait`/happens-before (Module 05.1 — chỉ nhắc lại vừa đủ), `@Async`/`ThreadPoolTaskExecutor` của Spring (Module 13), reactive `Mono`/`Flux` (Module 19), Fork/Join framework nội bộ. Virtual thread (Java 21) nêu vừa đủ để biết xu hướng.
+> **Phạm vi bài này:** toàn bộ `java.util.concurrent` ở mức ứng dụng — thread pool (`ExecutorService`, `ThreadPoolExecutor`), `BlockingQueue`, `Future`/`CompletableFuture`, `CountDownLatch`/`CyclicBarrier`/`Semaphore`, `Atomic*`, `Lock`/`ReadWriteLock`/`Condition`, `ConcurrentHashMap`. **Chỉ nhắc tên, không đi sâu:** cơ chế `synchronized`/`volatile`/`wait`/happens-before (Module 12 — chỉ nhắc lại vừa đủ), `@Async`/`ThreadPoolTaskExecutor` của Spring (Module 22), reactive `Mono`/`Flux` (Module 28), Fork/Join framework nội bộ. Virtual thread (Java 21) nêu vừa đủ để biết xu hướng.
 
 ---
 
@@ -21,14 +21,15 @@
 11. [Lock, ReadWriteLock, Condition](#11-lock-readwritelock-condition)
 12. [ConcurrentHashMap](#12-concurrenthashmap)
 13. [ThreadLocal — biến riêng theo từng thread](#13-threadlocal--biến-riêng-theo-từng-thread)
-14. [Tổng kết — Bảng ghi nhớ nhanh](#14-tổng-kết--bảng-ghi-nhớ-nhanh)
-15. [Bài tập luyện tập](#15-bài-tập-luyện-tập)
+14. [Structured Concurrency, Backpressure & mental model của Thread Pool](#14-structured-concurrency-backpressure--mental-model-của-thread-pool)
+15. [Tổng kết — Bảng ghi nhớ nhanh](#15-tổng-kết--bảng-ghi-nhớ-nhanh)
+16. [Bài tập luyện tập](#16-bài-tập-luyện-tập)
 
 ---
 
 ## 1. Vì sao không tự tạo Thread — và cách chọn kích thước pool
 
-Nhắc Module 05.1: mỗi platform thread tốn ~1 MB stack + đăng ký với OS scheduler. `new Thread()` cho **mỗi request** (hàng nghìn/giây) dẫn tới:
+Nhắc Module 12: mỗi platform thread tốn ~1 MB stack + đăng ký với OS scheduler. `new Thread()` cho **mỗi request** (hàng nghìn/giây) dẫn tới:
 
 - **Cạn tài nguyên** — hàng nghìn thread = hàng GB RAM chỉ để quản lý thread.
 - **Context switch quá nhiều** — CPU dành thời gian chuyển ngữ cảnh thay vì làm việc thật.
@@ -289,13 +290,13 @@ Future<String> a = pool.submit(() -> {
 
 → Task **không** được submit task khác vào **cùng pool** rồi block chờ nó. Dùng pool riêng, hoặc `CompletableFuture` chaining.
 
-> **Liên hệ Spring:** `@Async` dùng `ThreadPoolTaskExecutor` — wrapper của `ThreadPoolExecutor` này. Hiểu core/max/queue/rejection ở đây là cấu hình đúng cho Spring Boot (Module 13).
+> **Liên hệ Spring:** `@Async` dùng `ThreadPoolTaskExecutor` — wrapper của `ThreadPoolExecutor` này. Hiểu core/max/queue/rejection ở đây là cấu hình đúng cho Spring Boot (Module 22).
 
 ---
 
 ## 5. BlockingQueue — producer/consumer
 
-Hàng đợi an toàn đa luồng, **tự chặn** khi rỗng/đầy — nền tảng của thread pool và mọi mô hình producer/consumer, thay cho `wait`/`notify` viết tay (Module 05.1).
+Hàng đợi an toàn đa luồng, **tự chặn** khi rỗng/đầy — nền tảng của thread pool và mọi mô hình producer/consumer, thay cho `wait`/`notify` viết tay (Module 12).
 
 ```java
 BlockingQueue<Task> queue = new ArrayBlockingQueue<>(1000);
@@ -358,7 +359,7 @@ CompletableFuture<Integer> cf = CompletableFuture.supplyAsync(() -> slowCompute(
 cf.thenAccept(r -> log.info("kết quả {}", r));     // callback tự chạy khi xong, KHÔNG block thread hiện tại
 ```
 
-> ⚠️ `supplyAsync(task)` không truyền executor → chạy trên **`ForkJoinPool.commonPool()`** dùng chung JVM (cùng rủi ro như `parallelStream` — Module 03.3). Với tác vụ **I/O**, luôn truyền pool riêng:
+> ⚠️ `supplyAsync(task)` không truyền executor → chạy trên **`ForkJoinPool.commonPool()`** dùng chung JVM (cùng rủi ro như `parallelStream` — Module 10). Với tác vụ **I/O**, luôn truyền pool riêng:
 > ```java
 > CompletableFuture.supplyAsync(() -> callHttp(), ioPool)
 >                  .thenApplyAsync(this::parse, cpuPool);
@@ -427,7 +428,7 @@ legacyClient.onError(bridge::completeExceptionally);
 
 `join()` ném `CompletionException` (unchecked) → dùng được trong lambda/Stream. `get()` ném checked `ExecutionException`/`InterruptedException`.
 
-> **Liên hệ:** `CompletableFuture` là nền tảng tư duy cho reactive (`Mono`/`Flux` — Module 19): "nối các bước bất đồng bộ, không block".
+> **Liên hệ:** `CompletableFuture` là nền tảng tư duy cho reactive (`Mono`/`Flux` — Module 28): "nối các bước bất đồng bộ, không block".
 
 ---
 
@@ -522,7 +523,7 @@ c.accumulateAndGet(3, Integer::sum);
 
 ### CAS loop — nền tảng của lock-free
 
-Cho check-then-act "còn vé thì giảm" (mục ví dụ oversold ở Module 05.1) — `get()` rồi `decrementAndGet()` **vẫn race**. Gộp atomic:
+Cho check-then-act "còn vé thì giảm" (mục ví dụ oversold ở Module 12) — `get()` rồi `decrementAndGet()` **vẫn race**. Gộp atomic:
 
 ```java
 boolean bookTicket() {
@@ -561,7 +562,7 @@ config.updateAndGet(old -> old.withTimeout(5000));   // thay bằng bản mới,
 
 ## 11. Lock, ReadWriteLock, Condition
 
-`ReentrantLock` làm mọi việc `synchronized` làm, **cộng thêm** những thứ `synchronized` không có (Module 05.1 đã trỏ tới đây).
+`ReentrantLock` làm mọi việc `synchronized` làm, **cộng thêm** những thứ `synchronized` không có (Module 12 đã trỏ tới đây).
 
 ```java
 private final ReentrantLock lock = new ReentrantLock();
@@ -610,7 +611,7 @@ void put(T x) throws InterruptedException {
 }
 ```
 
-So với `wait`/`notifyAll` một phòng (Module 05.1): `signal()` đánh thức đúng nhóm cần thiết, không "đánh thức nhầm" bên kia.
+So với `wait`/`notifyAll` một phòng (Module 12): `signal()` đánh thức đúng nhóm cần thiết, không "đánh thức nhầm" bên kia.
 
 ### `ReadWriteLock` — nhiều reader song song, một writer độc quyền
 
@@ -662,7 +663,7 @@ void move(double dx, double dy) {
 
 ## 12. ConcurrentHashMap
 
-`HashMap` không an toàn đa luồng (Module 03.1 — có thể mất update, JDK 7 còn vòng lặp vô hạn khi resize). `Collections.synchronizedMap` khóa toàn bảng mỗi thao tác → nghẽn. `ConcurrentHashMap` khóa mịn / lock-free cho đọc.
+`HashMap` không an toàn đa luồng (Module 08 — có thể mất update, JDK 7 còn vòng lặp vô hạn khi resize). `Collections.synchronizedMap` khóa toàn bảng mỗi thao tác → nghẽn. `ConcurrentHashMap` khóa mịn / lock-free cho đọc.
 
 ```java
 ConcurrentHashMap<String, Long> counts = new ConcurrentHashMap<>();
@@ -764,7 +765,49 @@ Chỉ **sao chép giá trị tại thời điểm** thread con được tạo (`
 
 ---
 
-## 14. Tổng kết — Bảng ghi nhớ nhanh
+## 14. Structured Concurrency, Backpressure & mental model của Thread Pool
+
+### Structured Concurrency — lifetime của task con đi cùng task cha
+
+`CompletableFuture`/`ExecutorService` dễ tạo task “mồ côi”: request đã timeout nhưng task con vẫn chạy. Structured Concurrency tổ chức các task fork song song trong một scope; rời scope thì phải join/cancel và lỗi được gom về cha. Ý tưởng cốt lõi giống structured programming: lifetime hiển thị ngay trong cấu trúc code.
+
+> ⚠️ API Structured Concurrency xuất hiện dưới dạng preview ở các JDK hiện đại; phải kiểm tra đúng phiên bản JDK và cờ preview trước khi dùng production. Dù chưa dùng API này, vẫn áp dụng nguyên tắc: timeout/cancel từ request phải truyền xuống mọi task con.
+
+### Backpressure cho `ExecutorService`
+
+Unbounded queue không từ chối việc nhưng có thể đổi overload thành OOM và latency nhiều phút. Production executor nên có pool/queue hữu hạn, metrics và `RejectedExecutionHandler` phù hợp:
+
+| Chính sách | Khi phù hợp |
+|---|---|
+| Abort | Trả lỗi nhanh để upstream retry có kiểm soát |
+| CallerRuns | Làm chậm producer tự nhiên, nhưng không dùng trên event loop |
+| Discard | Chỉ cho tác vụ thật sự best-effort và có metric |
+
+Capacity phải đi cùng timeout và shutdown có thời hạn; đây là backpressure cục bộ trước khi mở rộng sang messaging ở Module 27.
+
+### Sơ đồ mental model của thread pool: admission trước execution
+
+```mermaid
+flowchart LR
+    P["Producer / request thread"] --> A{"Pool nhận task?"}
+    A -- "Worker còn khả năng" --> W["Worker thực thi"]
+    A -- "Tạm bận" --> Q["Bounded queue"]
+    Q --> W
+    A -- "Pool và queue đầy" --> R["Rejection policy"]
+    R --> F["Fail fast"]
+    R --> B["Caller-runs tạo backpressure"]
+    W --> D["Result / completion"]
+    W --> C{"Bị cancel hoặc deadline hết?"}
+    C -- "Có" --> I["Interrupt và cooperative cleanup"]
+```
+
+Thread pool không chỉ là công cụ “chạy song song”; nó là **cổng admission** bảo vệ CPU, memory và downstream. Số worker giới hạn concurrency, queue hấp thụ burst ngắn, rejection quyết định hệ thống degrade thế nào khi bão hòa.
+
+Unbounded queue loại bỏ tín hiệu overload khỏi producer và biến nó thành latency/memory growth. Vì vậy capacity, timeout, cancellation, metrics và shutdown là một contract duy nhất, không phải các tùy chọn rời rạc.
+
+---
+
+## 15. Tổng kết — Bảng ghi nhớ nhanh
 
 | Công cụ | Dùng khi |
 |---|---|
@@ -794,7 +837,7 @@ Chỉ **sao chép giá trị tại thời điểm** thread con được tạo (`
 
 ---
 
-## 15. Bài tập luyện tập
+## 16. Bài tập luyện tập
 
 ### Phần A — Trắc nghiệm nhận định (giải thích lý do)
 
@@ -856,7 +899,7 @@ Cho danh sách 10 `id`. `fetchAsync(id)` trả `CompletableFuture<Integer>` (`sl
 1 producer đẩy 100 "job" vào `ArrayBlockingQueue(10)`; 4 consumer `take()` và xử lý (`sleep` ngẫu nhiên). Dùng "poison pill" (job đặc biệt) để báo consumer dừng. `CountDownLatch` để main biết cả 4 consumer đã kết thúc. Không dùng `wait`/`notify` tay.
 
 **Bài 7 — Bài toán tổng hợp: phòng vé bằng ExecutorService + CAS loop (chuẩn bị capstone).**
-`TicketBooth` với `AtomicInteger available = new AtomicInteger(100)`. `boolean book()` dùng **CAS loop** (`compareAndSet`) để "kiểm tra còn vé + giảm 1" thành một thao tác nguyên tử. Submit 500 task `book()` vào `newFixedThreadPool(50)`; đếm số `true` bằng `AtomicInteger`/`LongAdder`; `CountDownLatch(500)` để main chờ; in tổng vé bán — **luôn đúng 100, không oversold**. Ghi chú vì sao `get()` rồi `decrementAndGet()` riêng lẻ vẫn sai, và backend nhiều instance cần thêm distributed lock / `SELECT … FOR UPDATE` / `@Version` (Module 14, 18).
+`TicketBooth` với `AtomicInteger available = new AtomicInteger(100)`. `boolean book()` dùng **CAS loop** (`compareAndSet`) để "kiểm tra còn vé + giảm 1" thành một thao tác nguyên tử. Submit 500 task `book()` vào `newFixedThreadPool(50)`; đếm số `true` bằng `AtomicInteger`/`LongAdder`; `CountDownLatch(500)` để main chờ; in tổng vé bán — **luôn đúng 100, không oversold**. Ghi chú vì sao `get()` rồi `decrementAndGet()` riêng lẻ vẫn sai, và backend nhiều instance cần thêm distributed lock / `SELECT … FOR UPDATE` / `@Version` (Module 19–20 và 24).
 
 ---
 
@@ -872,7 +915,7 @@ Cho danh sách 10 `id`. `fetchAsync(id)` trả `CompletableFuture<Integer>` (`sl
 
 **Câu 5.** `LongAdder` vs `AtomicLong` dưới tranh chấp cao: giải thích cơ chế "striping" (nhiều cell). Vì sao `LongAdder.sum()` **không** phải ảnh chụp nguyên tử, và điều đó chấp nhận được cho metric nhưng **không** cho "số dư tài khoản"? Khi nào `AtomicLong` vẫn là lựa chọn đúng?
 
-**Câu 6.** `ReentrantLock` với hai `Condition` (`notFull`/`notEmpty`) so với một monitor `wait`/`notifyAll` (Module 05.1): giải thích vì sao `signal()` đúng `Condition` tránh được "đánh thức nhầm" mà `notify()` một phòng gặp phải. Cái giá phải trả của `ReentrantLock` so với `synchronized` là gì, và vì sao `unlock()` **bắt buộc** trong `finally`?
+**Câu 6.** `ReentrantLock` với hai `Condition` (`notFull`/`notEmpty`) so với một monitor `wait`/`notifyAll` (Module 12): giải thích vì sao `signal()` đúng `Condition` tránh được "đánh thức nhầm" mà `notify()` một phòng gặp phải. Cái giá phải trả của `ReentrantLock` so với `synchronized` là gì, và vì sao `unlock()` **bắt buộc** trong `finally`?
 
 **Câu 7.** `ConcurrentHashMap.compute(key, remappingFn)` giữ khóa một bin trong lúc chạy `remappingFn`. Nêu ba điều `remappingFn` **không được làm** và hậu quả từng cái. Vì sao `size()` chỉ là ước lượng, và `map.forEach` không ném `ConcurrentModificationException` (khác `HashMap`) nhưng cũng không đảm bảo thấy gì?
 
@@ -922,4 +965,4 @@ Cho danh sách 10 `id`. `fetchAsync(id)` trả `CompletableFuture<Integer>` (`sl
 
 ---
 
-*File tiếp theo trong lộ trình: **Module 06 — Java Modern (8 → 21+)** (Optional, record, sealed class, pattern matching, Text Block, Virtual Threads).*
+*File tiếp theo trong lộ trình: **Module 14 — Java Modern (8 → 21+)** (Optional, record, sealed class, pattern matching, Text Block, Virtual Threads).*

@@ -1,8 +1,8 @@
-# Module 03.3 — Stream API & Lambda
+# Module 10 — Stream API & Lambda
 
 > **Mức độ ưu tiên: Cao trong thực tế** — Dù xếp "trung bình" trong lộ trình lý thuyết, đây là phong cách viết code **dùng nhiều nhất** trong mọi codebase Spring Boot hiện đại. Không thành thạo Stream/lambda thì đọc code đồng nghiệp hoặc tài liệu Spring sẽ chật vật, và dễ viết pipeline sai một cách khó phát hiện (dựa vào `peek`, tái dùng Stream, `parallelStream()` có side-effect...).
 
-> **Phạm vi bài này:** lambda, functional interface, method reference, Stream API tuần tự & song song, `Collectors`, lazy evaluation. **Chỉ nhắc tên, không đi sâu:** `equals`/`hashCode` (Module 02.4 — `distinct` phụ thuộc vào nó), Collections (Module 03.1), Generics (Module 03.2 — signature các functional interface), Concurrency/`ForkJoinPool` (Module 09 — `parallelStream` chạy trên đó), Optional đầy đủ (Module 04). Các chỗ chạm chủ đề khác chỉ nêu đủ để bài trọn vẹn.
+> **Phạm vi bài này:** lambda, functional interface, method reference, Stream API tuần tự & song song, `Collectors`, lazy evaluation. **Chỉ nhắc tên, không đi sâu:** `equals`/`hashCode` (Module 07 — `distinct` phụ thuộc vào nó), Collections (Module 08), Generics (Module 09 — signature các functional interface), Concurrency/`ForkJoinPool` (Module 13 — `parallelStream` chạy trên đó), Optional đầy đủ (Module 14). Các chỗ chạm chủ đề khác chỉ nêu đủ để bài trọn vẹn.
 
 ---
 
@@ -27,7 +27,7 @@
 
 ## 1. Functional Interface — nền tảng của Lambda
 
-**Functional interface** = interface có **đúng một method trừu tượng** (Single Abstract Method — SAM). Được phép có thêm `default`/`static`/`private` method (Module 02.2) mà vẫn là functional interface.
+**Functional interface** = interface có **đúng một method trừu tượng** (Single Abstract Method — SAM). Được phép có thêm `default`/`static`/`private` method (Module 05) mà vẫn là functional interface.
 
 ```java
 @FunctionalInterface   // KHÔNG bắt buộc, nhưng nên có — compiler báo lỗi nếu vô tình thêm method trừu tượng thứ 2
@@ -105,7 +105,7 @@ class Widget {
 | Có state/field riêng | Không | Có |
 | Không "capture" gì | Tái dùng **một** instance (non-capturing → singleton) | Tạo instance mới mỗi lần |
 
-Liên hệ Module 01.3 (mục `this` trong lambda vs anonymous).
+Liên hệ Module 03 (mục `this` trong lambda vs anonymous).
 
 ### Variable capture — phải "effectively final"
 
@@ -339,7 +339,7 @@ List<Integer> ns = List.of(5, 3, 8, 1, 9, 2, 8);
 ns.stream().filter(n -> n > 3);
 ns.stream().map(n -> n * 2);
 ns.stream().sorted(Comparator.reverseOrder());
-ns.stream().distinct();                 // dựa equals()/hashCode() — Module 02.4
+ns.stream().distinct();                 // dựa equals()/hashCode() — Module 07
 ns.stream().limit(3);
 ns.stream().skip(2);
 ns.stream().takeWhile(n -> n < 8);      // Java 9 — lấy tới khi gặp phần tử SAI điều kiện: [5,3]
@@ -524,7 +524,7 @@ Map<String,Double> sorted = revenue.entrySet().stream()
                    (a, b) -> a, LinkedHashMap::new));   // giữ đúng thứ tự đã sort
 ```
 
-> `groupingBy` ↔ `GROUP BY` trong SQL (Module 12). Nếu quen SQL thì downstream collector chính là `COUNT`/`SUM`/`AVG`/`HAVING`.
+> `groupingBy` ↔ `GROUP BY` trong SQL (Module 21). Nếu quen SQL thì downstream collector chính là `COUNT`/`SUM`/`AVG`/`HAVING`.
 
 ### Viết `Collector` tùy chỉnh — `Collector.of`
 
@@ -636,6 +636,49 @@ Không cần tự implement `Spliterator` trong công việc thường ngày —
 Nhược điểm cần cân nhắc: stack trace của lambda khó đọc hơn; debug từng bước phải đặt breakpoint trong lambda; checked exception phải bọc.
 
 ---
+
+### Contract khi tự viết `Collector`
+
+Một collector đúng phải thỏa identity và associativity: chia input thành nhiều phần, accumulate riêng rồi `combiner` phải cho kết quả tương đương xử lý tuần tự. `IDENTITY_FINISH` chỉ khai báo khi finisher thật sự là identity; `CONCURRENT` chỉ an toàn khi accumulator hỗ trợ cập nhật đồng thời.
+
+```java
+Collector<Order, LongSummaryStatistics, LongSummaryStatistics> quantities =
+    Collector.of(LongSummaryStatistics::new,
+        (s, o) -> s.accept(o.quantity()),
+        (left, right) -> { left.combine(right); return left; });
+```
+
+### Non-interference — không sửa nguồn trong lúc pipeline chạy
+
+Operation phải không can thiệp vào source và nên stateless. Ghi vào `ArrayList` bên ngoài từ `parallelStream()` vừa race condition vừa phá khả năng reasoning; dùng `collect()` để Stream sở hữu quá trình gộp.
+
+> ⚠️ “Cho kết quả đúng khi chạy tuần tự” chưa chứng minh pipeline hợp lệ. Hãy kiểm tra state dùng chung, encounter order, tính kết hợp của phép reduce và chi phí chia/gộp trước khi bật parallel.
+
+### Sequence diagram: một Stream pipeline thật sự chạy thế nào
+
+```mermaid
+sequenceDiagram
+    participant App as Caller
+    participant Stream as Pipeline description
+    participant Source as Spliterator
+    participant Ops as Fused operations
+    participant Sink as Terminal sink
+    App->>Stream: filter(...).map(...).limit(3)
+    Note over Stream: Chưa duyệt dữ liệu
+    App->>Stream: toList()
+    Stream->>Source: tryAdvance()
+    Source->>Ops: phần tử kế tiếp
+    Ops->>Ops: filter rồi map
+    alt phần tử được giữ
+        Ops->>Sink: accept(result)
+    end
+    Sink-->>Stream: cancellation requested khi đủ 3
+    Stream-->>App: List kết quả
+```
+
+Intermediate operation không tạo collection sau mỗi bước; pipeline thường **fuse** các operation và đẩy từng phần tử qua chuỗi sink. Đây là lý do short-circuit như `limit/findFirst/anyMatch` có thể dừng nguồn sớm và vì sao side effect trong `peek/map` khó suy luận.
+
+Với parallel stream, source được split thành task, mỗi task chạy pipeline tương tự rồi kết quả được combine. Nếu source khó chia, phép combine đắt hoặc operation cần encounter order, chi phí điều phối có thể lớn hơn phần việc.
 
 ## 12. Tổng kết — Bảng ghi nhớ nhanh
 
@@ -815,10 +858,10 @@ Cho `List<String> words`. Tính: (a) tổng độ dài bằng `reduce(0, (acc,w)
 4. (i) *identity*: `combiner.apply(identity, u).equals(u)` với mọi `u` — `0` cho cộng, `1` cho nhân, `""` cho nối. (ii) *associativity*: `(a op b) op c == a op (b op c)` — trừ và chia vi phạm. (iii) *không can thiệp / không side-effect*: accumulator & combiner không đọc–ghi state chia sẻ, không sửa nguồn. Ví dụ sai: `reduce(1, Integer::sum, Integer::sum)` — mỗi lần chia luồng song song cộng thêm một `1` thừa → tổng song song > tổng tuần tự. Hoặc `identity` là một `ArrayList` dùng chung → các luồng cùng add vào một list.
 5. (a) `filter` trước `groupingBy`: phần tử bị loại **trước khi phân nhóm** → key nào không còn phần tử nào thì **không xuất hiện** trong Map. (b) `filtering` downstream (Java 9): phân nhóm trước, lọc trong từng nhóm → key vẫn xuất hiện với **list rỗng**. (c) `groupingBy` đầy đủ rồi `removeIf`: giống (a) về key cuối cùng nhưng đã tốn công dựng nhóm. Khác biệt cốt lõi: **(b) giữ key nhóm rỗng, (a)/(c) không**.
 6. `toMap` mô hình hóa quan hệ **1 key → 1 value**; hai phần tử cùng key là mâu thuẫn dữ liệu → ném để lập trình viên biết. `groupingBy` bản chất là **1 key → nhiều value** (gom list) nên trùng key là bình thường. Supplier `HashMap::new` chỉ chọn *loại Map*, không đổi luật va chạm — vẫn ném `IllegalStateException` nếu không có merge function và có hai phần tử cùng key.
-7. (i) Common pool dùng chung toàn JVM → một request chạy `parallelStream` nặng làm chậm `parallelStream` của các request khác. (ii) Kích thước pool ≈ số nhân − 1, không co giãn theo tải → nghẽn. (iii) Không có cách ly lỗi/tài nguyên giữa các request. Tác vụ I/O nguy hiểm vì thread common pool bị **chặn** chờ mạng/DB — vài request đủ để cạn pool, mọi `parallelStream` khác đứng hình (fork/join giả định tác vụ CPU-bound, ngắn). Pool riêng (`new ForkJoinPool(n)`) cô lập được nhưng: tốn tài nguyên tạo/quản lý, dễ tạo quá nhiều pool, và vẫn không phải mô hình đúng cho I/O (nên dùng async / thread pool chuyên cho I/O — Module 09).
+7. (i) Common pool dùng chung toàn JVM → một request chạy `parallelStream` nặng làm chậm `parallelStream` của các request khác. (ii) Kích thước pool ≈ số nhân − 1, không co giãn theo tải → nghẽn. (iii) Không có cách ly lỗi/tài nguyên giữa các request. Tác vụ I/O nguy hiểm vì thread common pool bị **chặn** chờ mạng/DB — vài request đủ để cạn pool, mọi `parallelStream` khác đứng hình (fork/join giả định tác vụ CPU-bound, ngắn). Pool riêng (`new ForkJoinPool(n)`) cô lập được nhưng: tốn tài nguyên tạo/quản lý, dễ tạo quá nhiều pool, và vẫn không phải mô hình đúng cho I/O (nên dùng async / thread pool chuyên cho I/O — Module 13).
 
 </details>
 
 ---
 
-*File tiếp theo trong lộ trình: **Module 04 — Exception Handling & I/O** (try-with-resources, custom exception, exception chaining, File I/O cơ bản).*
+*File tiếp theo trong lộ trình: **Module 11 — Exception Handling & I/O** (try-with-resources, custom exception, exception chaining, File I/O cơ bản).*

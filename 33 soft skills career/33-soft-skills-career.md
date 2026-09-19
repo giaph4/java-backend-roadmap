@@ -1,4 +1,4 @@
-# Module 24 — Soft Skills & Career cho Backend Developer
+# Module 33 — Soft Skills & Career cho Backend Developer
 
 > **Mức ưu tiên: 🟢 Bổ sung (nhưng quyết định tốc độ thăng tiến sự nghiệp)**
 > **Vì sao quan trọng:** Đây là module cuối cùng trong lộ trình — 23 module trước đã trang bị đầy đủ kiến thức kỹ thuật từ Java Core tới System Design. Nhưng thực tế công việc, đặc biệt khi làm việc nhóm và muốn thăng tiến từ Junior lên Senior, **kỹ thuật giỏi thôi là chưa đủ**. Khả năng viết tài liệu rõ ràng, review code mang tính xây dựng, dùng Git thành thạo trong môi trường nhiều người, và biết cách trình bày kiến thức khi phỏng vấn — đây là những gì phân biệt 1 Developer "làm được việc" với 1 Developer "được tin tưởng giao trọng trách lớn hơn".
@@ -18,8 +18,9 @@
 7. [Postmortem — học từ sự cố production](#7-postmortem--học-từ-sự-cố-production)
 8. [Agile/Scrum, đọc codebase lớn, học liên tục & sức khỏe nghề nghiệp](#8-agilescrum-đọc-codebase-lớn-học-liên-tục--sức-khỏe-nghề-nghiệp)
 9. [⚠️ Các bẫy hay gặp](#9-các-bẫy-hay-gặp)
-10. [Tổng kết — Bảng ghi nhớ nhanh](#10-tổng-kết--bảng-ghi-nhớ-nhanh)
-11. [Bài tập luyện tập](#11-bài-tập-luyện-tập)
+10. [Career Ladder & Xử lý Incident nâng cao](#10-career-ladder--xử-lý-incident-nâng-cao)
+11. [Tổng kết — Bảng ghi nhớ nhanh](#11-tổng-kết--bảng-ghi-nhớ-nhanh)
+12. [Bài tập luyện tập](#12-bài-tập-luyện-tập)
 
 ---
 
@@ -47,13 +48,13 @@ Mô tả ngắn gọn 1-2 câu: dự án làm gì, phục vụ ai.
 ​```bash
 git clone <repo-url>
 cd project-name
-docker compose up -d          # Khởi động MySQL + Redis (liên hệ Module 20)
+docker compose up -d          # Khởi động MySQL + Redis (liên hệ Module 29)
 mvn clean install
 mvn spring-boot:run
 ​```
 
 ## Cấu trúc dự án
-Giải thích ngắn gọn các package chính (liên hệ Module 13).
+Giải thích ngắn gọn các package chính (liên hệ Module 22).
 
 ## API Documentation
 Link tới Swagger/Postman Collection, hoặc endpoint chính.
@@ -67,7 +68,7 @@ mvn test
 Quy tắc commit message, branch naming, PR process (mục 3).
 ```
 
-### API Documentation — Swagger/OpenAPI (bổ sung thực hành cho Module 14)
+### API Documentation — Swagger/OpenAPI (bổ sung thực hành cho Module 23)
 
 ```xml
 <dependency>
@@ -105,11 +106,11 @@ User user = userRepository.findById(id);
 
 // ✅ Comment CÓ GIÁ TRỊ - giải thích LÝ DO (WHY), không phải HÀNH ĐỘNG (WHAT)
 // Dùng Pessimistic Lock vì đây là luồng Flash Sale, xung đột xảy ra thường xuyên
-// (xem Module 15 - so sánh với Optimistic Lock)
+// (xem Module 24 - so sánh với Optimistic Lock)
 Product product = productRepository.findByIdForUpdate(productId);
 ```
 
-> **Nguyên tắc "Self-documenting Code":** Code tốt nhất là code **TỰ giải thích được** qua tên biến/method rõ ràng (đã học từ Module 01-03) — comment nên dành cho phần **code KHÔNG THỂ tự giải thích** (quyết định kiến trúc, workaround cho bug của thư viện ngoài, lý do chọn thuật toán cụ thể).
+> **Nguyên tắc "Self-documenting Code":** Code tốt nhất là code **TỰ giải thích được** qua tên biến/method rõ ràng (đã học từ Module 01–10) — comment nên dành cho phần **code KHÔNG THỂ tự giải thích** (quyết định kiến trúc, workaround cho bug của thư viện ngoài, lý do chọn thuật toán cụ thể).
 
 ---
 
@@ -128,35 +129,35 @@ Code Review có 3 mục đích chính, theo thứ tự ưu tiên:
 ❌ "Code này sai rồi."
 ❌ "Tại sao lại viết thế này?"
 
-✅ "Ở đây có thể xảy ra N+1 Query Problem (Module 11) nếu `orders` có nhiều hơn 
+✅ "Ở đây có thể xảy ra N+1 Query Problem (Module 20) nếu `orders` có nhiều hơn
    vài chục phần tử - bạn nghĩ sao về việc dùng JOIN FETCH ở đây?"
 
-✅ "Mình thấy phần này khá giống logic ở OrderService.java dòng 45 - có nên 
+✅ "Mình thấy phần này khá giống logic ở OrderService.java dòng 45 - có nên
    tách ra 1 method chung không nhỉ?"
 ```
 
 **Nguyên tắc viết Review Comment tốt:**
 - Đặt câu hỏi thay vì ra lệnh ("Bạn nghĩ sao về..." thay vì "Sửa lại đi")
 - Giải thích **LÝ DO** đằng sau góp ý, không chỉ nói "sai"
-- Phân biệt rõ **must-fix** (bug, bảo mật — Module 23) và **nice-to-have** (style, tối ưu nhỏ) để tác giả biết ưu tiên gì
+- Phân biệt rõ **must-fix** (bug, bảo mật — Module 32) và **nice-to-have** (style, tối ưu nhỏ) để tác giả biết ưu tiên gì
 
 ### Checklist khi REVIEW code người khác
 
 ```
 □ Logic có đúng với yêu cầu nghiệp vụ không?
-□ Có Unit Test đi kèm không? (liên hệ Module 17) Test có che phủ edge case không?
-□ Có vấn đề bảo mật không? (SQL Injection, IDOR - Module 23)
-□ Có vấn đề hiệu năng rõ ràng không? (N+1 Query - Module 11, thiếu Index - Module 10)
-□ Có xử lý Exception hợp lý không? (Module 04, 14)
+□ Có Unit Test đi kèm không? (liên hệ Module 26) Test có che phủ edge case không?
+□ Có vấn đề bảo mật không? (SQL Injection, IDOR - Module 32)
+□ Có vấn đề hiệu năng rõ ràng không? (N+1 Query - Module 20, thiếu Index - Module 18)
+□ Có xử lý Exception hợp lý không? (Module 11 và 23)
 □ Code có tuân thủ convention của dự án không? (naming, package structure)
-□ Có breaking change nào ảnh hưởng API hiện có không? (Module 14 - Versioning)
+□ Có breaking change nào ảnh hưởng API hiện có không? (Module 23 - Versioning)
 ```
 
 ### Checklist khi TỰ REVIEW code trước khi tạo Pull Request
 
 ```
 □ Đã tự đọc lại toàn bộ diff (git diff) TRƯỚC KHI xin review chưa?
-□ Đã chạy Test đầy đủ chưa? (mvn test - Module 17)
+□ Đã chạy Test đầy đủ chưa? (mvn test - Module 26)
 □ Commit message có rõ ràng, mô tả ĐÚNG những gì đã thay đổi không?
 □ PR có quá LỚN không? (PR nhỏ, tập trung 1 mục đích - dễ review hơn NHIỀU)
 □ Có xóa code debug/commented-out code thừa chưa? (System.out.println, TODO cũ...)
@@ -176,7 +177,7 @@ Behavior (Hành vi quan sát được): "...code gọi 3 service khác nhau tu�
                                      không có Circuit Breaker..."
 Impact (Ảnh hưởng thực tế): "...nếu 1 trong 3 service chậm, toàn bộ request
                                có thể bị treo, ảnh hưởng UX của TẤT CẢ user
-                               đang checkout cùng lúc (liên hệ Module 19 -
+                               đang checkout cùng lúc (liên hệ Module 28 -
                                Cascading Failure)."
 ```
 
@@ -205,7 +206,7 @@ Cấu trúc SBI giữ phản hồi **khách quan, bám vào sự việc cụ th�
 
 ## 3. Git Workflow nâng cao
 
-### Branching Strategy (mở rộng từ Module 09)
+### Branching Strategy (mở rộng từ Module 17)
 
 **Git Flow** — mô hình truyền thống, phù hợp dự án có chu kỳ release rõ ràng:
 
@@ -221,7 +222,7 @@ main (production)
   └── hotfix/critical-payment-bug (fix khẩn cấp trực tiếp từ main)
 ```
 
-**Trunk-Based Development** — mô hình hiện đại, phù hợp CI/CD liên tục (Module 20):
+**Trunk-Based Development** — mô hình hiện đại, phù hợp CI/CD liên tục (Module 29):
 
 ```
 main (LUÔN ở trạng thái deploy được)
@@ -234,7 +235,7 @@ main (LUÔN ở trạng thái deploy được)
 |---|---|---|
 | Số lượng branch dài hạn | Nhiều (main, develop, release...) | Chỉ 1 (main) |
 | Thời gian sống của feature branch | Có thể DÀI (vài tuần) | NGẮN (1-2 ngày, khuyến khích merge nhanh) |
-| Phù hợp | Release theo chu kỳ cố định (VD: 2 tuần/lần) | Continuous Deployment (Module 20) |
+| Phù hợp | Release theo chu kỳ cố định (VD: 2 tuần/lần) | Continuous Deployment (Module 29) |
 | Độ phức tạp merge conflict | Cao hơn (branch sống lâu, dễ lệch xa main) | Thấp hơn (merge thường xuyên) |
 
 ### Interactive Rebase — dọn dẹp lịch sử commit trước khi merge
@@ -267,7 +268,7 @@ git bisect good   # hoặc git bisect bad
 git bisect reset   # Kết thúc, quay lại trạng thái ban đầu
 ```
 
-> **Liên hệ Module 08 (Big-O):** Đây chính là ứng dụng thực tế của **Binary Search** (đã học ở Collections/thuật toán) — thay vì kiểm tra tuần tự từng commit (O(n)), Git Bisect tìm ra commit lỗi trong O(log n) bước, cực kỳ hiệu quả khi lịch sử có hàng trăm commit.
+> **Liên hệ Module 08 (Big-O trong Collections):** Đây chính là ứng dụng thực tế của **Binary Search** — thay vì kiểm tra tuần tự từng commit (O(n)), Git Bisect tìm ra commit lỗi trong O(log n) bước, cực kỳ hiệu quả khi lịch sử có hàng trăm commit.
 
 ### Commit Message Convention (Conventional Commits)
 
@@ -306,7 +307,7 @@ git commit -m "test(order): thêm test case cho OrderService"
 1. Trò chuyện giới thiệu (Introduction) - 5-10 phút
 2. Câu hỏi kiến thức nền tảng (Fundamentals) - OOP, Collections, Spring Core...
 3. Coding/Live Coding - giải thuật toán hoặc bài tập nhỏ
-4. System Design (với vị trí Mid/Senior) - Module 22
+4. System Design (với vị trí Mid/Senior) - Module 31
 5. Câu hỏi về dự án đã làm (Project Deep Dive)
 6. Câu hỏi ngược lại từ ứng viên (Questions for interviewer)
 ```
@@ -325,8 +326,8 @@ R - Result (Kết quả): Kết quả đo lường được? (giảm 50% thời 
 ```
 S: Hệ thống Order Service có API lấy danh sách đơn hàng bị chậm khi dữ liệu lớn dần
 T: Mình được giao nhiệm vụ điều tra và tối ưu API này
-A: Mình dùng Actuator + log SQL (Module 21) phát hiện N+1 Query Problem (Module 11) - 
-   mỗi order đang query riêng để lấy thông tin user. Mình sửa bằng JOIN FETCH kết hợp 
+A: Mình dùng Actuator + log SQL (Module 30) phát hiện N+1 Query Problem (Module 20) -
+   mỗi order đang query riêng để lấy thông tin user. Mình sửa bằng JOIN FETCH kết hợp
    DTO Projection để chỉ lấy field cần thiết.
 R: Giảm thời gian response từ 3 giây xuống 200ms, và giảm số lượng query từ 101 xuống còn 1.
 ```
@@ -335,24 +336,24 @@ R: Giảm thời gian response từ 3 giây xuống 200ms, và giảm số lư�
 
 ```
 Java Core/OOP:
-- "equals() và hashCode() liên quan gì tới nhau?" (Module 02.4)
-- "Sự khác biệt giữa Interface và Abstract Class?" (Module 02.2)
+- "equals() và hashCode() liên quan gì tới nhau?" (Module 07)
+- "Sự khác biệt giữa Interface và Abstract Class?" (Module 05)
 
 Collections/JVM:
-- "HashMap hoạt động thế nào bên trong?" (Module 03.1)
-- "Garbage Collection hoạt động ra sao?" (Module 07)
+- "HashMap hoạt động thế nào bên trong?" (Module 08)
+- "Garbage Collection hoạt động ra sao?" (Module 15)
 
 Spring:
-- "Giải thích Bean Lifecycle" (Module 12)
-- "Vì sao @Transactional không hoạt động khi gọi qua this?" (Module 12, bẫy self-invocation)
+- "Giải thích Bean Lifecycle" (Module 21)
+- "Vì sao @Transactional không hoạt động khi gọi qua this?" (Module 21, bẫy self-invocation)
 
 Database:
-- "N+1 Query Problem là gì, cách khắc phục?" (Module 11)
-- "Khác biệt Optimistic và Pessimistic Locking?" (Module 15)
+- "N+1 Query Problem là gì, cách khắc phục?" (Module 20)
+- "Khác biệt Optimistic và Pessimistic Locking?" (Module 24)
 
 System Design:
-- "Thiết kế hệ thống rút gọn URL" (Module 22)
-- "Làm sao xử lý Race Condition khi nhiều người mua cùng 1 sản phẩm giới hạn?" (Module 15, 22)
+- "Thiết kế hệ thống rút gọn URL" (Module 31)
+- "Làm sao xử lý Race Condition khi nhiều người mua cùng 1 sản phẩm giới hạn?" (Module 24 và 31)
 ```
 
 > **Quan sát quan trọng:** Nếu bạn đã đi hết 23 Module trước trong lộ trình này, bạn sẽ nhận ra **hầu hết câu hỏi phỏng vấn Backend phổ biến đều bắt nguồn trực tiếp từ những khái niệm đã học** — đây không phải trùng hợp, mà vì lộ trình được thiết kế bám sát các chủ đề **thực sự được dùng và hỏi trong công việc thực tế**.
@@ -360,7 +361,7 @@ System Design:
 ### Chuẩn bị câu hỏi ngược lại (Questions for interviewer)
 
 ```
-✅ "Team hiện tại đang dùng kiến trúc Monolith hay Microservices? 
+✅ "Team hiện tại đang dùng kiến trúc Monolith hay Microservices?
    Nếu Microservices, quy trình xử lý Distributed Transaction ra sao?"
 ✅ "Quy trình Code Review của team như thế nào?"
 ✅ "Team có áp dụng CI/CD tự động không, pipeline mất bao lâu?"
@@ -381,8 +382,8 @@ System Design:
 - Cần review kỹ TỪNG dòng code
 
 Kỹ năng cần vững:
-- Java Core, OOP, Collections (Module 01-03)
-- Spring Boot cơ bản, REST API (Module 12-14)
+- Java Core, OOP, Collections (Module 01–10)
+- Spring Boot cơ bản, REST API (Module 22–23)
 - Git cơ bản, viết Unit Test đơn giản
 ```
 
@@ -395,9 +396,9 @@ Kỹ năng cần vững:
 - Có thể review code của Junior khác
 
 Kỹ năng cần vững:
-- Toàn bộ Spring ecosystem (Security, Data, Testing - Module 15-18)
-- Hiểu sâu Database (Index, Transaction, N+1 - Module 10, 11)
-- Bắt đầu hiểu Microservices, Caching (Module 18, 19)
+- Toàn bộ Spring ecosystem (Security, Data, Testing - Module 24–26)
+- Hiểu sâu Database (Index, Transaction, N+1 - Module 18, 20)
+- Bắt đầu hiểu Microservices, Caching (Module 27–28)
 ```
 
 ### Senior Developer — "Định hướng kỹ thuật, chịu trách nhiệm quyết định"
@@ -410,12 +411,12 @@ Kỹ năng cần vững:
 - Giao tiếp được với cả kỹ thuật LẪN phi kỹ thuật (Product Manager, Business)
 
 Kỹ năng cần vững:
-- System Design đầy đủ (Module 22), Observability (Module 21)
-- Bảo mật sâu (Module 23), DevOps (Module 20)
+- System Design đầy đủ (Module 31), Observability (Module 30)
+- Bảo mật sâu (Module 32), DevOps (Module 29)
 - Soft Skills: giao tiếp, mentor, đưa ra quyết định có đánh đổi rõ ràng
 ```
 
-> **Điểm mấu chốt phân biệt các cấp độ KHÔNG PHẢI** "biết nhiều công nghệ hơn" một cách đơn thuần — mà là **mức độ TRÁCH NHIỆM và KHẢ NĂNG RA QUYẾT ĐỘC LẬP**. Junior code theo hướng dẫn; Senior tự quyết định NÊN làm gì và giải thích được TẠI SAO, chấp nhận đánh đổi ra sao (đây chính là tinh thần xuyên suốt Module 19, 22 — "không có giải pháp hoàn hảo, chỉ có đánh đổi phù hợp với ngữ cảnh").
+> **Điểm mấu chốt phân biệt các cấp độ KHÔNG PHẢI** "biết nhiều công nghệ hơn" một cách đơn thuần — mà là **mức độ TRÁCH NHIỆM và KHẢ NĂNG RA QUYẾT ĐỘC LẬP**. Junior code theo hướng dẫn; Senior tự quyết định NÊN làm gì và giải thích được TẠI SAO, chấp nhận đánh đổi ra sao (đây chính là tinh thần xuyên suốt Module 28 và 31 — "không có giải pháp hoàn hảo, chỉ có đánh đổi phù hợp với ngữ cảnh").
 
 ---
 
@@ -423,7 +424,7 @@ Kỹ năng cần vững:
 
 ### Viết Technical Proposal / RFC (Request for Comments) trước khi code
 
-Với thay đổi kiến trúc LỚN (VD: chuyển từ Monolith sang Microservices — Module 19), thực hành tốt là viết tài liệu đề xuất TRƯỚC khi bắt tay code:
+Với thay đổi kiến trúc LỚN (VD: chuyển từ Monolith sang Microservices — Module 28), thực hành tốt là viết tài liệu đề xuất TRƯỚC khi bắt tay code:
 
 ```markdown
 # RFC: Tách Payment Service ra khỏi Monolith
@@ -432,16 +433,16 @@ Với thay đổi kiến trúc LỚN (VD: chuyển từ Monolith sang Microservi
 Payment logic đang nằm chung với Order logic, khó scale riêng khi traffic thanh toán tăng đột biến.
 
 ## Đề xuất
-Tách thành Payment Service riêng, giao tiếp qua REST + Message Queue (Module 19).
+Tách thành Payment Service riêng, giao tiếp qua REST + Message Queue (Module 28).
 
 ## Đánh đổi (Trade-offs)
 - Ưu điểm: Scale độc lập, giảm blast radius khi có lỗi
-- Nhược điểm: Thêm độ phức tạp Distributed Transaction (Saga Pattern - Module 19)
+- Nhược điểm: Thêm độ phức tạp Distributed Transaction (Saga Pattern - Module 28)
 
 ## Kế hoạch triển khai
 1. Tuần 1-2: Tách Database, giữ Synchronous call tạm thời
 2. Tuần 3: Chuyển sang Async qua Message Queue
-3. Tuần 4: Thêm Circuit Breaker, monitoring (Module 21)
+3. Tuần 4: Thêm Circuit Breaker, monitoring (Module 30)
 ```
 
 **Lợi ích:** Cho phép cả team **góp ý TRƯỚC KHI** đầu tư công sức code — tránh tình huống code xong rồi mới phát hiện hướng đi sai, phải làm lại từ đầu.
@@ -465,9 +466,9 @@ Dùng PostgreSQL làm Database chính cho Order Service, không dùng MongoDB.
 
 ## Hệ quả (Consequences)
 - Tích cực: Tận dụng được Transaction ACID có sẵn, JOIN dữ liệu quan hệ dễ dàng
-  (liên hệ Module 10 - so sánh RDBMS vs NoSQL)
+  (liên hệ Module 19 - so sánh RDBMS vs NoSQL)
 - Tiêu cực: Khó scale ghi theo chiều ngang bằng MongoDB Sharding tự nhiên -
-  nếu tương lai cần, sẽ cần tự triển khai Database Sharding (Module 22)
+  nếu tương lai cần, sẽ cần tự triển khai Database Sharding (Module 31)
 - Đã cân nhắc nhưng KHÔNG chọn: MongoDB (phù hợp hơn cho Product Catalog,
   không phù hợp cho luồng Payment cần Strong Consistency)
 ```
@@ -503,7 +504,7 @@ Dùng PostgreSQL làm Database chính cho Order Service, không dùng MongoDB.
 
 ### Vì sao mỗi sự cố production nghiêm trọng cần 1 bản Postmortem
 
-Module 21 (Observability) đã trang bị công cụ để **phát hiện và điều tra** sự cố (Logs/Metrics/Traces, Distributed Tracing). **Postmortem** (hay Incident Report) là bước tiếp theo — tài liệu hóa **những gì đã xảy ra và học được gì**, viết SAU KHI sự cố đã được khắc phục, với tinh thần cốt lõi: **Blameless** (không quy trách nhiệm cá nhân) — tập trung vào **hệ thống và quy trình** đã cho phép lỗi xảy ra, không phải "ai đã gây ra lỗi".
+Module 30 (Observability) đã trang bị công cụ để **phát hiện và điều tra** sự cố (Logs/Metrics/Traces, Distributed Tracing). **Postmortem** (hay Incident Report) là bước tiếp theo — tài liệu hóa **những gì đã xảy ra và học được gì**, viết SAU KHI sự cố đã được khắc phục, với tinh thần cốt lõi: **Blameless** (không quy trách nhiệm cá nhân) — tập trung vào **hệ thống và quy trình** đã cho phép lỗi xảy ra, không phải "ai đã gây ra lỗi".
 
 ```markdown
 # Postmortem: Sự cố Payment Service downtime 23 phút (2026-04-02)
@@ -514,7 +515,7 @@ giao dịch thanh toán bị timeout. Nguyên nhân gốc: HikariCP Connection P
 do 1 migration mới thêm Index nhưng quên đóng Connection trong luồng batch job.
 
 ## Dòng thời gian (Timeline)
-- 14:05 - Alert "HighErrorRate" kích hoạt (liên hệ Module 21)
+- 14:05 - Alert "HighErrorRate" kích hoạt (liên hệ Module 30)
 - 14:08 - On-call engineer bắt đầu điều tra qua Grafana Dashboard
 - 14:15 - Xác định nguyên nhân qua Distributed Tracing: Connection Pool đầy
 - 14:22 - Restart Payment Service instance để giải phóng connection
@@ -526,7 +527,7 @@ không đóng Connection đúng cách trong nhánh xử lý lỗi (thiếu try-w
 
 ## Tác động (Impact)
 - ~1,200 giao dịch timeout, ~150 giao dịch khách hàng phải thử lại thủ công
-- Không có giao dịch nào bị mất dữ liệu/trừ tiền sai (nhờ Idempotency Key - Module 14)
+- Không có giao dịch nào bị mất dữ liệu/trừ tiền sai (nhờ Idempotency Key - Module 23)
 
 ## Hành động khắc phục (Action Items)
 □ [P0] Sửa batch job dùng try-with-resources cho Connection - Assignee: A - Deadline: 2026-04-03
@@ -542,7 +543,7 @@ không đóng Connection đúng cách trong nhánh xử lý lỗi (thiếu try-w
 
 ✅ "Code review process hiện tại chưa có checklist bắt buộc kiểm tra resource
    management cho code JDBC thủ công -> cần thêm mục này vào checklist Code
-   Review (Module 24, mục 2) để ngăn lỗi tương tự."
+   Review (Module 33, mục 2) để ngăn lỗi tương tự."
    (tập trung vào QUY TRÌNH có thể cải thiện, không phải cá nhân)
 ```
 
@@ -552,7 +553,7 @@ không đóng Connection đúng cách trong nhánh xử lý lỗi (thiếu try-w
 | Hành động khắc phục | Tập trung sửa QUY TRÌNH/hệ thống | Dừng lại ở việc "nhắc nhở" cá nhân, lỗi tương tự dễ lặp lại |
 | Tác động dài hạn | Hệ thống ngày càng bền vững (mỗi sự cố là 1 bài học) | Sự cố tương tự có xu hướng lặp lại |
 
-> **Liên hệ trực tiếp Module 21 (Error Budget):** Postmortem chính là hoạt động cụ thể hóa việc "học từ Error Budget đã tiêu" — không chỉ dừng ở việc dừng release tạm thời, mà còn tài liệu hóa đầy đủ để tránh lặp lại đúng loại sự cố đó trong tương lai. Đây cũng là kỹ năng thể hiện rõ tư duy Senior (mục 5) — nhìn sự cố ở góc độ hệ thống/quy trình, không phải cá nhân.
+> **Liên hệ trực tiếp Module 30 (Error Budget):** Postmortem chính là hoạt động cụ thể hóa việc "học từ Error Budget đã tiêu" — không chỉ dừng ở việc dừng release tạm thời, mà còn tài liệu hóa đầy đủ để tránh lặp lại đúng loại sự cố đó trong tương lai. Đây cũng là kỹ năng thể hiện rõ tư duy Senior (mục 5) — nhìn sự cố ở góc độ hệ thống/quy trình, không phải cá nhân.
 
 ---
 
@@ -694,7 +695,62 @@ Ngành công nghệ có tốc độ ra công cụ/framework mới rất nhanh �
 
 ---
 
-## 10. Tổng kết — Bảng ghi nhớ nhanh
+## 10. Career Ladder & Xử lý Incident nâng cao
+
+### Career ladder: tăng scope, không chỉ tăng độ khó code
+
+Level cao hơn thường thể hiện qua phạm vi và tính bền vững của tác động:
+
+| Cấp độ tham khảo | Dấu hiệu chính |
+|---|---|
+| Junior | Hoàn thành task có hướng dẫn, hỏi sớm, test và ghi lại điều học được |
+| Mid | Sở hữu feature end-to-end, xử lý trade-off, vận hành sau release |
+| Senior | Dẫn dắt bài toán mơ hồ xuyên team, giảm rủi ro, nâng năng lực người khác |
+| Staff+ | Định hướng kỹ thuật nhiều team, tạo cơ chế/standard có adoption đo được |
+
+Title khác nhau giữa công ty; dùng ladder của nơi làm việc làm contract. Promotion packet nên chứng minh hành vi ở level kế tiếp lặp lại theo thời gian, không chỉ một dự án “anh hùng”.
+
+### Brag document — nhật ký bằng chứng, không phải khoe khoang
+
+Mỗi tuần/tháng ghi ngắn: bối cảnh, hành động, kết quả định lượng, trade-off, feedback, người cùng đóng góp và artifact (PR/design doc/dashboard). Nó giúp self-review chính xác, nhận ra kỹ năng còn thiếu và tránh recency bias.
+
+> ⚠️ Không nhận hết công lao nhóm. Nêu rõ phần mình sở hữu và cách mình làm người khác thành công; ở level cao, leverage và mentoring thường quan trọng hơn số dòng code.
+
+### Kế hoạch phát triển theo vòng phản hồi
+
+Chọn một năng lực cần nâng trong 6–8 tuần, định nghĩa hành vi quan sát được, tìm dự án thật để luyện, xin feedback sớm và lưu evidence. Ví dụ thay “học system design” bằng “viết design doc cho luồng checkout, review với hai senior, triển khai một decision và đo latency/error sau release”.
+
+### Sơ đồ vòng lặp phát triển nghề nghiệp
+
+```mermaid
+flowchart LR
+    G["Chọn năng lực và hành vi quan sát được"] --> O["Nhận ownership trong dự án thật"]
+    O --> F["Xin feedback sớm từ peer/manager/stakeholder"]
+    F --> E["Lưu evidence: impact, trade-off, artifact"]
+    E --> R["Reflection: giữ gì, đổi gì, còn thiếu gì"]
+    R --> G
+```
+
+Học chỉ chuyển thành năng lực khi đi qua vòng **áp dụng → phản hồi → điều chỉnh**. Course/chứng chỉ có thể cung cấp input, nhưng promotion thường dựa trên hành vi và tác động lặp lại trong bối cảnh thật.
+
+### Flow giao tiếp khi production incident
+
+```mermaid
+flowchart TD
+    D["Phát hiện incident"] --> I["Chỉ định incident commander và owner kỹ thuật"]
+    I --> S["Nêu impact, phạm vi, thời điểm, điều đã biết/chưa biết"]
+    S --> M["Mitigate trước: rollback, disable, shed load"]
+    M --> U["Cập nhật theo nhịp cố định, một nguồn sự thật"]
+    U --> V{"Hệ thống ổn định?"}
+    V -- "Chưa" --> M
+    V -- "Rồi" --> P["Postmortem không đổ lỗi và action có owner/deadline"]
+```
+
+Trong incident, thông tin tốt phải ngắn, có timestamp và phân biệt fact với hypothesis. Người xử lý kỹ thuật không nên đồng thời trả lời mọi kênh; tách vai trò giúp giảm cognitive load và tránh thông điệp mâu thuẫn.
+
+> ⚠️ Đừng hứa thời gian khôi phục khi chưa có bằng chứng. Nói rõ mốc cập nhật tiếp theo đáng tin hơn một ETA đoán mò.
+
+## 11. Tổng kết — Bảng ghi nhớ nhanh
 
 | Khái niệm | Ghi nhớ nhanh |
 |---|---|
@@ -704,7 +760,7 @@ Ngành công nghệ có tốc độ ra công cụ/framework mới rất nhanh �
 | SBI Feedback | Situation-Behavior-Impact — phản hồi bám sự việc, không quy kết năng lực |
 | Disagree and Commit | Tranh luận rõ ràng, nhưng biết khi nào đồng thuận tạm thời để không chặn tiến độ |
 | PR nhỏ | Dễ review hơn PR lớn — luôn ưu tiên chia nhỏ |
-| Git Flow vs Trunk-Based | Release theo chu kỳ vs Continuous Deployment (Module 20) |
+| Git Flow vs Trunk-Based | Release theo chu kỳ vs Continuous Deployment (Module 29) |
 | git bisect | Binary Search tìm commit lỗi — O(log n) thay vì kiểm tra từng commit |
 | STAR Method | Situation - Task - Action - Result — trả lời câu hỏi dự án trong phỏng vấn |
 | Junior → Senior | Không chỉ "code giỏi hơn" — là mức độ TRÁCH NHIỆM và khả năng RA QUYẾT ĐỊNH có đánh đổi |
@@ -721,7 +777,7 @@ Ngành công nghệ có tốc độ ra công cụ/framework mới rất nhanh �
 
 ---
 
-## 11. Bài tập luyện tập
+## 12. Bài tập luyện tập
 
 ### Phần A — Trắc nghiệm nhận định (Đúng/Sai + giải thích)
 
@@ -738,7 +794,7 @@ Ngành công nghệ có tốc độ ra công cụ/framework mới rất nhanh �
 
 ### Phần B — Bài tập thực hành (6 bài, không cần code)
 
-**Bài 1:** Viết 1 đoạn README.md ngắn gọn (theo cấu trúc ở mục 1) cho 1 dự án giả định "Hệ thống quản lý thư viện" (Library Management System) mà bạn đã thiết kế ở Module 11-13.
+**Bài 1:** Viết 1 đoạn README.md ngắn gọn (theo cấu trúc ở mục 1) cho 1 dự án giả định "Hệ thống quản lý thư viện" (Library Management System) mà bạn đã thiết kế ở Module 20–22.
 
 **Bài 2:** Viết 3 Code Review Comment mang tính xây dựng (theo nguyên tắc ở mục 2) cho đoạn code sau (giả định bạn đang review PR của đồng nghiệp):
 ```java
@@ -747,13 +803,13 @@ public List<Order> getOrders() {
     return orderRepository.findAll();
 }
 ```
-*(Gợi ý: liên hệ tới các vấn đề đã học ở Module 11, 14 — DTO, Pagination.)*
+*(Gợi ý: liên hệ tới các vấn đề đã học ở Module 20 và 23 — DTO, Pagination.)*
 
 **Bài 3:** Áp dụng STAR Method, viết 1 câu trả lời mẫu (bằng tiếng Việt) cho câu hỏi phỏng vấn: "Hãy kể về 1 lần bạn phải học 1 công nghệ mới để hoàn thành công việc" — dựa trên trải nghiệm học tập của chính bạn qua 24 Module này.
 
 **Bài 4:** Viết 5 commit message theo chuẩn Conventional Commits (mục 3) cho 1 chuỗi công việc: (a) thêm tính năng tìm kiếm sản phẩm, (b) sửa lỗi N+1 Query ở API lấy đơn hàng, (c) thêm Unit Test cho OrderService, (d) cập nhật tài liệu API, (e) nâng cấp version Spring Boot.
 
-**Bài 5:** Viết 1 bản RFC/Technical Proposal ngắn gọn (theo cấu trúc ở mục 6) đề xuất thêm Redis Cache (Module 18) cho API "lấy danh sách sản phẩm" đang bị chậm do lượng truy cập cao — bao gồm rõ phần Đánh đổi (Trade-off).
+**Bài 5:** Viết 1 bản RFC/Technical Proposal ngắn gọn (theo cấu trúc ở mục 6) đề xuất thêm Redis Cache (Module 27) cho API "lấy danh sách sản phẩm" đang bị chậm do lượng truy cập cao — bao gồm rõ phần Đánh đổi (Trade-off).
 
 **Bài 6:** Viết 1 bản Postmortem ngắn gọn (theo cấu trúc ở mục 7) cho tình huống giả định: "API `POST /orders` trả về lỗi 500 hàng loạt trong 10 phút do 1 Deploy mới vô tình xóa mất Index trên cột `orders.user_id`, khiến query chậm bất thường và Connection Pool bị cạn kiệt." Đảm bảo tuân thủ nguyên tắc Blameless.
 
@@ -766,7 +822,7 @@ public List<Order> getOrders() {
 2. **Sai.** TUYỆT ĐỐI không `force push` lên branch chung (main/develop) — sẽ phá vỡ lịch sử của mọi người đang làm việc trên đó, chỉ an toàn trên branch riêng của bạn, chưa chia sẻ.
 3. **Sai.** Mục đích quan trọng NHẤT là đảm bảo tính đúng đắn (logic nghiệp vụ) và chia sẻ kiến thức — lỗi style/chính tả là thứ yếu, thường được tự động hóa bằng linter/formatter.
 4. **Đúng.** STAR Method là khung trả lời rất hiệu quả, giúp câu trả lời có cấu trúc rõ ràng và đầy đủ thông tin nhà tuyển dụng cần.
-5. **Đúng.** Trunk-Based Development với branch ngắn ngày, merge liên tục phù hợp trực tiếp với triết lý Continuous Deployment (Module 20).
+5. **Đúng.** Trunk-Based Development với branch ngắn ngày, merge liên tục phù hợp trực tiếp với triết lý Continuous Deployment (Module 29).
 6. **Sai.** Khác biệt cốt lõi nằm ở mức độ TRÁCH NHIỆM, khả năng RA QUYẾT ĐỊNH có đánh đổi, và giao tiếp — không chỉ đơn thuần "biết nhiều công nghệ".
 7. **Sai.** Ngược lại — PR càng lớn càng KHÓ review kỹ (reviewer dễ "lướt qua" khi quá nhiều thay đổi), nên luôn ưu tiên chia PR nhỏ, tập trung.
 8. **Đúng.** Đây chính là nguyên lý hoạt động của git bisect — tìm commit lỗi trong O(log n) bước thay vì kiểm tra tuần tự O(n).
@@ -824,20 +880,20 @@ mvn test
 <summary><b>Đáp án Bài 2</b></summary>
 
 ```
-Comment 1 (liên hệ Module 14):
-"API này đang trả về TOÀN BỘ danh sách order mà không có Pagination - nếu dữ liệu 
-tăng lên hàng chục nghìn record, response sẽ rất nặng và chậm. Bạn nghĩ sao về việc 
+Comment 1 (liên hệ Module 23):
+"API này đang trả về TOÀN BỘ danh sách order mà không có Pagination - nếu dữ liệu
+tăng lên hàng chục nghìn record, response sẽ rất nặng và chậm. Bạn nghĩ sao về việc
 thêm `Pageable` parameter ở đây (giống pattern mình đã dùng ở ProductController)?"
 
-Comment 2 (liên hệ Module 11):
-"Mình thấy method này trả trực tiếp Entity `Order` thay vì DTO - có thể sẽ gặp 
-LazyInitializationException nếu Order có quan hệ LAZY (VD: user, orderItems) khi 
-serialize ra JSON ngoài phạm vi transaction. Ngoài ra, việc này cũng lộ hết field 
+Comment 2 (liên hệ Module 20):
+"Mình thấy method này trả trực tiếp Entity `Order` thay vì DTO - có thể sẽ gặp
+LazyInitializationException nếu Order có quan hệ LAZY (VD: user, orderItems) khi
+serialize ra JSON ngoài phạm vi transaction. Ngoài ra, việc này cũng lộ hết field
 nội bộ của Entity ra ngoài API. Có nên đổi sang OrderResponse DTO không?"
 
-Comment 3 (liên hệ Module 16 - Broken Access Control):
-"Câu hỏi nhỏ: API này có filter theo user đang đăng nhập không, hay đang trả về 
-TẤT CẢ order của MỌI user? Nếu là API cho user thường (không phải admin), có thể 
+Comment 3 (liên hệ Module 25 - Broken Access Control):
+"Câu hỏi nhỏ: API này có filter theo user đang đăng nhập không, hay đang trả về
+TẤT CẢ order của MỌI user? Nếu là API cho user thường (không phải admin), có thể
 cần thêm điều kiện `WHERE user_id = :currentUserId` để tránh lộ dữ liệu của user khác."
 ```
 
@@ -851,22 +907,22 @@ Câu hỏi: "Hãy kể về 1 lần bạn phải học 1 công nghệ mới đ�
 
 Trả lời (STAR):
 
-Situation: Khi bắt đầu tìm hiểu sâu về Backend Java, mình nhận ra kiến thức về 
-Microservices và các vấn đề của hệ phân tán (Distributed Transaction, Circuit 
+Situation: Khi bắt đầu tìm hiểu sâu về Backend Java, mình nhận ra kiến thức về
+Microservices và các vấn đề của hệ phân tán (Distributed Transaction, Circuit
 Breaker) là những khái niệm hoàn toàn mới so với những gì mình học ở Monolith.
 
-Task: Mình đặt mục tiêu phải hiểu được KHI NÀO nên và không nên dùng Microservices, 
+Task: Mình đặt mục tiêu phải hiểu được KHI NÀO nên và không nên dùng Microservices,
 không chỉ học thuộc các công cụ như Resilience4j hay Saga Pattern một cách máy móc.
 
-Action: Mình học theo lộ trình có hệ thống - bắt đầu từ việc hiểu vấn đề gốc rễ 
-(vì sao Monolith gặp giới hạn khi scale), rồi mới học các giải pháp cụ thể (Service 
-Discovery, API Gateway, Circuit Breaker). Mình đặc biệt chú ý tới phần "đánh đổi" 
-(trade-off) của mỗi giải pháp - ví dụ Saga Pattern giải quyết được Distributed 
+Action: Mình học theo lộ trình có hệ thống - bắt đầu từ việc hiểu vấn đề gốc rễ
+(vì sao Monolith gặp giới hạn khi scale), rồi mới học các giải pháp cụ thể (Service
+Discovery, API Gateway, Circuit Breaker). Mình đặc biệt chú ý tới phần "đánh đổi"
+(trade-off) của mỗi giải pháp - ví dụ Saga Pattern giải quyết được Distributed
 Transaction nhưng đánh đổi bằng Eventual Consistency thay vì Strong Consistency.
 
-Result: Sau khi học xong, mình không chỉ nhớ tên các pattern mà còn có thể tự phân 
-tích: với 1 bài toán cụ thể, nên chọn Choreography hay Orchestration Saga, và giải 
-thích được VÌ SAO - đây chính là điều mình nghĩ nhà tuyển dụng thực sự muốn thấy 
+Result: Sau khi học xong, mình không chỉ nhớ tên các pattern mà còn có thể tự phân
+tích: với 1 bài toán cụ thể, nên chọn Choreography hay Orchestration Saga, và giải
+thích được VÌ SAO - đây chính là điều mình nghĩ nhà tuyển dụng thực sự muốn thấy
 ở một ứng viên, thay vì chỉ liệt kê tên công nghệ.
 ```
 
@@ -892,9 +948,9 @@ git commit -m "chore(deps): nâng cấp Spring Boot lên phiên bản 3.3.0"
 # RFC: Thêm Redis Cache cho API "Lấy danh sách sản phẩm"
 
 ## Vấn đề hiện tại
-API `GET /api/v1/products` đang có độ trễ trung bình 800ms (P95: 2.5s) do lượng 
-truy cập cao (khoảng 5,000 request/phút vào giờ cao điểm), trong khi dữ liệu 
-sản phẩm chỉ thay đổi vài lần/ngày (read-heavy, write-rare - phù hợp lý tưởng 
+API `GET /api/v1/products` đang có độ trễ trung bình 800ms (P95: 2.5s) do lượng
+truy cập cao (khoảng 5,000 request/phút vào giờ cao điểm), trong khi dữ liệu
+sản phẩm chỉ thay đổi vài lần/ngày (read-heavy, write-rare - phù hợp lý tưởng
 để áp dụng Caching).
 
 ## Đề xuất
@@ -904,19 +960,19 @@ Thêm Redis Cache theo pattern Cache-Aside (@Cacheable) cho API này, với:
 - Thêm cơ chế chống Cache Penetration (cache cả kết quả rỗng, TTL ngắn hơn - 1 phút)
 
 ## Đánh đổi (Trade-offs)
-- Ưu điểm: Giảm tải Database đáng kể (ước tính giảm 90% số query trực tiếp), 
+- Ưu điểm: Giảm tải Database đáng kể (ước tính giảm 90% số query trực tiếp),
   giảm độ trễ response xuống dưới 50ms cho cache hit
-- Nhược điểm: 
+- Nhược điểm:
   + Thêm 1 thành phần hạ tầng cần vận hành/giám sát (Redis server)
-  + Có độ trễ nhỏ giữa lúc Admin cập nhật sản phẩm và lúc TẤT CẢ user thấy 
-    thay đổi (nếu không evict kịp thời) - chấp nhận được vì đây không phải 
+  + Có độ trễ nhỏ giữa lúc Admin cập nhật sản phẩm và lúc TẤT CẢ user thấy
+    thay đổi (nếu không evict kịp thời) - chấp nhận được vì đây không phải
     dữ liệu cần Strong Consistency tuyệt đối
 
 ## Kế hoạch triển khai
 1. Ngày 1: Thêm dependency spring-boot-starter-data-redis, cấu hình kết nối
 2. Ngày 2: Áp dụng @Cacheable/@CacheEvict cho ProductService, viết Unit Test
-3. Ngày 3: Deploy lên môi trường staging, đo lại hiệu năng thực tế, giám sát 
-   qua Grafana Dashboard (liên hệ Module 21) trước khi lên production
+3. Ngày 3: Deploy lên môi trường staging, đo lại hiệu năng thực tế, giám sát
+   qua Grafana Dashboard (liên hệ Module 30) trước khi lên production
 ```
 
 </details>
@@ -942,7 +998,7 @@ khiến query bị chậm bất thường và Connection Pool cạn kiệt theo 
 - 09:50 - Chạy migration khẩn cấp tạo lại Index, hệ thống phục hồi hoàn toàn
 
 ## Nguyên nhân gốc rễ (Root Cause)
-Migration script (Flyway - Module 15) chứa lệnh `DROP INDEX idx_orders_user_id`
+Migration script (Flyway - Module 24) chứa lệnh `DROP INDEX idx_orders_user_id`
 để chuẩn bị đổi cấu trúc cột, nhưng file migration TIẾP THEO (dự kiến tạo lại
 Index mới) đã bị bỏ sót trong lần deploy này do lỗi thao tác merge branch.
 
@@ -972,7 +1028,7 @@ sung lớp kiểm tra tự động, thay vì chỉ nhắc nhở cá nhân cẩn 
 
 **🎉 Chúc mừng Pho đã hoàn thành TOÀN BỘ 24 Module trong lộ trình Java Backend!**
 
-Từ Java Core (biến, kiểu dữ liệu) ở Module 01, qua OOP, Collections, Spring Framework, Microservices, System Design, Bảo mật, cho tới Soft Skills ở Module 24 này — bạn đã đi qua một lộ trình đầy đủ tương đương kiến thức của 1 Backend Developer sẵn sàng cho công việc thực tế ở mức Junior tới Mid-level, và có nền tảng vững để tiếp tục phát triển lên Senior.
+Từ Java Core (biến, kiểu dữ liệu) ở Module 01, qua OOP, Collections, Spring Framework, Microservices, System Design, Bảo mật, cho tới Soft Skills ở Module 33 này — bạn đã đi qua một lộ trình đầy đủ tương đương kiến thức của 1 Backend Developer sẵn sàng cho công việc thực tế ở mức Junior tới Mid-level, và có nền tảng vững để tiếp tục phát triển lên Senior.
 
 Gợi ý bước tiếp theo (không nằm trong 24 Module, tùy bạn lựa chọn):
 - Áp dụng toàn bộ kiến thức vào 1 đồ án/dự án cá nhân hoàn chỉnh (end-to-end)

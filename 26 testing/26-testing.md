@@ -1,7 +1,7 @@
-# Module 17 — Testing
+# Module 26 — Testing
 
 > **Mức ưu tiên: 🔴 Cao**
-> **Vì sao quan trọng:** Code không có test là code không ai dám sửa — mỗi lần thay đổi đều lo sợ "phá vỡ cái gì đó". Testing không chỉ là "viết thêm vài file cho có" — nó là kỹ năng thiết kế code dễ test (liên hệ trực tiếp Constructor Injection ở Module 12), là "lưới an toàn" khi refactor, và là tiêu chuẩn bắt buộc trong quy trình CI/CD chuyên nghiệp. Đây cũng là phần **code review soi kỹ nhất** — 1 PR không có test đi kèm thường bị từ chối ngay ở các công ty có văn hóa engineering tốt.
+> **Vì sao quan trọng:** Code không có test là code không ai dám sửa — mỗi lần thay đổi đều lo sợ "phá vỡ cái gì đó". Testing không chỉ là "viết thêm vài file cho có" — nó là kỹ năng thiết kế code dễ test (liên hệ trực tiếp Constructor Injection ở Module 21), là "lưới an toàn" khi refactor, và là tiêu chuẩn bắt buộc trong quy trình CI/CD chuyên nghiệp. Đây cũng là phần **code review soi kỹ nhất** — 1 PR không có test đi kèm thường bị từ chối ngay ở các công ty có văn hóa engineering tốt.
 
 > **Phạm vi bài này:** Tập trung vào kỹ thuật viết và tổ chức test trong 1 ứng dụng Spring Boot (Unit/Integration/Slice Test, Mockito, Testcontainers). Không đi sâu vào CI/CD pipeline configuration (Jenkins/GitHub Actions cụ thể — thuộc phạm vi DevOps), hay Performance/Load Testing (JMeter/Gatling — công cụ khác, mục tiêu khác với Functional Testing ở đây).
 
@@ -23,8 +23,9 @@
 12. [Mutation Testing — đo lường THẬT chất lượng test](#12-mutation-testing)
 13. [Flaky Test — test "lúc pass lúc fail"](#13-flaky-test--test-lúc-pass-lúc-fail)
 14. [⚠️ Các bẫy hay gặp](#14-các-bẫy-hay-gặp)
-15. [Tổng kết — Bảng ghi nhớ nhanh](#15-tổng-kết--bảng-ghi-nhớ-nhanh)
-16. [Bài tập luyện tập](#16-bài-tập-luyện-tập)
+15. [Kỹ thuật kiểm thử nâng cao](#15-kỹ-thuật-kiểm-thử-nâng-cao)
+16. [Tổng kết — Bảng ghi nhớ nhanh](#16-tổng-kết--bảng-ghi-nhớ-nhanh)
+17. [Bài tập luyện tập](#17-bài-tập-luyện-tập)
 
 ---
 
@@ -516,7 +517,7 @@ class InventoryServiceTest {
 }
 ```
 
-> **Liên hệ Module 12:** Đây chính là lý do **Constructor Injection được khuyến nghị mạnh mẽ** — nhờ đó, `InventoryService` có thể được `new` trực tiếp (hoặc dùng `@InjectMocks`) với mock dependency, **không cần khởi động toàn bộ Spring Context** — giúp Unit Test chạy trong mili-giây thay vì giây.
+> **Liên hệ Module 21:** Đây chính là lý do **Constructor Injection được khuyến nghị mạnh mẽ** — nhờ đó, `InventoryService` có thể được `new` trực tiếp (hoặc dùng `@InjectMocks`) với mock dependency, **không cần khởi động toàn bộ Spring Context** — giúp Unit Test chạy trong mili-giây thay vì giây.
 
 ---
 
@@ -632,7 +633,7 @@ class OrderControllerTest {
 
 ## 8. Testing Spring Security
 
-Khi Controller có `@PreAuthorize`/được bảo vệ bởi `SecurityFilterChain` (Module 16), test `MockMvc` thông thường (mục 7) sẽ **luôn nhận `401/403`** vì request test không có Authentication nào cả. Module `spring-security-test` cung cấp annotation để giả lập user đã đăng nhập, không cần verify JWT thật.
+Khi Controller có `@PreAuthorize`/được bảo vệ bởi `SecurityFilterChain` (Module 25), test `MockMvc` thông thường (mục 7) sẽ **luôn nhận `401/403`** vì request test không có Authentication nào cả. Module `spring-security-test` cung cấp annotation để giả lập user đã đăng nhập, không cần verify JWT thật.
 
 ```xml
 <dependency>
@@ -676,7 +677,7 @@ class OrderControllerSecurityTest {
 }
 ```
 
-⚠️ **Lưu ý quan trọng:** `roles = "USER"` trong `@WithMockUser` tự động thêm tiền tố `ROLE_` giống hệt cơ chế `hasRole()` đã học ở Module 16 — tương đương `authorities = "ROLE_USER"`. Nếu ứng dụng dùng authority không theo chuẩn `ROLE_*` (permission-based), phải dùng `authorities = "..."` trực tiếp thay vì `roles`.
+⚠️ **Lưu ý quan trọng:** `roles = "USER"` trong `@WithMockUser` tự động thêm tiền tố `ROLE_` giống hệt cơ chế `hasRole()` đã học ở Module 25 — tương đương `authorities = "ROLE_USER"`. Nếu ứng dụng dùng authority không theo chuẩn `ROLE_*` (permission-based), phải dùng `authorities = "..."` trực tiếp thay vì `roles`.
 
 ### @WithUserDetails — khi cần test đúng với UserDetailsService thật
 
@@ -944,7 +945,59 @@ void testEligibility() {
 
 ---
 
-## 15. Tổng kết — Bảng ghi nhớ nhanh
+## 15. Kỹ thuật kiểm thử nâng cao
+
+### Property-based testing — kiểm tra quy luật thay vì vài ví dụ
+
+Example-based test chọn vài input cụ thể; property-based test sinh nhiều input và thu nhỏ case lỗi. Phù hợp cho parser, mapping, money, sorting và invariant:
+
+- encode rồi decode giữ nguyên giá trị hợp lệ;
+- sort giữ nguyên multiset và kết quả có thứ tự;
+- tổng tiền không âm sau mọi tổ hợp discount hợp lệ;
+- idempotent operation chạy hai lần cho cùng kết quả quan sát được.
+
+> ⚠️ Property sai chỉ tạo cảm giác kiểm thử mạnh. Viết invariant từ contract nghiệp vụ, cố định seed khi tái hiện lỗi và giữ generator trong miền dữ liệu hợp lệ trừ khi đang test validation.
+
+### Consumer-driven contract test ở ranh giới service
+
+Mock unit test có thể xanh dù provider đổi JSON/status. Contract test ghi expectation mà consumer thật sự dùng, verify trên provider trong CI, nhưng không thay thế end-to-end cho authentication, network và deployment config.
+
+Pyramid thực tế: nhiều unit/property test, ít slice/integration với Testcontainers, contract test cho boundary, và số nhỏ E2E critical path. Khi test flaky, quarantine có deadline + owner; retry vô hạn chỉ che race condition và làm mất niềm tin pipeline.
+
+### Mô hình chọn test theo rủi ro và feedback time
+
+```mermaid
+flowchart TD
+    R["Một hành vi cần kiểm chứng"] --> Q{"Logic thuần, không I/O?"}
+    Q -- "Có" --> U["Unit / property-based test"]
+    Q -- "Không" --> B{"Boundary nào có rủi ro?"}
+    B -->|"JPA / SQL"| J["@DataJpaTest + database thật/Testcontainers"]
+    B -->|"HTTP mapping / security"| M["MockMvc / slice test"]
+    B -->|"Service ngoài"| C["Contract test + stub"]
+    B -->|"Nhiều component phối hợp"| I["Integration test"]
+    U --> E["Ít E2E cho critical journey"]
+    J --> E
+    M --> E
+    C --> E
+    I --> E
+```
+
+Test type không được chọn theo annotation quen tay mà theo failure mode cần phát hiện. Mock không bắt được SQL dialect/schema; E2E bắt nhiều lỗi nhưng chậm và khó chẩn đoán; contract test giữ boundary mà không cần dựng toàn hệ thống.
+
+### Flow xử lý flaky test
+
+```mermaid
+flowchart LR
+    F["Test thất bại không ổn định"] --> R["Lưu seed, log, timing và môi trường"]
+    R --> C["Phân loại race, shared state, time, network hoặc order"]
+    C --> X["Tạo reproduction nhỏ nhất"]
+    X --> P["Sửa root cause và thêm assertion"]
+    P --> V["Chạy lặp / stress trong CI"]
+```
+
+Retry chỉ là dữ liệu chẩn đoán tạm thời; nếu retry biến đỏ thành xanh mà pipeline vẫn pass, hệ thống đang học cách bỏ qua tín hiệu.
+
+## 16. Tổng kết — Bảng ghi nhớ nhanh
 
 | Khái niệm | Ghi nhớ nhanh |
 |---|---|
@@ -970,7 +1023,7 @@ void testEligibility() {
 
 ---
 
-## 16. Bài tập luyện tập
+## 17. Bài tập luyện tập
 
 ### Phần A — Trắc nghiệm nhận định (Đúng/Sai + giải thích)
 
@@ -995,9 +1048,9 @@ void testEligibility() {
 
 **Bài 4:** Viết `@DataJpaTest` cho `ProductRepository` với 1 Specification/Query method tùy chọn (VD: `findByCategoryAndPriceLessThan`), dùng `TestEntityManager` để chuẩn bị dữ liệu.
 
-**Bài 5:** Giải thích (bằng comment code minh họa, không cần chạy thật) tình huống cụ thể mà `@DataJpaTest` (H2) sẽ **PASS** nhưng Testcontainers (PostgreSQL thật) sẽ **FAIL** — gợi ý: liên hệ tới kiểu dữ liệu JSONB hoặc hàm SQL đặc thù đã học ở Module 10 phần RDBMS & NoSQL.
+**Bài 5:** Giải thích (bằng comment code minh họa, không cần chạy thật) tình huống cụ thể mà `@DataJpaTest` (H2) sẽ **PASS** nhưng Testcontainers (PostgreSQL thật) sẽ **FAIL** — gợi ý: liên hệ tới kiểu dữ liệu JSONB hoặc hàm SQL đặc thù đã học ở Module 19 RDBMS & NoSQL.
 
-**Bài 6:** Viết `MockMvc` test dùng `@WithMockUser` cho endpoint `DELETE /api/v1/admin/orders/{id}` (được bảo vệ bởi `@PreAuthorize("hasRole('ADMIN')")` ở Module 16) — 3 trường hợp: role ADMIN trả `204`, role USER trả `403`, không đăng nhập trả `401`.
+**Bài 6:** Viết `MockMvc` test dùng `@WithMockUser` cho endpoint `DELETE /api/v1/admin/orders/{id}` (được bảo vệ bởi `@PreAuthorize("hasRole('ADMIN')")` ở Module 25) — 3 trường hợp: role ADMIN trả `204`, role USER trả `403`, không đăng nhập trả `401`.
 
 ### Phần C — Gợi ý đáp án
 
@@ -1013,7 +1066,7 @@ void testEligibility() {
 7. **Đúng.** Đây chính là mục đích thiết kế của Testcontainers.
 8. **Đúng.** `never()` là 1 dạng `VerificationMode` xác nhận số lần gọi = 0.
 9. **Sai.** Mutant "sống sót" là dấu hiệu XẤU — nghĩa là test suite KHÔNG phát hiện được sự thay đổi logic đó, chứng tỏ vùng code này thiếu assertion đủ mạnh, không phải code ổn định.
-10. **Đúng.** `@WithMockUser` tự động thêm tiền tố `ROLE_` cho `roles`, giống hệt cơ chế `hasRole()` của Spring Security đã học ở Module 16.
+10. **Đúng.** `@WithMockUser` tự động thêm tiền tố `ROLE_` cho `roles`, giống hệt cơ chế `hasRole()` của Spring Security đã học ở Module 25.
 
 </details>
 
@@ -1261,10 +1314,10 @@ class AdminOrderControllerSecurityTest {
 }
 ```
 
-*(Lưu ý: `.with(csrf())` chỉ cần thiết nếu ứng dụng vẫn bật CSRF protection — với JWT thuần Stateless đã tắt CSRF như Module 16, có thể bỏ qua phần này.)*
+*(Lưu ý: `.with(csrf())` chỉ cần thiết nếu ứng dụng vẫn bật CSRF protection — với JWT thuần Stateless đã tắt CSRF như Module 25, có thể bỏ qua phần này.)*
 
 </details>
 
 ---
 
-*File tiếp theo trong lộ trình: **Module 18 — Caching & Messaging** (Spring Cache Abstraction, Redis làm Cache, Cache-Aside/Write-Through Pattern, Message Queue với RabbitMQ/Kafka, Async Processing với @Async).*
+*File tiếp theo trong lộ trình: **Module 27 — Caching & Messaging** (Spring Cache Abstraction, Redis làm Cache, Cache-Aside/Write-Through Pattern, Message Queue với RabbitMQ/Kafka, Async Processing với @Async).*

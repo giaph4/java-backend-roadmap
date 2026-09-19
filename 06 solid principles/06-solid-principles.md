@@ -1,4 +1,4 @@
-# Module 01.6 — SOLID Principles trong Java
+# Module 06 — SOLID Principles trong Java
 
 > **Mức độ ưu tiên: Cao** — SOLID giúp thiết kế phần mềm dễ thay đổi, dễ kiểm thử và ít ảnh hưởng dây chuyền. Giá trị của SOLID nằm ở khả năng nhận ra đúng nguồn thay đổi và đặt ranh giới phụ thuộc hợp lý, không nằm ở số lượng interface hay class.
 
@@ -880,6 +880,40 @@ Mỗi interface thêm một bước khi đọc code: từ nơi gọi phải tìm
 
 ---
 
+### YAGNI và “điểm đảo chiều” của abstraction
+
+SOLID không yêu cầu tạo interface cho mọi class. Một abstraction đáng giá khi có áp lực thay đổi thật: nhiều implementation, boundary với hạ tầng, cần test double, hoặc chính sách nghiệp vụ biến thiên độc lập. Trước đó, code cụ thể đơn giản thường rẻ hơn.
+
+1. Viết implementation rõ ràng và có test bảo vệ hành vi.
+2. Chờ lần thay đổi thứ hai để nhận ra trục biến thiên.
+3. Refactor abstraction quanh **điểm khác nhau**, không quanh danh từ chung chung.
+4. Đo lại coupling: thay đổi một use case phải sửa bao nhiêu module và test?
+
+> ⚠️ “Có thể sau này cần” không phải requirement. Abstraction sai tạo coupling khó thấy hơn duplication nhỏ. YAGNI không chống thiết kế; nó trì hoãn quyết định chưa có bằng chứng để giữ chi phí đổi hướng thấp.
+
+### Architecture test — biến nguyên tắc thành ràng buộc kiểm tra được
+
+Với codebase lớn, review thủ công khó giữ dependency direction. Có thể dùng ArchUnit để kiểm tra domain không phụ thuộc adapter/Spring, controller chỉ gọi application service, hoặc package cycle bị cấm. Đây là cách nối DIP với pipeline test ở Module 26: kiến trúc trở thành contract tự động thay vì sơ đồ nhanh lỗi thời.
+
+### Sơ đồ Dependency Inversion: source code hướng vào policy
+
+```mermaid
+flowchart LR
+    UI["Web / Message adapter"] --> APP["Application use case"]
+    APP --> PORT["Port interface do application sở hữu"]
+    DB["JPA adapter"] -. "implements" .-> PORT
+    EXT["Payment API adapter"] -. "implements" .-> PORT
+    COMP["Composition root"] --> UI
+    COMP --> DB
+    COMP --> EXT
+```
+
+Mũi tên source dependency đi từ chi tiết dễ đổi vào abstraction ổn định. Runtime call có thể đi từ use case ra database, nhưng compile-time dependency không cần đảo theo chiều đó: adapter implement port của core.
+
+Vì sao composition root được đặt ở rìa? Nơi khởi động phải biết concrete class để lắp graph; gom kiến thức đó vào một điểm giữ phần còn lại không phụ thuộc cơ chế tạo object. Spring container tự động hóa bước lắp ráp, nhưng không tự tạo kiến trúc tốt nếu interface vẫn nằm sai phía hoặc domain import framework.
+
+> ⚠️ DIP không có nghĩa “mọi class đều cần interface”. Boundary với hạ tầng/chính sách biến thiên mới là nơi abstraction trả lại giá trị rõ nhất.
+
 ## 12. Tổng kết — Bảng ghi nhớ nhanh
 
 | Nguyên lý | Một câu | Vi phạm điển hình | Công cụ thường dùng |
@@ -1031,4 +1065,4 @@ Viết `Main` lắp ráp toàn bộ hệ thống ở Bài 1 mà không dùng fra
 
 ---
 
-*File tiếp theo trong lộ trình: **Module 01.7 — equals, hashCode, toString** (hợp đồng của `Object`, vì sao ghi đè theo cặp, và ảnh hưởng tới `HashMap`/`HashSet`).*
+*File tiếp theo trong lộ trình: **Module 07 — equals, hashCode, toString** (hợp đồng của `Object`, vì sao ghi đè theo cặp, và ảnh hưởng tới `HashMap`/`HashSet`).*

@@ -1,8 +1,8 @@
-# Module 10 — Database & SQL
+# Module 18 — Database & SQL
 
-> **Mức độ ưu tiên: Cao** — Backend về bản chất là "xử lý dữ liệu". SQL yếu thì mọi framework phía trên (Hibernate, Spring Data JPA — Module 11, 14) đều xây trên nền cát — code ORM "chạy được" nhưng sinh SQL chậm mà không biết vì sao, không đọc được `EXPLAIN`, không tối ưu được khi dữ liệu lớn.
+> **Mức độ ưu tiên: Cao** — Backend về bản chất là "xử lý dữ liệu". SQL yếu thì mọi framework phía trên (Hibernate, Spring Data JPA — Module 20 và 24) đều xây trên nền cát — code ORM "chạy được" nhưng sinh SQL chậm mà không biết vì sao, không đọc được `EXPLAIN`, không tối ưu được khi dữ liệu lớn.
 
-> **Phạm vi bài này:** SQL chuẩn (SELECT/JOIN/GROUP BY/Window Function/Subquery), Transaction & ACID, Isolation Level & khóa ở tầng database, Index (cơ chế & loại), thiết kế schema (chuẩn hóa/khóa), `EXPLAIN`. **Chỉ nhắc tên, không đi sâu:** JPA/Hibernate, `@Transactional`, N+1 query (Module 11); NoSQL (module kế); logging/monitoring query chậm (Module 21); System Design/sharding (module cuối). Ví dụ dùng cú pháp PostgreSQL, ghi chú khi MySQL khác biệt đáng kể.
+> **Phạm vi bài này:** SQL chuẩn (SELECT/JOIN/GROUP BY/Window Function/Subquery), Transaction & ACID, Isolation Level & khóa ở tầng database, Index (cơ chế & loại), thiết kế schema (chuẩn hóa/khóa), `EXPLAIN`. **Chỉ nhắc tên, không đi sâu:** JPA/Hibernate, `@Transactional`, N+1 query (Module 20); NoSQL (module kế); logging/monitoring query chậm (Module 30); System Design/sharding (module cuối). Ví dụ dùng cú pháp PostgreSQL, ghi chú khi MySQL khác biệt đáng kể.
 
 ---
 
@@ -62,9 +62,9 @@ Giả sử bảng `employees(id, name, department, salary, hire_date)`:
 SELECT name, salary FROM employees;                              -- chỉ lấy cột cần — KHÔNG SELECT * trong production
 SELECT * FROM employees WHERE department = 'IT';
 SELECT * FROM employees WHERE salary > 15000000 AND department = 'IT';
-SELECT * FROM employees ORDER BY department ASC, salary DESC;    -- sắp nhiều cấp (giống thenComparing, Module 02.4)
+SELECT * FROM employees ORDER BY department ASC, salary DESC;    -- sắp nhiều cấp (giống thenComparing, Module 07)
 SELECT * FROM employees LIMIT 10 OFFSET 20;                       -- nền tảng PHÂN TRANG
-SELECT DISTINCT department FROM employees;                        -- loại trùng (giống Set, Module 03.1)
+SELECT DISTINCT department FROM employees;                        -- loại trùng (giống Set, Module 08)
 ```
 
 ### Thứ tự THỰC THI thực sự (khác thứ tự viết)
@@ -183,7 +183,7 @@ INNER JOIN project_assignments pa ON e.id = pa.employee_id
 INNER JOIN projects p ON pa.project_id = p.id;
 ```
 
-> **Liên hệ Module 11 (JPA/Hibernate):** nền tảng để hiểu **N+1 Query Problem** — không hiểu JOIN sẽ không hiểu vì sao Hibernate sinh hàng nghìn `SELECT` nhỏ lẻ thay vì một câu JOIN khi cấu hình `fetch` sai.
+> **Liên hệ Module 20 (JPA/Hibernate):** nền tảng để hiểu **N+1 Query Problem** — không hiểu JOIN sẽ không hiểu vì sao Hibernate sinh hàng nghìn `SELECT` nhỏ lẻ thay vì một câu JOIN khi cấu hình `fetch` sai.
 
 ---
 
@@ -191,7 +191,7 @@ INNER JOIN projects p ON pa.project_id = p.id;
 
 ```sql
 SELECT department, COUNT(*) AS total_employees
-FROM employees GROUP BY department;      -- tương đương Collectors.groupingBy(..., counting()), Module 03.3
+FROM employees GROUP BY department;      -- tương đương Collectors.groupingBy(..., counting()), Module 10
 
 SELECT department, AVG(salary), MAX(salary), MIN(salary)
 FROM employees GROUP BY department;
@@ -377,7 +377,7 @@ ROLLBACK TO SAVEPOINT before_bonus;   -- chỉ hủy phần SAU savepoint, giữ
 COMMIT;
 ```
 
-> **Liên hệ Module 12/14 (Spring):** `@Transactional` là cách Spring **tự động** quản lý `BEGIN`/`COMMIT`/`ROLLBACK` — method có `@Transactional` ném **unchecked exception** thì Spring tự `ROLLBACK`, đảm bảo Atomicity mà không cần viết SQL thủ công như trên.
+> **Liên hệ Module 20–21:** `@Transactional` là cách Spring **tự động** quản lý `BEGIN`/`COMMIT`/`ROLLBACK` — method có `@Transactional` ném **unchecked exception** thì Spring tự `ROLLBACK`, đảm bảo Atomicity mà không cần viết SQL thủ công như trên.
 
 ---
 
@@ -406,7 +406,7 @@ READ UNCOMMITTED → READ COMMITTED → REPEATABLE READ → SERIALIZABLE
 | `REPEATABLE READ` (mặc định MySQL/InnoDB) | ✅ | ✅ | ❌ theo chuẩn lý thuyết (InnoDB thực tế ngăn được nhờ cơ chế riêng — xem MVCC dưới) |
 | `SERIALIZABLE` | ✅ | ✅ | ✅ |
 
-> Càng chặt càng an toàn nhưng càng chậm (nhiều transaction chờ/khóa nhau hơn — cùng bản chất đánh đổi với `synchronized`, Module 05.1). Đa số backend dùng mặc định của DB là đủ; `SERIALIZABLE` cho nghiệp vụ cực nhạy cảm (tồn kho Flash-Sale).
+> Càng chặt càng an toàn nhưng càng chậm (nhiều transaction chờ/khóa nhau hơn — cùng bản chất đánh đổi với `synchronized`, Module 12). Đa số backend dùng mặc định của DB là đủ; `SERIALIZABLE` cho nghiệp vụ cực nhạy cảm (tồn kho Flash-Sale).
 
 ### MVCC — cơ chế thực tế của PostgreSQL/InnoDB
 
@@ -419,7 +419,7 @@ SELECT * FROM tickets WHERE id = 1 FOR UPDATE;   -- khóa ĐỘC QUYỀN (exclus
 SELECT * FROM tickets WHERE id = 1 FOR SHARE;     -- khóa CHIA SẺ — nhiều transaction cùng đọc, KHÔNG ai ghi được tới khi nhả
 ```
 
-`FOR UPDATE` là **khóa bi quan**: giả định xung đột chắc chắn xảy ra, khóa trước. Row-level lock (khóa đúng dòng, không cả bảng) là mặc định của các engine hiện đại. Hai transaction cùng chờ khóa của nhau theo vòng tròn → **deadlock ở tầng DB** — cùng bản chất Circular Wait (Module 05.1); DB tự phát hiện và **chủ động abort** một trong hai transaction (thường ném lỗi để tầng ứng dụng bắt và thử lại).
+`FOR UPDATE` là **khóa bi quan**: giả định xung đột chắc chắn xảy ra, khóa trước. Row-level lock (khóa đúng dòng, không cả bảng) là mặc định của các engine hiện đại. Hai transaction cùng chờ khóa của nhau theo vòng tròn → **deadlock ở tầng DB** — cùng bản chất Circular Wait (Module 12); DB tự phát hiện và **chủ động abort** một trong hai transaction (thường ném lỗi để tầng ứng dụng bắt và thử lại).
 
 ### Khóa lạc quan (optimistic locking)
 
@@ -430,13 +430,13 @@ UPDATE tickets SET stock = stock - 1, version = version + 1
 WHERE id = 1 AND version = 5;    -- 0 dòng ảnh hưởng ⇒ có transaction khác đã cập nhật version trước
 ```
 
-Hiệu quả hơn khóa bi quan khi xung đột **hiếm** (ít khóa, ít chờ). Đây chính là ý nghĩa của `@Version` trong JPA (Module 11/14).
+Hiệu quả hơn khóa bi quan khi xung đột **hiếm** (ít khóa, ít chờ). Đây chính là ý nghĩa của `@Version` trong JPA (Module 20 và 24).
 
 ---
 
 ## 8. Index — cơ chế & loại
 
-**Index** là cấu trúc dữ liệu phụ (thường **B-Tree**, cùng ý tưởng `TreeMap`, Module 03.1) giúp tìm dữ liệu nhanh mà không quét toàn bảng.
+**Index** là cấu trúc dữ liệu phụ (thường **B-Tree**, cùng ý tưởng `TreeMap`, Module 08) giúp tìm dữ liệu nhanh mà không quét toàn bảng.
 
 ```sql
 SELECT * FROM employees WHERE email = 'pho@example.com';    -- không index → Seq Scan, O(n)
@@ -584,7 +584,7 @@ CREATE TABLE employees (
 | `SET NULL` | Đặt FK thành `NULL` |
 | `RESTRICT` (mặc định) | Ngăn xóa nếu còn dòng tham chiếu — ném lỗi |
 
-> `CASCADE` cần cẩn thận — dễ xóa nhầm hàng loạt. Nhiều team ưu tiên **Soft Delete** (`is_deleted = true`) thay vì xóa thật (Module 11).
+> `CASCADE` cần cẩn thận — dễ xóa nhầm hàng loạt. Nhiều team ưu tiên **Soft Delete** (`is_deleted = true`) thay vì xóa thật (Module 20).
 
 ### Natural key vs Surrogate key
 
@@ -663,13 +663,72 @@ EXPLAIN ANALYZE SELECT * FROM employees WHERE email = 'pho@example.com';
 
 ### Quy trình chẩn đoán chuẩn
 
-1. Xác định query chậm (log, monitoring — Module 21).
+1. Xác định query chậm (log, monitoring — Module 30).
 2. `EXPLAIN ANALYZE`.
 3. Tìm dấu hiệu bất thường: `Seq Scan` trên bảng lớn, số dòng **ước tính** lệch xa số dòng **thực tế** (thống kê bảng đã cũ, cần `ANALYZE`/`VACUUM ANALYZE`), `Nested Loop` không hiệu quả trên JOIN nhiều dòng.
 4. Thêm index phù hợp hoặc viết lại query.
 5. Chạy lại `EXPLAIN ANALYZE` để **xác nhận** cải thiện thật, không đoán mò.
 
-> Thực tế backend không chờ người dùng báo "chậm" mới `EXPLAIN` — bật **slow query log** (MySQL) / `pg_stat_statements` (PostgreSQL) để tự động ghi lại query vượt ngưỡng, giám sát định kỳ (Module 21).
+> Thực tế backend không chờ người dùng báo "chậm" mới `EXPLAIN` — bật **slow query log** (MySQL) / `pg_stat_statements` (PostgreSQL) để tự động ghi lại query vượt ngưỡng, giám sát định kỳ (Module 30).
+
+### SARGable — viết predicate để index có thể tìm kiếm
+
+Predicate SARGable cho phép database biến điều kiện thành index seek/range scan. Bọc cột trong hàm hoặc cast sai phía thường làm mất khả năng đó:
+
+```sql
+-- Khó dùng index trên created_at
+WHERE DATE(created_at) = DATE '2026-09-20'
+
+-- Range rõ ràng, dễ dùng index
+WHERE created_at >= TIMESTAMP '2026-09-20 00:00:00'
+  AND created_at <  TIMESTAMP '2026-09-21 00:00:00'
+```
+
+Tương tự, `LIKE '%term'` khó dùng B-tree thông thường; implicit cast giữa kiểu parameter và cột cũng có thể phá plan. Xác nhận bằng `EXPLAIN ANALYZE`, không suy đoán chỉ từ việc "đã có index".
+
+### Plan ước lượng sai: kiểm tra statistics trước khi thêm index
+
+Optimizer chọn plan theo cardinality estimate. Dữ liệu skew/correlation, statistics cũ hoặc parameter nhạy cảm có thể khiến estimate khác actual rows nhiều bậc. Quy trình: so estimated/actual rows ở node đầu tiên lệch lớn → cập nhật/mở rộng statistics nếu DB hỗ trợ → kiểm tra predicate/join → cuối cùng mới cân nhắc index/hint.
+
+> ⚠️ Hint có thể cứu một query hôm nay nhưng khóa plan vào phân bố dữ liệu hiện tại. Ghi rõ giả định và theo dõi regression sau khi volume thay đổi.
+
+### Sequence diagram: transaction từ client tới WAL và lock
+
+```mermaid
+sequenceDiagram
+    participant App as Application
+    participant DB as Database engine
+    participant Lock as Lock / MVCC manager
+    participant WAL as Transaction log
+    App->>DB: BEGIN
+    App->>DB: SELECT / UPDATE
+    DB->>Lock: kiểm tra snapshot và conflict
+    Lock-->>DB: version hoặc lock phù hợp
+    DB->>WAL: ghi log thay đổi cần thiết
+    App->>DB: COMMIT
+    DB->>WAL: flush commit record theo durability policy
+    WAL-->>DB: durable
+    DB-->>App: commit thành công
+```
+
+ACID không phải một "nút bật": isolation đến từ MVCC/locking và rule conflict; durability đến từ log/flush/replication policy; atomicity dựa vào log để commit hoặc undo/recovery. Vì vậy cùng câu SQL có latency khác nhau theo contention, log I/O và isolation level.
+
+### Flow đọc `EXPLAIN ANALYZE`
+
+```mermaid
+flowchart TD
+    Q["Query chậm"] --> N["Tìm node có actual time/rows lớn"]
+    N --> E{"Estimated rows lệch actual nhiều?"}
+    E -- "Có" --> ST["Kiểm tra statistics, skew, correlation và predicate"]
+    E -- "Không" --> IO["Kiểm tra scan, join, sort, spill và I/O"]
+    ST --> F["Sửa model/index/query rồi đo lại"]
+    IO --> F
+    F --> R{"Plan và latency đạt mục tiêu?"}
+    R -- "Không" --> N
+    R -- "Có" --> D["Lưu baseline và theo dõi regression"]
+```
+
+Tối ưu là vòng lặp đo–giả thuyết–đo lại; không bắt đầu bằng việc thêm index theo cảm giác.
 
 ---
 
@@ -817,7 +876,7 @@ SELECT name FROM customers WHERE id NOT IN (SELECT customer_id FROM orders);
 `CREATE TABLE` đầy đủ: `users`, `posts` (1 tác giả/bài), `tags`, quan hệ nhiều-nhiều `posts`↔`tags` qua bảng trung gian với khóa chính ghép. Tuân thủ 3NF.
 
 **Bài 4 — Transaction đặt vé với khóa bi quan.**
-Viết SQL: `SELECT ... FOR UPDATE` kiểm tra còn vé, giảm số vé, insert `bookings`. Comment giải thích vì sao cần `FOR UPDATE` (liên hệ Race Condition Module 05.1, tầng DB).
+Viết SQL: `SELECT ... FOR UPDATE` kiểm tra còn vé, giảm số vé, insert `bookings`. Comment giải thích vì sao cần `FOR UPDATE` (liên hệ Race Condition Module 12, tầng DB).
 
 **Bài 5 — Chẩn đoán & tối ưu query chậm.**
 ```sql
@@ -898,4 +957,4 @@ ORDER BY total_spent DESC;
 
 ---
 
-*File tiếp theo trong lộ trình: **Module 10 (tiếp) — RDBMS phổ biến & NoSQL** (MySQL/PostgreSQL thực hành, MongoDB, Redis — khi nào chọn NoSQL thay vì SQL).*
+*File tiếp theo trong lộ trình: **Module 19 — RDBMS phổ biến & NoSQL** (MySQL/PostgreSQL thực hành, MongoDB, Redis — khi nào chọn NoSQL thay vì SQL).*

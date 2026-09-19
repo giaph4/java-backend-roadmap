@@ -1,8 +1,8 @@
-# Module 01.1 — Cú pháp & Kiểu dữ liệu trong Java
+# Module 01 — Cú pháp & Kiểu dữ liệu trong Java
 
 > **Mức độ ưu tiên: Cao** — Đây là nền tảng tuyệt đối. Mọi lỗi runtime khó hiểu sau này (NullPointerException, sai kết quả tính toán tiền tệ, so sánh String bằng `==` cho kết quả sai, tràn số `int` âm thầm, `0.1 + 0.2 != 0.3`...) đều bắt nguồn từ việc chưa nắm chắc phần này.
 
-> **Phạm vi bài học:** cú pháp khai báo, 8 kiểu nguyên thủy + wrapper, quy tắc ép kiểu & thăng hạng kiểu (type promotion), toán tử & thứ tự ưu tiên, số thực IEEE 754, mảng, `String`/`StringBuilder`/`StringBuffer`, String Pool, mô hình bộ nhớ Stack/Heap và ngữ nghĩa *pass-by-value*. Các chủ đề `if/switch/loop` (Module 01.2), OOP (01.3+), Collections (01.8), `BigDecimal` chi tiết (Module riêng) **không** thuộc bài này.
+> **Phạm vi bài học:** cú pháp khai báo, 8 kiểu nguyên thủy + wrapper, quy tắc ép kiểu & thăng hạng kiểu (type promotion), toán tử & thứ tự ưu tiên, số thực IEEE 754, mảng, `String`/`StringBuilder`/`StringBuffer`, String Pool, mô hình bộ nhớ Stack/Heap và ngữ nghĩa *pass-by-value*. Các chủ đề `if/switch/loop` (Module 02), OOP (Module 03–07), Collections (Module 08), `BigDecimal` chi tiết (module riêng) **không** thuộc bài này.
 
 ---
 
@@ -734,7 +734,7 @@ arr[1] = 42;                     // ArrayStoreException lúc runtime — kiểu 
 | Độ dài | `a.length` | `list.size()` |
 | API | `Arrays.*` | phong phú (add/remove/contains...) |
 
-Hiểu rõ hạn chế "kích thước cố định" của mảng chính là lý do Collections Framework (Module 01.8) tồn tại.
+Hiểu rõ hạn chế "kích thước cố định" của mảng chính là lý do Collections Framework (Module 08) tồn tại.
 
 > ⚠️ **`ArrayIndexOutOfBoundsException`** khi index < 0 hoặc ≥ `length`. **`NegativeArraySizeException`** khi `new int[-1]`. **`NullPointerException`** khi truy cập `.length` / phần tử của biến mảng đang `null`.
 
@@ -1006,6 +1006,55 @@ String name = "Pho"; grow(name);     // name vẫn "Pho"
 
 ---
 
+### Defensive copy — pass-by-value không bảo vệ trạng thái bên trong object
+
+Java truyền **bản sao của tham chiếu**, nhưng hai tham chiếu vẫn trỏ tới cùng một object mutable. Constructor/getter nhận hoặc trả thẳng `List`, mảng, `Date`... vì thế có thể làm lộ trạng thái nội bộ:
+
+```java
+final class Order {
+    private final List<String> items;
+
+    Order(List<String> items) {
+        this.items = List.copyOf(items); // snapshot + không cho sửa
+    }
+
+    List<String> items() { return items; }
+}
+```
+
+Với mảng, dùng `clone()`/`Arrays.copyOf()` ở **cả đầu vào và đầu ra**. Đây là cầu nối từ pass-by-value sang Encapsulation (Module 04): `final` chỉ khóa việc gán lại tham chiếu, không làm object được tham chiếu trở thành bất biến.
+
+> ⚠️ `Collections.unmodifiableList(source)` chỉ tạo **read-only view**; nếu nơi khác còn giữ `source` và sửa nó, view vẫn thay đổi. `List.copyOf(source)` mới tạo snapshot nông. Nếu phần tử bên trong mutable, vẫn cần deep copy hoặc thiết kế phần tử immutable.
+
+### Sơ đồ mental model: pass-by-value qua Stack và Heap
+
+```mermaid
+flowchart LR
+    subgraph Caller["Stack frame: caller"]
+        A["orderRef = địa chỉ H1"]
+    end
+    subgraph Callee["Stack frame: update"]
+        B["parameter = bản sao địa chỉ H1"]
+    end
+    subgraph Heap["Heap"]
+        H1["H1: Order mutable"]
+        H2["H2: Order mới"]
+    end
+    A --> H1
+    A -. "copy giá trị reference" .-> B
+    B --> H1
+    B -. "gán lại parameter" .-> H2
+```
+
+Luồng cần giữ trong đầu:
+
+1. Caller đánh giá argument thành một **giá trị**; với object, giá trị đó là reference.
+2. JVM chép giá trị vào local variable của stack frame callee.
+3. Hai reference ban đầu cùng tới `H1`, nên mutation qua parameter được caller quan sát.
+4. Gán parameter sang `H2` chỉ đổi local variable của callee; `orderRef` của caller vẫn tới `H1`.
+
+Mô hình này giải thích đồng thời ba hiện tượng tưởng mâu thuẫn: Java luôn pass-by-value, method vẫn có thể sửa object, nhưng không thể đổi biến reference của caller.
+
 ## 11. Tổng kết — Bảng ghi nhớ nhanh
 
 | Khái niệm | Điểm mấu chốt |
@@ -1257,4 +1306,4 @@ System.out.println('1' + 2);
 
 ---
 
-*File tiếp theo trong lộ trình: **Module 01.2 — Cấu trúc điều khiển** (if/else, switch expression, vòng lặp, đệ quy).*
+*File tiếp theo trong lộ trình: **Module 02 — Cấu trúc điều khiển** (if/else, switch expression, vòng lặp, đệ quy).*

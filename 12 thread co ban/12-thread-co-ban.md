@@ -1,8 +1,8 @@
-# Module 05.1 — Thread cơ bản
+# Module 12 — Thread cơ bản
 
 > **Mức độ ưu tiên: Cao** — Backend xử lý hàng nghìn request đồng thời, mỗi request thường một thread. Không hiểu race condition / visibility / deadlock sẽ tạo ra bug **chỉ xuất hiện dưới tải cao, không tái hiện được bằng breakpoint** — loại câu hỏi kinh điển để phân biệt Junior với Middle/Senior.
 
-> **Phạm vi bài này:** mô hình bộ nhớ luồng, tạo & vòng đời `Thread`, race condition, `synchronized`, `volatile`, `wait`/`notify`, deadlock, và các method điều khiển thread ở mức JDK lõi. **Chỉ nhắc tên, không đi sâu:** `ExecutorService`/thread pool, `Future`/`CompletableFuture`, `java.util.concurrent.locks.Lock`, `Atomic*`, `CountDownLatch`/`Semaphore` (tất cả ở Module 05.2), virtual thread (Java 21 — nêu vừa đủ). `InterruptedException` đã học ở Module 04, ở đây chỉ nhắc phần liên quan.
+> **Phạm vi bài này:** mô hình bộ nhớ luồng, tạo & vòng đời `Thread`, race condition, `synchronized`, `volatile`, `wait`/`notify`, deadlock, và các method điều khiển thread ở mức JDK lõi. **Chỉ nhắc tên, không đi sâu:** `ExecutorService`/thread pool, `Future`/`CompletableFuture`, `java.util.concurrent.locks.Lock`, `Atomic*`, `CountDownLatch`/`Semaphore` (tất cả ở Module 13), virtual thread (Java 21 — nêu vừa đủ). `InterruptedException` đã học ở Module 11, ở đây chỉ nhắc phần liên quan.
 
 ---
 
@@ -69,16 +69,16 @@ public class MyTask implements Runnable {
     @Override public void run() { /* ... */ }
 }
 new Thread(new MyTask()).start();
-new Thread(() -> System.out.println("lambda")).start();   // Runnable là functional interface (Module 03.3)
+new Thread(() -> System.out.println("lambda")).start();   // Runnable là functional interface (Module 10)
 ```
 
 ### Vì sao ưu tiên `Runnable`
 
-1. Java không đa kế thừa class (Module 02.1) — `extends Thread` khóa mất khả năng `extends` class khác.
-2. Tách "việc cần chạy" (`Runnable`) khỏi "cơ chế chạy" (`Thread`) — đúng tinh thần SRP (Module 01.6).
-3. `Runnable`/`Callable` dùng trực tiếp với **thread pool** (`ExecutorService` — Module 05.2), là cách quản lý thread chuẩn trong backend; hầu như không ai `new Thread()` thủ công trong code production.
+1. Java không đa kế thừa class (Module 04) — `extends Thread` khóa mất khả năng `extends` class khác.
+2. Tách "việc cần chạy" (`Runnable`) khỏi "cơ chế chạy" (`Thread`) — đúng tinh thần SRP (Module 06).
+3. `Runnable`/`Callable` dùng trực tiếp với **thread pool** (`ExecutorService` — Module 13), là cách quản lý thread chuẩn trong backend; hầu như không ai `new Thread()` thủ công trong code production.
 
-> `Runnable.run()` **không trả giá trị** và **không `throws` checked exception**. Khi cần trả kết quả / ném checked exception → `Callable<V>` (`V call() throws Exception`) — nhưng chạy `Callable` cần `ExecutorService` hoặc `FutureTask` (Module 05.2).
+> `Runnable.run()` **không trả giá trị** và **không `throws` checked exception**. Khi cần trả kết quả / ném checked exception → `Callable<V>` (`V call() throws Exception`) — nhưng chạy `Callable` cần `ExecutorService` hoặc `FutureTask` (Module 13).
 
 > ⚠️ **Gọi `run()` trực tiếp KHÔNG tạo thread mới** — nó chạy như method thường trên thread hiện tại:
 > ```java
@@ -286,7 +286,7 @@ public synchronized void b() { }         // ...vào b() được luôn (cùng lo
 ### Bảo đảm & hạn chế
 
 - **Bảo đảm:** loại trừ lẫn nhau + visibility (hàng rào bộ nhớ khi vào/ra) + reentrant.
-- **Không** có: timeout, khả năng bị `interrupt` khi đang chờ lock, tính công bằng (fairness), nhiều condition. Cần những thứ đó → `ReentrantLock`/`ReadWriteLock` (Module 05.2).
+- **Không** có: timeout, khả năng bị `interrupt` khi đang chờ lock, tính công bằng (fairness), nhiều condition. Cần những thứ đó → `ReentrantLock`/`ReadWriteLock` (Module 13).
 - **Không gọi "alien method"** (method của class khác/override được) khi đang giữ lock — dễ kéo theo deadlock/liveness nếu method đó lại giành lock khác.
 
 ```java
@@ -335,7 +335,7 @@ private volatile int count = 0;
 public void increment() { count++; }   // ❌ VẪN race — volatile không làm 3 bước thành 1
 ```
 
-→ Cho `count++`: dùng `synchronized` hoặc `AtomicInteger` (Module 05.2).
+→ Cho `count++`: dùng `synchronized` hoặc `AtomicInteger` (Module 13).
 
 ### `final` field — công bố an toàn không cần `volatile`/`synchronized`
 
@@ -385,7 +385,7 @@ JIT/CPU được phép đổi thứ tự bước 2 và 3 (vì không phụ thu�
 | Chi phí | Cao hơn (acquire/release, có thể park thread) | Thấp (chỉ hàng rào bộ nhớ) |
 | Dùng cho | Bộ đếm, số dư, mọi chuỗi thao tác cần nguyên vẹn | Cờ hiệu, công bố object bất biến, biến quan sát đơn lẻ |
 
-> **Quy tắc nhanh:** chỉ **gán một giá trị** mà nhiều thread cần thấy ngay → `volatile`. **Đọc rồi tính rồi ghi lại**, hoặc bất biến trên nhiều biến → `synchronized` (hoặc công cụ Module 05.2).
+> **Quy tắc nhanh:** chỉ **gán một giá trị** mà nhiều thread cần thấy ngay → `volatile`. **Đọc rồi tính rồi ghi lại**, hoặc bất biến trên nhiều biến → `synchronized` (hoặc công cụ Module 13).
 
 ---
 
@@ -429,7 +429,7 @@ public class MessageBox {
 4. **Ưu tiên `notifyAll()` hơn `notify()`** — `notify()` đánh thức **một** thread ngẫu nhiên; nếu trúng thread không xử lý được điều kiện thì nó ngủ lại, thread cần thức thì không được gọi → "kẹt tín hiệu".
 5. Điều kiện chờ phải là **biến chia sẻ** được bảo vệ bởi **cùng** monitor dùng cho `wait`/`notify`.
 
-> Thực tế backend hiếm khi viết `wait`/`notify` tay — dùng `BlockingQueue`, `CountDownLatch`, `CompletableFuture` (Module 05.2). Nhưng hiểu cơ chế này là nền tảng để hiểu chúng.
+> Thực tế backend hiếm khi viết `wait`/`notify` tay — dùng `BlockingQueue`, `CountDownLatch`, `CompletableFuture` (Module 13). Nhưng hiểu cơ chế này là nền tảng để hiểu chúng.
 
 ---
 
@@ -460,7 +460,7 @@ Thread 1 ──giữ──► lockA ──cần──► lockB ──bị giữ 
 |---|---|---|
 | **Mutual exclusion** | Tài nguyên không chia sẻ được | Dùng cấu trúc bất biến / lock-free (`Atomic*`) khi có thể |
 | **Hold and wait** | Giữ lock này, chờ lock khác | Giành **tất cả** lock cần cùng lúc, hoặc không giành gì |
-| **No preemption** | Không cưỡng đoạt được lock | `tryLock(timeout)` — bỏ cuộc và nhả hết nếu không lấy đủ (Module 05.2) |
+| **No preemption** | Không cưỡng đoạt được lock | `tryLock(timeout)` — bỏ cuộc và nhả hết nếu không lấy đủ (Module 13) |
 | **Circular wait** | Vòng chờ khép kín | **Giành lock theo một thứ tự toàn cục cố định** ← phổ biến nhất |
 
 ### Lock ordering — sửa ví dụ chuyển tiền
@@ -483,7 +483,7 @@ void transfer(Account from, Account to, long amount) {
 
 1. Giữ lock **ngắn nhất có thể**; không làm I/O / gọi alien method khi đang giữ lock.
 2. Tránh giữ **nhiều** lock cùng lúc nếu tái cấu trúc được.
-3. `Lock.tryLock(200, MILLISECONDS)` — có đường thoát thay vì chờ vô hạn (Module 05.2).
+3. `Lock.tryLock(200, MILLISECONDS)` — có đường thoát thay vì chờ vô hạn (Module 13).
 
 ### Lỗi liveness khác (không phải deadlock nhưng cũng "không tiến lên")
 
@@ -536,7 +536,7 @@ Thread.currentThread().isInterrupted();   // ĐỌC cờ, KHÔNG xóa
 Thread.interrupted();                      // đọc cờ của thread hiện tại RỒI XÓA (static)
 ```
 
-- Method blocking (`sleep`, `wait`, `join`, `BlockingQueue.take`...) khi thread bị interrupt → **ném `InterruptedException` và xóa cờ**. Muốn giữ tín hiệu, `catch` xong gọi lại `Thread.currentThread().interrupt()` (Module 04).
+- Method blocking (`sleep`, `wait`, `join`, `BlockingQueue.take`...) khi thread bị interrupt → **ném `InterruptedException` và xóa cờ**. Muốn giữ tín hiệu, `catch` xong gọi lại `Thread.currentThread().interrupt()` (Module 11).
 - Vòng lặp dài không blocking → tự kiểm tra `while (!Thread.currentThread().isInterrupted()) { ... }`.
 - `interrupt()` **không** làm gì nếu thread không hợp tác kiểm tra — nó chỉ là *tín hiệu*.
 
@@ -552,9 +552,45 @@ Thread.interrupted();                      // đọc cờ của thread hiện t�
 
 `Thread.stop()` (nhả **mọi** lock đột ngột → object hỏng bất biến), `suspend()`/`resume()` (dừng thread khi đang giữ lock → deadlock). Đều `@Deprecated` từ lâu.
 
-> `ThreadLocal<T>` — biến "một bản cho mỗi thread" (`SimpleDateFormat` per-thread, ngữ cảnh request). ⚠️ Với **thread pool** (thread sống lâu, tái dùng), phải `remove()` sau mỗi tác vụ, nếu không → rò rỉ bộ nhớ và dữ liệu request này lẫn sang request khác. Chi tiết ở Module 05.2.
+> `ThreadLocal<T>` — biến "một bản cho mỗi thread" (`SimpleDateFormat` per-thread, ngữ cảnh request). ⚠️ Với **thread pool** (thread sống lâu, tái dùng), phải `remove()` sau mỗi tác vụ, nếu không → rò rỉ bộ nhớ và dữ liệu request này lẫn sang request khác. Chi tiết ở Module 13.
 
 ---
+
+### Safe publication — tạo đúng chưa đủ, phải công bố đúng
+
+Một object bất biến chỉ an toàn khi reference tới nó được publish qua quan hệ happens-before: gán vào `final` đúng quy tắc constructor, ghi/đọc qua `volatile`, mở khóa/khóa cùng monitor, cấu trúc concurrent, hoặc hoàn tất static initialization.
+
+```java
+final class ConfigHolder {
+    static final Config INSTANCE = load(); // class initialization publish an toàn
+}
+```
+
+> ⚠️ Gán object mới vào field thường rồi để thread khác polling là data race. Thread kia có thể không thấy reference mới hoặc quan sát trạng thái chưa đầy đủ; `sleep()` không tạo happens-before.
+
+### False sharing — không tranh chấp logic vẫn có thể tranh chấp cache line
+
+Hai thread cập nhật hai field độc lập nhưng nằm cùng cache line có thể liên tục làm invalid cache của nhau. Hiện tượng này xuất hiện ở counter/tight loop hiệu năng cao; `LongAdder` (Module 13) giảm tranh chấp bằng nhiều cell. Chỉ tối ưu sau khi profiler/hardware counter chứng minh, vì padding thủ công tăng memory footprint và phụ thuộc JVM/hardware.
+
+### State diagram: `Thread.State`
+
+```mermaid
+stateDiagram-v2
+    [*] --> NEW: new Thread
+    NEW --> RUNNABLE: start
+    RUNNABLE --> BLOCKED: chờ monitor lock
+    BLOCKED --> RUNNABLE: lấy được monitor
+    RUNNABLE --> WAITING: wait, join hoặc park không timeout
+    WAITING --> RUNNABLE: notify, unpark hoặc thread đích kết thúc
+    RUNNABLE --> TIMED_WAITING: sleep, timed wait, timed join hoặc parkNanos
+    TIMED_WAITING --> RUNNABLE: hết hạn hoặc được đánh thức
+    RUNNABLE --> TERMINATED: run kết thúc hoặc lỗi không bắt
+    TERMINATED --> [*]
+```
+
+`RUNNABLE` của Java gộp cả “đang chạy trên CPU” và “sẵn sàng chờ OS scheduler”; thread dump không đủ để kết luận thread đang tiêu CPU. `BLOCKED` chỉ dành cho chờ intrinsic monitor, còn chờ `LockSupport`/`Condition` thường hiện `WAITING` hoặc `TIMED_WAITING`.
+
+> ⚠️ `interrupt()` không tạo một state riêng và không cưỡng bức dừng thread. Nó đặt cờ hoặc làm một số blocking method ném `InterruptedException`; code phải hợp tác thoát và thường restore cờ nếu không xử lý tại chỗ.
 
 ## 12. Tổng kết — Bảng ghi nhớ nhanh
 
@@ -650,7 +686,7 @@ Cài đúng ví dụ deadlock (2 method giành lock ngược thứ tự). Chạy
 Tự viết `SynchronousBox<T>` với `put(T)` / `take()` dùng `wait`/`notifyAll` (không dùng `java.util.concurrent`). 1 producer đẩy 20 số, 2 consumer lấy ra; in thứ tự lấy được. Đảm bảo: `wait()` trong `while`, không mất phần tử, không deadlock khi cả 2 consumer cùng chờ.
 
 **Bài 6 — Bài toán tổng hợp: phòng vé (chuẩn bị capstone Flash-Sale).**
-`TicketBooth` với `int available = 100`. `boolean book()`: còn vé thì giảm 1 trả `true`, hết thì `false`. 200 thread cùng `book()`, đếm số `true` bằng biến chung (cũng phải đồng bộ đúng!). Chứng minh: **không** đồng bộ `book()` → số vé bán ra có thể > 100 (oversold, do check-then-act ở mục 4.5). Sửa bằng `synchronized`, chứng minh **không bao giờ** vượt 100. Ghi chú: đây là lời giải Java thuần một-instance; backend nhiều instance cần distributed lock / `SELECT ... FOR UPDATE` / optimistic lock `@Version` (Module 14, 18).
+`TicketBooth` với `int available = 100`. `boolean book()`: còn vé thì giảm 1 trả `true`, hết thì `false`. 200 thread cùng `book()`, đếm số `true` bằng biến chung (cũng phải đồng bộ đúng!). Chứng minh: **không** đồng bộ `book()` → số vé bán ra có thể > 100 (oversold, do check-then-act ở mục 4.5). Sửa bằng `synchronized`, chứng minh **không bao giờ** vượt 100. Ghi chú: đây là lời giải Java thuần một-instance; backend nhiều instance cần distributed lock / `SELECT ... FOR UPDATE` / optimistic lock `@Version` (Module 19–20 và 24).
 
 ---
 
@@ -679,7 +715,7 @@ Tự viết `SynchronousBox<T>` với `put(T)` / `take()` dùng `wait`/`notifyAl
 
 1. **Không** tạo thread mới. `t.run()` gọi thẳng `run()` như method thường → in ra tên thread **hiện tại** (thường `main`). Cần `t.start()` để JVM tạo luồng OS và in ra `Thread-0`.
 2. **Không** đảm bảo `1000`. Ba mối nguy: (a) **atomicity** — `count++` là đọc-tăng-ghi, hai thread lost update; (b) **visibility** — thread này không thấy giá trị mới nhất thread kia ghi; (c) **reordering** — ít rõ với một biến nhưng vẫn thuộc phạm trù JMM. Kết quả thường < 1000, đổi mỗi lần chạy.
-3. **Không.** `volatile` cho visibility nhưng `count++` vẫn là ba bước không nguyên tử → vẫn lost update. Sửa: (i) `synchronized` quanh `count++`; (ii) `AtomicInteger.incrementAndGet()` (Module 05.2).
+3. **Không.** `volatile` cho visibility nhưng `count++` vẫn là ba bước không nguyên tử → vẫn lost update. Sửa: (i) `synchronized` quanh `count++`; (ii) `AtomicInteger.incrementAndGet()` (Module 13).
 4. **Không chắc chắn.** Thiếu `volatile` nên không có quan hệ happens-before giữa `stop = true` (Thread A) và lần đọc `stop` trong vòng lặp (Thread B) → JIT được phép nâng `stop` ra khỏi vòng, B lặp vô hạn. Sửa: `private volatile boolean stop = false;` — ghi `volatile` hb đọc `volatile` sau đó → B thấy `true`.
 5. Nguy cơ **deadlock**: Thread 1 khóa `A` rồi chờ `B`; Thread 2 khóa `B` rồi chờ `A` → **circular wait** (điều kiện Coffman thứ 4). Sửa: giành lock theo thứ tự cố định không phụ thuộc tham số — `Account first = a.id() < b.id() ? a : b; ...` rồi `synchronized(first){ synchronized(second){...} }`.
 6. Hai lỗi: (a) dùng `if` thay vì `while` — spurious wakeup / consumer khác đã lấy mất phần tử giữa lúc `notify` và lúc giành lại lock → `queue.remove()` nổ trên hàng đợi rỗng; (b) toàn bộ phải nằm **trong `synchronized (queue)`** — gọi `wait()`/`remove()` ngoài monitor → `IllegalMonitorStateException` / race. Sửa: `synchronized (queue) { while (queue.isEmpty()) queue.wait(); return queue.remove(); }`.
@@ -715,4 +751,4 @@ Tự viết `SynchronousBox<T>` với `put(T)` / `take()` dùng `wait`/`notifyAl
 
 ---
 
-*File tiếp theo trong lộ trình: **Module 05.2 — Concurrency Utilities** (ExecutorService, ThreadPoolExecutor, Future/CompletableFuture, CountDownLatch, Semaphore, Atomic, Lock).*
+*File tiếp theo trong lộ trình: **Module 13 — Concurrency Utilities** (ExecutorService, ThreadPoolExecutor, Future/CompletableFuture, CountDownLatch, Semaphore, Atomic, Lock).*

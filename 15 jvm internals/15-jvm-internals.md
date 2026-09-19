@@ -1,8 +1,8 @@
-# Module 07 — JVM Internals
+# Module 15 — JVM Internals
 
 > **Mức độ ưu tiên: Trung bình → Bổ sung** — Không cần thuộc lòng chi tiết cài đặt của từng GC algorithm, nhưng hiểu rõ **Runtime Data Areas** (Heap/Stack/Metaspace/Code Cache), cơ chế **Garbage Collection** ở mức khái niệm, **ClassLoader** và **JIT Compiler** là **điểm khác biệt rõ rệt** giữa lập trình viên chỉ biết "viết code chạy được" và người thực sự hiểu **tại sao** code chạy như vậy — cực kỳ hữu ích khi debug production issue (memory leak, ứng dụng chậm dần, latency spike ngẫu nhiên, `OutOfMemoryError` lúc 3 giờ sáng) mà không có kiến thức này gần như không thể chẩn đoán được.
 
-> **Phạm vi bài này:** kiến trúc bên trong của **HotSpot JVM** ở mức cần cho backend engineer — runtime data areas, bố cục object trong bộ nhớ, cấu trúc Heap theo thế hệ, cơ chế & các collector Garbage Collection, reference types, memory leak trong bộ nhớ được quản lý, ClassLoader (phân cấp + parent delegation + loading/linking/initialization), JIT compiler (tiered compilation + tối ưu + deoptimization), các biến thể `OutOfMemoryError`, cờ JVM & công cụ chẩn đoán, container awareness. **Chỉ nhắc tên, không đi sâu:** `<clinit>` & thứ tự khởi tạo class → Module 01.3; `ExceptionInInitializerError` / `NoClassDefFoundError` chi tiết → Module 01.3 & 04; String pool / interning / Compact Strings → Module 01.1; pass-by-value, Stack vs Heap cơ bản → Module 01.1; `ThreadLocal` leak với thread pool → Module 05.2; `WeakHashMap` → Module 03.1; deprecation của `finalize()` → Module 04; carrier thread của virtual thread → Module 06; cách chọn kích thước thread pool → Module 05.2. **Ngoài phạm vi (chỉ cần biết có tồn tại):** AOT compilation / GraalVM native image; `-Xint` (chỉ thông dịch) / `-Xcomp` (biên dịch ngay); bytecode verifier chi tiết; JVM TI / agent instrumentation.
+> **Phạm vi bài này:** kiến trúc bên trong của **HotSpot JVM** ở mức cần cho backend engineer — runtime data areas, bố cục object trong bộ nhớ, cấu trúc Heap theo thế hệ, cơ chế & các collector Garbage Collection, reference types, memory leak trong bộ nhớ được quản lý, ClassLoader (phân cấp + parent delegation + loading/linking/initialization), JIT compiler (tiered compilation + tối ưu + deoptimization), các biến thể `OutOfMemoryError`, cờ JVM & công cụ chẩn đoán, container awareness. **Chỉ nhắc tên, không đi sâu:** `<clinit>` & thứ tự khởi tạo class → Module 03; `ExceptionInInitializerError` / `NoClassDefFoundError` chi tiết → Module 03 & 04; String pool / interning / Compact Strings → Module 01; pass-by-value, Stack vs Heap cơ bản → Module 01; `ThreadLocal` leak với thread pool → Module 13; `WeakHashMap` → Module 08; deprecation của `finalize()` → Module 11; carrier thread của virtual thread → Module 14; cách chọn kích thước thread pool → Module 13. **Ngoài phạm vi (chỉ cần biết có tồn tại):** AOT compilation / GraalVM native image; `-Xint` (chỉ thông dịch) / `-Xcomp` (biên dịch ngay); bytecode verifier chi tiết; JVM TI / agent instrumentation.
 
 ---
 
@@ -105,13 +105,13 @@ Java 8 trở đi:        PermGen bị XÓA. Class metadata chuyển sang "Metasp
 
 ### String pool đã chuyển vào Heap (Java 7)
 
-Trước Java 7, string pool (nơi lưu các `String` literal và kết quả `intern()`) nằm trong PermGen — dễ tràn PermGen nếu `intern()` bừa. **Từ Java 7, string pool nằm trong Heap** → được GC dọn như object thường, và có thể chỉnh số bucket bằng `-XX:StringTableSize`. Chi tiết về interning, Compact Strings (Java 9), `+UseCompactStrings` → **Module 01.1**.
+Trước Java 7, string pool (nơi lưu các `String` literal và kết quả `intern()`) nằm trong PermGen — dễ tràn PermGen nếu `intern()` bừa. **Từ Java 7, string pool nằm trong Heap** → được GC dọn như object thường, và có thể chỉnh số bucket bằng `-XX:StringTableSize`. Chi tiết về interning, Compact Strings (Java 9), `+UseCompactStrings` → **Module 01**.
 
 ---
 
 ## 3. Heap vs Stack — đào sâu
 
-Đã nhắc sơ ở Module 01.1 (pass-by-value) và Module 05.1 (Process vs Thread) — đây là phần trình bày đầy đủ.
+Đã nhắc sơ ở Module 01 (pass-by-value) và Module 12 (Process vs Thread) — đây là phần trình bày đầy đủ.
 
 | Tiêu chí | **Heap** | **Stack** |
 |---|---|---|
@@ -157,7 +157,7 @@ STACK của Thread hiện tại:            HEAP (dùng chung):
 └──────────────────────┘
 ```
 
-> **Pass-by-value của reference:** khi truyền `s` vào `method2`, Java **copy giá trị của reference** (như copy địa chỉ nhà) — không copy object. Nên `s.setName(...)` bên trong `method2` **ảnh hưởng** object gốc (cùng 1 object trên Heap), còn `s = new Student(...)` bên trong `method2` thì **không** (chỉ đổi bản copy reference trên frame method2). Đây là "pass-by-value của reference", không phải "pass-by-reference". Chi tiết → **Module 01.1**.
+> **Pass-by-value của reference:** khi truyền `s` vào `method2`, Java **copy giá trị của reference** (như copy địa chỉ nhà) — không copy object. Nên `s.setName(...)` bên trong `method2` **ảnh hưởng** object gốc (cùng 1 object trên Heap), còn `s = new Student(...)` bên trong `method2` thì **không** (chỉ đổi bản copy reference trên frame method2). Đây là "pass-by-value của reference", không phải "pass-by-reference". Chi tiết → **Module 01**.
 
 ⚠️ **Escape analysis có thể "phá" mô hình trên:** với JIT bật, một object mà JVM chứng minh được là **không "thoát" khỏi method** có thể **không được cấp phát trên Heap** mà tách thành các biến vô hướng nằm trên Stack/thanh ghi (scalar replacement — mục 12). Mô hình "mọi `new` đều lên Heap" đúng ở mức khái niệm/bytecode, nhưng runtime thực tế tinh vi hơn.
 
@@ -331,7 +331,7 @@ Mặc định mọi reference bạn viết là **strong**. `java.lang.ref` cho 3
 |---|---|---|
 | **Strong** (`Object o = ...`) | Không bao giờ, chừng nào còn strong ref reachable | Reference thường ngày |
 | **`SoftReference`** | Chỉ khi **sắp hết Heap** (GC cố giữ lại càng lâu càng tốt) | **Cache "nhớ được thì tốt"** — memory-sensitive cache |
-| **`WeakReference`** | **Ngay lần GC kế tiếp** nếu không còn strong ref | Metadata gắn theo object mà không giữ nó sống: `WeakHashMap` (key yếu — Module 03.1), `ThreadLocal` entry, listener registry |
+| **`WeakReference`** | **Ngay lần GC kế tiếp** nếu không còn strong ref | Metadata gắn theo object mà không giữ nó sống: `WeakHashMap` (key yếu — Module 08), `ThreadLocal` entry, listener registry |
 | **`PhantomReference`** | Object đã finalize xong, sắp bị thu hồi — `get()` **luôn trả `null`** | Biết **chính xác thời điểm** object bị thu hồi để dọn tài nguyên native kèm theo |
 
 ```java
@@ -349,7 +349,7 @@ Reference<?> dead = q.poll();          // != null khi widget đã bị GC → d�
 
 ### `finalize()` đã chết — dùng `Cleaner`
 
-`Object.finalize()` **deprecated for removal** (Module 04): thời điểm chạy không xác định, có thể **không bao giờ chạy**, làm chậm GC, có thể "hồi sinh" object. Thay bằng **`java.lang.ref.Cleaner`** (Java 9) — dựa trên `PhantomReference` + thread dọn riêng:
+`Object.finalize()` **deprecated for removal** (Module 11): thời điểm chạy không xác định, có thể **không bao giờ chạy**, làm chậm GC, có thể "hồi sinh" object. Thay bằng **`java.lang.ref.Cleaner`** (Java 9) — dựa trên `PhantomReference` + thread dọn riêng:
 
 ```java
 public class FileHandle implements AutoCloseable {
@@ -368,7 +368,7 @@ public class FileHandle implements AutoCloseable {
 }
 ```
 
-> `Cleaner` là **lưới an toàn (safety net)**, không phải cơ chế chính. Cách đúng vẫn là `try-with-resources` + `close()` tường minh (Module 04). Nhiều class JDK giữ tài nguyên native (`DirectByteBuffer`, `FileInputStream` cũ...) đã chuyển sang `Cleaner` nội bộ.
+> `Cleaner` là **lưới an toàn (safety net)**, không phải cơ chế chính. Cách đúng vẫn là `try-with-resources` + `close()` tường minh (Module 11). Nhiều class JDK giữ tài nguyên native (`DirectByteBuffer`, `FileInputStream` cũ...) đã chuyển sang `Cleaner` nội bộ.
 
 ---
 
@@ -490,7 +490,7 @@ bus.register(this);      // nếu quên bus.unregister(this) khi component chế
                          // → "listeners" list giữ strong ref → component không bao giờ được GC
                          // Sửa: WeakReference registry, hoặc luôn unregister trong lifecycle hook
 
-// 3. ThreadLocal + thread pool (đọc Module 05.2)
+// 3. ThreadLocal + thread pool (đọc Module 13)
 private static final ThreadLocal<HeavyContext> CTX = new ThreadLocal<>();
 // worker thread trong pool sống RẤT LÂU; nếu quên CTX.remove() ở finally → HeavyContext
 // bám theo thread mãi mãi. Chồng chất qua nhiều request → leak + rò rỉ dữ liệu request cũ.
@@ -507,7 +507,7 @@ private static final ThreadLocal<HeavyContext> CTX = new ThreadLocal<>();
 
 `HashMap` làm cache **không có eviction** là nguyên nhân leak phổ biến nhất trong code tự viết. Dùng:
 
-- `LinkedHashMap` với `removeEldestEntry` (LRU thủ công — Module 03.1), hoặc
+- `LinkedHashMap` với `removeEldestEntry` (LRU thủ công — Module 08), hoặc
 - Thư viện: **Caffeine** / Guava `Cache` (giới hạn theo size/time/weight), hoặc
 - `WeakHashMap` / `SoftReference` value nếu ngữ nghĩa cho phép mất entry.
 
@@ -609,7 +609,7 @@ INITIALIZATION   chạy <clinit>: gán static field theo code + chạy static {}
                  → JVM ĐẢM BẢO chạy ĐÚNG MỘT LẦN, THREAD-SAFE (khóa trên đối tượng Class)
 ```
 
-Ba tính chất "lazy + once + thread-safe" của `<clinit>` chính là cơ chế đứng sau **Initialization-on-demand Holder idiom** cho singleton (chi tiết → **Module 01.3**). Nếu `<clinit>` ném exception → `ExceptionInInitializerError`, và class bị đánh dấu "erroneous" → mọi lần dùng sau ném `NoClassDefFoundError` (→ Module 01.3 & 04).
+Ba tính chất "lazy + once + thread-safe" của `<clinit>` chính là cơ chế đứng sau **Initialization-on-demand Holder idiom** cho singleton (chi tiết → **Module 03**). Nếu `<clinit>` ném exception → `ExceptionInInitializerError`, và class bị đánh dấu "erroneous" → mọi lần dùng sau ném `NoClassDefFoundError` (→ Module 03 & 04).
 
 ### `NoClassDefFoundError` vs `ClassNotFoundException`
 
@@ -797,7 +797,7 @@ Lambda x -> println(x)  ──javac──►  method ẩn "lambda$main$0" + 1 l�
 | `Java heap space` | Heap thật sự đầy — leak, hoặc `-Xmx` quá nhỏ so với tải, hoặc một request nạp dữ liệu khổng lồ | Heap dump (mục 10); kiểm tra query trả quá nhiều dòng, cache vô hạn |
 | `GC overhead limit exceeded` | JVM dành **> 98% thời gian** cho GC mà thu lại **< 2%** Heap → bỏ cuộc | Gần như luôn là leak hoặc Heap quá nhỏ; xử như `Java heap space` |
 | `Metaspace` | Quá nhiều class metadata | Classloader leak (mục 11), sinh proxy/lambda class vô hạn; đặt `-XX:MaxMetaspaceSize` để "bắt" sớm |
-| `unable to create native thread` | OS từ chối tạo thread mới — hết `ulimit -u`, hết RAM cho Stack (số thread × `-Xss`), hoặc chạm `threads-max` | Giảm số thread (dùng pool / virtual thread — Module 05.2, 06), giảm `-Xss`, tăng ulimit |
+| `unable to create native thread` | OS từ chối tạo thread mới — hết `ulimit -u`, hết RAM cho Stack (số thread × `-Xss`), hoặc chạm `threads-max` | Giảm số thread (dùng pool / virtual thread — Module 13–14), giảm `-Xss`, tăng ulimit |
 | `Direct buffer memory` | `ByteBuffer.allocateDirect(...)` (dùng nhiều bởi Netty/NIO) vượt `-XX:MaxDirectMemorySize` | Bộ đệm direct không được giải phóng (chờ GC dọn `DirectByteBuffer` qua `Cleaner`); tăng giới hạn hoặc pool lại buffer |
 | `Requested array size exceeds VM limit` | Xin mảng > ~`Integer.MAX_VALUE` phần tử | Bug logic kích thước |
 
@@ -865,7 +865,7 @@ Không cần thành thạo ngay — **biết tên, biết dùng khi nào**. Tấ
 | **`jps`** | Liệt kê tiến trình JVM đang chạy + PID | `jps -lv` |
 | **`jstat`** | Thống kê GC theo thời gian thực (đếm & thời gian Minor/Full GC, % từng vùng) | `jstat -gcutil <pid> 1000` (mỗi 1s) |
 | **`jmap`** | Chụp heap dump; histogram class | `jmap -histo:live <pid>` · `jmap -dump:live,format=b,file=h.hprof <pid>` |
-| **`jstack`** | Thread dump — phát hiện deadlock (Module 05.1), thread bị treo / chờ lock | `jstack <pid>` (chạy 3 lần cách nhau 5s để so) |
+| **`jstack`** | Thread dump — phát hiện deadlock (Module 12), thread bị treo / chờ lock | `jstack <pid>` (chạy 3 lần cách nhau 5s để so) |
 | **`jcmd`** | "Dao đa năng" — thay được phần lớn công cụ trên | `jcmd <pid> GC.heap_info` · `GC.run` · `Thread.print` · `VM.native_memory summary` · `GC.heap_dump f.hprof` · `JFR.start` |
 | **`jinfo`** | Xem/đổi cờ JVM của tiến trình đang chạy | `jinfo -flags <pid>` |
 | **JFR (Java Flight Recorder)** | Profiler overhead cực thấp (< 1–2%) — "ghi hình" allocation, GC, lock contention, method sampling, I/O trong một khoảng thời gian | `jcmd <pid> JFR.start duration=120s filename=rec.jfr` |
@@ -882,6 +882,61 @@ Không cần thành thạo ngay — **biết tên, biết dùng khi nào**. Tấ
 > 5. RAM tổng cao nhưng Heap ổn: bật `-XX:NativeMemoryTracking` → `jcmd VM.native_memory summary` (thủ phạm hay gặp: quá nhiều thread × stack, Metaspace, direct buffer).
 
 ---
+
+### Native Memory Tracking — heap ổn nhưng container vẫn OOM
+
+RSS của process gồm heap **và** metaspace, code cache, thread stack, direct buffer, GC/native structures. Vì vậy `-Xmx` thấp hơn container limit vẫn chưa đủ. Bật NMT từ lúc khởi động rồi so snapshot:
+
+```bash
+java -XX:NativeMemoryTracking=summary -jar app.jar
+jcmd <pid> VM.native_memory baseline
+jcmd <pid> VM.native_memory summary.diff
+```
+
+NMT có overhead và không thay thế OS metrics, nhưng giúp phân biệt heap leak với native/direct/thread growth. Liên hệ Module 30: alert đồng thời RSS, heap committed/used, thread count và direct buffer pool.
+
+### Class unloading, classloader leak và CDS
+
+Class chỉ unload khi class loader định nghĩa nó không còn reachable; static cache, `ThreadLocal`, listener hoặc thread còn giữ reference có thể giữ cả một application classloader sau redeploy. Heap dump thường hiện nhiều bản class/classloader giống nhau.
+
+Class Data Sharing (CDS/AppCDS) lưu metadata/class đã xử lý để giảm startup và footprint chia sẻ. CDS tối ưu thời gian/nhớ, không sửa classloader leak và archive phải tương thích với runtime/application build.
+
+### Sơ đồ JVM Runtime Data Areas theo phạm vi chia sẻ
+
+```mermaid
+flowchart TB
+    subgraph Shared["Dùng chung toàn JVM"]
+        H["Heap<br/>object và array"]
+        M["Metaspace / Method metadata<br/>class metadata và runtime constant pool"]
+        CC["Code Cache<br/>native code do JIT sinh"]
+    end
+    subgraph T1["Mỗi thread có vùng riêng"]
+        PC1["PC register"]
+        JS1["Java Stack<br/>stack frame và local variables"]
+        NS1["Native Method Stack"]
+    end
+    ROOT["GC Roots"] --> H
+    JS1 --> H
+    M --> H
+    CC -. "thực thi code tối ưu" .-> JS1
+```
+
+Tách shared/per-thread giải thích nhiều lỗi vận hành: tăng thread làm phình tổng stack/native memory dù heap ổn; classloader leak giữ Metaspace; direct buffer/JIT structures làm RSS lớn hơn `-Xmx`. Stack frame chứa primitive và reference, còn object thường nằm trên heap về mặt semantic dù JIT có thể scalar-replace allocation.
+
+### Flowchart: Class Loading → Linking → Initialization
+
+```mermaid
+flowchart LR
+    L["Loading<br/>đọc bytecode và tạo Class"] --> V["Verification<br/>kiểm tra bytecode an toàn"]
+    V --> P["Preparation<br/>cấp static field với zero-value"]
+    P --> R["Resolution<br/>symbolic reference thành direct reference"]
+    R --> I["Initialization<br/>chạy class initializer"]
+    I --> U["Class sẵn sàng sử dụng"]
+```
+
+Linking tách verification/preparation/resolution để JVM có thể kiểm tra an toàn và trì hoãn một số resolution tới lúc cần. Initialization được đồng bộ và xảy ra theo trigger xác định; đây là nền tảng của initialization-on-demand holder idiom.
+
+> ⚠️ “Class đã load” không đồng nghĩa static initializer đã chạy. Khi debug startup hoặc deadlock class initialization phải phân biệt rõ từng giai đoạn.
 
 ## 15. Tổng kết — Bảng ghi nhớ nhanh
 
@@ -908,7 +963,7 @@ Không cần thành thạo ngay — **biết tên, biết dùng khi nào**. Tấ
 | ClassLoader phân cấp | Bootstrap → Platform → Application → (Custom). **Parent delegation**: hỏi cha trước → bảo mật, không trùng class lõi |
 | Class identity | (tên đầy đủ **+ defining classloader**) → cùng tên khác loader = khác class → `ClassCastException` "vô lý" |
 | `Class.forName` vs `loadClass` | `forName` (1-arg) **chạy `<clinit>`**; `loadClass` thì không |
-| load → link → init | link = verify + prepare (static = giá trị mặc định) + resolve. init = `<clinit>` **lazy, once, thread-safe** (→ Module 01.3) |
+| load → link → init | link = verify + prepare (static = giá trị mặc định) + resolve. init = `<clinit>` **lazy, once, thread-safe** (→ Module 03) |
 | `NoClassDefFoundError` vs `ClassNotFoundException` | Error (có lúc compile, thiếu lúc chạy / init lỗi trước đó) vs checked Exception (nạp động không thấy) |
 | JIT tiered | Interpreter (profiling) → **C1** (nhanh, tối ưu nhẹ) → **C2** (chậm, tối ưu sâu). Mặc định từ Java 8 |
 | Hot detection | invocation counter + backedge counter; **OSR** thay khung vòng lặp đang chạy dở |
@@ -984,7 +1039,7 @@ Viết method `long sumSquares(int n)`. Gọi trong vòng lặp 20 lần, mỗi 
 
 **Bài 4 — Tái hiện & sửa memory leak bằng cache.**
 (a) `LeakyCache`: `static Map<Integer, byte[]>`, `put(i, new byte[100_000])` trong vòng lặp 1..500_000, **không eviction**. Mỗi 20_000 vòng in `used = totalMemory - freeMemory` và số lần Full GC (đọc qua `ManagementFactory.getGarbageCollectorMXBeans()`). Quan sát `used` sau mỗi Full GC vẫn tăng dần.
-(b) `BoundedCache`: dùng `LinkedHashMap` override `removeEldestEntry` giới hạn 1000 entry (LRU — Module 03.1). Chạy cùng vòng lặp, in cùng số liệu. Vẽ biểu đồ text (`*` tỉ lệ với `used`) cho cả (a) và (b) cạnh nhau.
+(b) `BoundedCache`: dùng `LinkedHashMap` override `removeEldestEntry` giới hạn 1000 entry (LRU — Module 08). Chạy cùng vòng lặp, in cùng số liệu. Vẽ biểu đồ text (`*` tỉ lệ với `used`) cho cả (a) và (b) cạnh nhau.
 
 **Bài 5 — Chứng minh class identity phụ thuộc ClassLoader.**
 Viết `Widget` (class thường). Trong `main`: nạp `Widget` hai lần bằng hai `URLClassLoader` độc lập trỏ cùng thư mục `target/classes`. In `w1.getClass() == w2.getClass()` (false) và `w1.getClass().getClassLoader()` của mỗi bên. Thử `(Widget) instanceFromLoader2` → bắt `ClassCastException`, in `getMessage()` (sẽ thấy "Widget cannot be cast to Widget"). Giải thích trong comment.
@@ -1080,4 +1135,4 @@ Viết `hot()` gọi 100 triệu lần một hàm tạo object nhỏ cục bộ 
 
 ---
 
-*File tiếp theo trong lộ trình: **Module 08 — Design Patterns** (Creational, Structural, Behavioral Patterns — nền tảng để đọc hiểu source code Spring Framework).*
+*File tiếp theo trong lộ trình: **Module 16 — Design Patterns** (Creational, Structural, Behavioral Patterns — nền tảng để đọc hiểu source code Spring Framework).*

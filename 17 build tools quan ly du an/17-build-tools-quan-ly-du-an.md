@@ -1,8 +1,8 @@
-# Module 09 — Build Tools & Quản lý dự án
+# Module 17 — Build Tools & Quản lý dự án
 
 > **Mức độ ưu tiên: Cao (Maven/Git) → Trung bình (Gradle)** — Không dự án backend thực tế nào build tay bằng `javac` từng file. Công cụ build và Git là điều **bắt buộc phải thành thạo ngay ngày đầu đi thực tập/đi làm** — nhà tuyển dụng mặc định ứng viên đã biết, nên thường **không được dạy kỹ ở trường** nhưng lại gây bối rối nhất cho sinh viên mới ra trường.
 
-> **Phạm vi bài này:** cấu trúc & vòng đời Maven, so sánh Gradle, và Git ở mức làm việc thực tế trong team (branching, rebase/merge, PR, conflict, convention). **Chỉ nhắc tên, không đi sâu:** CI/CD pipeline (Module 20), Unit Test/Mockito (Module 17-kế), Spring Boot Starter/Profile thực tế (Module 13). Các chỗ chạm chủ đề khác chỉ nêu đủ để bài trọn vẹn.
+> **Phạm vi bài này:** cấu trúc & vòng đời Maven, so sánh Gradle, và Git ở mức làm việc thực tế trong team (branching, rebase/merge, PR, conflict, convention). **Chỉ nhắc tên, không đi sâu:** CI/CD pipeline (Module 29), Unit Test/Mockito (Module 26), Spring Boot Starter/Profile thực tế (Module 22). Các chỗ chạm chủ đề khác chỉ nêu đủ để bài trọn vẹn.
 
 ---
 
@@ -31,7 +31,7 @@
 Dự án backend thực tế có hàng trăm file `.java`, phụ thuộc hàng chục thư viện ngoài. Build Tool giải quyết:
 
 1. **Quản lý dependency** — tự tải đúng phiên bản thư viện cần dùng, cùng **transitive dependency** (thư viện mà thư viện đó cần), thay vì tự tay tải `.jar` và ghép classpath.
-2. **Chuẩn hóa quy trình build** — compile/test/package theo một quy trình, chạy **giống nhau** trên mọi máy trong team và trên CI server (Module 20).
+2. **Chuẩn hóa quy trình build** — compile/test/package theo một quy trình, chạy **giống nhau** trên mọi máy trong team và trên CI server (Module 29).
 3. **Chuẩn hóa cấu trúc dự án** — ai mở dự án Maven/Gradle mới cũng biết ngay code nằm ở đâu.
 
 ---
@@ -54,7 +54,7 @@ my-project/
 └── target/                          ← TỰ SINH, không commit lên Git
 ```
 
-> Maven mặc định tìm code ở đúng các vị trí này — **"Convention over Configuration"**, nguyên lý cốt lõi sẽ gặp lại xuyên suốt Spring Boot (Module 13).
+> Maven mặc định tìm code ở đúng các vị trí này — **"Convention over Configuration"**, nguyên lý cốt lõi sẽ gặp lại xuyên suốt Spring Boot (Module 22).
 
 ### Bộ khung `pom.xml`
 
@@ -132,7 +132,7 @@ Dự án của bạn
             ├─► spring-web, spring-webmvc, tomcat-embed-core, jackson-databind (TỰ ĐỘNG kéo theo)
 ```
 
-Đây là ý nghĩa của **Spring Boot Starter**: khai báo một dòng, kéo theo cả cây (Module 13).
+Đây là ý nghĩa của **Spring Boot Starter**: khai báo một dòng, kéo theo cả cây (Module 22).
 
 Khi 2 thư viện cùng phụ thuộc một thư viện thứ ba ở **hai phiên bản khác nhau**, Maven chọn theo **"Nearest Wins"** — khai báo **gần** dự án gốc nhất trong cây thắng; hòa khoảng cách thì **khai báo trước trong `<dependencies>`** thắng.
 
@@ -274,7 +274,7 @@ mvn -P prod package  # kích hoạt profile (mục 5)
 mvn package -P prod
 ```
 
-> Nền tảng để hiểu Spring Profile (`application-dev.yml`/`application-prod.yml` — Module 13) — cơ chế khác, ý tưởng "tách cấu hình theo môi trường" giống nhau.
+> Nền tảng để hiểu Spring Profile (`application-dev.yml`/`application-prod.yml` — Module 22) — cơ chế khác, ý tưởng "tách cấu hình theo môi trường" giống nhau.
 
 ### Multi-module project — nhiều `pom.xml` con dưới một `pom.xml` cha
 
@@ -520,7 +520,7 @@ main (nhánh duy nhất, luôn deploy được)
   └── feature/payment
 ```
 
-> Gitflow hợp chu kỳ phát hành **chậm, cố định**. Trunk-Based hợp team **deploy liên tục** (Module 20), ưu tiên merge nhanh, tránh feature branch "sống" lâu (dễ conflict lớn). Xu hướng hiện đại nghiêng về Trunk-Based hoặc Gitflow rút gọn.
+> Gitflow hợp chu kỳ phát hành **chậm, cố định**. Trunk-Based hợp team **deploy liên tục** (Module 29), ưu tiên merge nhanh, tránh feature branch "sống" lâu (dễ conflict lớn). Xu hướng hiện đại nghiêng về Trunk-Based hoặc Gitflow rút gọn.
 
 ---
 
@@ -572,7 +572,7 @@ Quy trình chuẩn:
 1. Bắt lỗi **sớm**, rẻ hơn nhiều so với fix trên production.
 2. **Chia sẻ kiến thức** — giảm "Bus Factor" (rủi ro chỉ 1 người hiểu 1 đoạn code).
 3. Nhất quán coding convention/kiến trúc.
-4. CI (Module 20) chạy test/kiểm tra chất lượng **ngay trên PR** trước khi cho merge.
+4. CI (Module 29) chạy test/kiểm tra chất lượng **ngay trên PR** trước khi cho merge.
 
 ### Kỷ luật PR & etiquette review
 
@@ -684,6 +684,47 @@ BREAKING CHANGE: field `data` giờ là object thay vì array
 
 ---
 
+### Reproducible build và dependency governance
+
+Một commit phải cho cùng artifact khi build lại trong môi trường tương đương. Khóa version plugin/dependency, tránh dynamic version/SNAPSHOT trong release, cố định toolchain JDK và kiểm soát timestamp/thứ tự file trong archive. Maven Enforcer hoặc Gradle dependency locking giúp build fail sớm khi dependency lệch chuẩn.
+
+```xml
+<plugin>
+  <groupId>org.apache.maven.plugins</groupId>
+  <artifactId>maven-enforcer-plugin</artifactId>
+  <executions><execution><goals><goal>enforce</goal></goals></execution></executions>
+</plugin>
+```
+
+> ⚠️ `dependencyManagement` quản lý version, không tự thêm dependency. Hãy xem effective POM/dependency insight để biết version cuối cùng sau BOM và conflict resolution.
+
+### SBOM và provenance trong chuỗi cung ứng
+
+SBOM (CycloneDX/SPDX) liệt kê component/version để đối chiếu CVE và license. Pipeline release nên sinh SBOM từ artifact thực, ký artifact/provenance và lưu cùng release; scan source tree đơn thuần có thể khác dependency đã resolve.
+
+Liên hệ Module 29/32: build “xanh” chưa chứng minh artifact an toàn; cần biết **đã build cái gì, bằng công cụ nào, từ commit nào** và có thể tái tạo/thu hồi phiên bản bị ảnh hưởng.
+
+### Flowchart: artifact đi qua pipeline CI/CD
+
+```mermaid
+flowchart LR
+    C["Commit / Pull Request"] --> B["Compile và static checks"]
+    B --> U["Unit tests"]
+    U --> I["Integration / contract tests"]
+    I --> P["Package một immutable artifact"]
+    P --> S["SBOM, scan và ký provenance"]
+    S --> R["Artifact registry"]
+    R --> ST["Deploy staging bằng digest"]
+    ST --> V["Smoke / acceptance checks"]
+    V --> A{"Approval / policy"}
+    A -- "Đạt" --> PR["Promote cùng artifact tới production"]
+    A -- "Không đạt" --> X["Dừng, không rebuild"]
+```
+
+Nguyên tắc **build once, promote many** bảo đảm thứ đã test chính là thứ được deploy. Rebuild riêng cho production có thể resolve dependency/base image khác và làm provenance mất ý nghĩa. Cấu hình môi trường được inject ngoài artifact nhưng phải version/audit được.
+
+Pipeline nên fail sớm ở bước rẻ, song security/integration gate không được bỏ chỉ để tối ưu thời gian. Cache tăng tốc phải có key gồm lockfile/toolchain; cache sai còn nguy hiểm hơn build chậm.
+
 ## 14. Tổng kết — Bảng ghi nhớ nhanh
 
 | Khái niệm | Điểm mấu chốt |
@@ -772,7 +813,7 @@ Mô tả tình huống: đã `git commit` xong 2 tiếng làm việc, lỡ `git 
 
 **Câu 2.** Giải thích "Nearest Wins" của Maven khi cây phụ thuộc **sâu 3-4 tầng** (không phải khai báo trực tiếp). Cho một ví dụ cụ thể hai đường dẫn phụ thuộc cùng dẫn tới `library-x` ở độ sâu khác nhau, và dự đoán Maven chọn bản nào. Vì sao `mvn dependency:tree` là công cụ bắt buộc trong tình huống này thay vì đoán?
 
-**Câu 3.** Gradle `implementation` vs `api`: dựng ví dụ 3 module `common → core → api` để chứng minh khi đổi một dependency `implementation` bên trong `core`, module `api` **không cần build lại**, còn nếu đổi dependency đó thành `api` thì **phải**. Liên hệ nguyên lý đóng gói/coupling đã học (Module 01.6).
+**Câu 3.** Gradle `implementation` vs `api`: dựng ví dụ 3 module `common → core → api` để chứng minh khi đổi một dependency `implementation` bên trong `core`, module `api` **không cần build lại**, còn nếu đổi dependency đó thành `api` thì **phải**. Liên hệ nguyên lý đóng gói/coupling đã học (Module 06).
 
 **Câu 4.** So sánh chi phí và rủi ro giữa hai chiến lược giữ nhánh feature "đồng bộ" với `main` trong lúc phát triển dài ngày: (a) định kỳ `git merge main` vào feature, (b) định kỳ `git rebase main`. Trường hợp nào an toàn hơn khi **nhiều người cùng làm chung một nhánh feature**? Vì sao?
 
@@ -780,7 +821,7 @@ Mô tả tình huống: đã `git commit` xong 2 tiếng làm việc, lỡ `git 
 
 **Câu 6.** Trong quy trình PR dùng "squash and merge" cho `main`, `git bisect` để tìm commit gây bug có còn hiệu quả như khi dùng "merge commit" giữ nguyên từng commit nhỏ không? Giải thích đánh đổi giữa lịch sử `main` sạch (1 PR = 1 dòng) và khả năng "bisect" ở độ chi tiết cao.
 
-**Câu 7.** `-SNAPSHOT` trong Maven và tag Git dùng cho release (`v1.2.0`) phục vụ hai mục đích khác nhau nhưng bổ trợ nhau trong CI/CD (Module 20). Giải thích luồng thực tế: từ commit trên `develop` (version `1.3.0-SNAPSHOT`) tới lúc có bản release `1.3.0` gắn tag Git — điều gì cần đổi ở `pom.xml`, và vì sao **không nên** deploy bản `-SNAPSHOT` lên production.
+**Câu 7.** `-SNAPSHOT` trong Maven và tag Git dùng cho release (`v1.2.0`) phục vụ hai mục đích khác nhau nhưng bổ trợ nhau trong CI/CD (Module 29). Giải thích luồng thực tế: từ commit trên `develop` (version `1.3.0-SNAPSHOT`) tới lúc có bản release `1.3.0` gắn tag Git — điều gì cần đổi ở `pom.xml`, và vì sao **không nên** deploy bản `-SNAPSHOT` lên production.
 
 ---
 
@@ -808,7 +849,7 @@ Mô tả tình huống: đã `git commit` xong 2 tiếng làm việc, lỡ `git 
 - **Bài 3:** Giữ logic **phân bậc** (tiered) từ `feature/tiered-discount` vì nó **bao hàm và mở rộng** ý tưởng của HEAD (HEAD chỉ là một trường hợp đặc biệt/đơn giản hóa) — không phải "xóa 1 bên" mà là nhận ra một bên đã được thay thế hoàn toàn.
 - **Bài 4:** Thêm `.env` (và `.env.*.local`) vào `.gitignore`; tạo và **commit** `.env.example` (tên biến, giá trị mẫu/rỗng, không có giá trị thật) để onboard thành viên mới.
 - **Bài 5:** `git reflog` → tìm dòng `commit: <message>` ứng với commit đã mất (trước lệnh `reset`) → `git branch recovered-work <hash-tìm-được>` → `git checkout recovered-work` để lấy lại toàn bộ thay đổi.
-- **Bài 6:** Quy mô nhỏ, ngắn hạn, không CI/CD liên tục → Gitflow đầy đủ là **over-engineering** (liên hệ Module 01.6 §11). Đề xuất: chỉ `main` + `feature/*` (mỗi người 1 nhánh theo module việc), merge qua PR sau review nhanh, bỏ tầng `develop`/`release`/`hotfix`.
+- **Bài 6:** Quy mô nhỏ, ngắn hạn, không CI/CD liên tục → Gitflow đầy đủ là **over-engineering** (liên hệ Module 06 §11). Đề xuất: chỉ `main` + `feature/*` (mỗi người 1 nhánh theo module việc), merge qua PR sau review nhanh, bỏ tầng `develop`/`release`/`hotfix`.
 
 </details>
 
@@ -817,7 +858,7 @@ Mô tả tình huống: đã `git commit` xong 2 tiếng làm việc, lỡ `git 
 
 1. Vì mỗi commit trỏ thẳng tới một `tree` (danh sách blob) mô tả **toàn bộ trạng thái thư mục** tại thời điểm đó — `checkout` một commit chỉ là "trải" các blob theo tree đó ra working directory, không cần **phát lại tuần tự** hàng nghìn diff từ đầu lịch sử như VCS kiểu diff-chain. Blob được định danh bằng hash nội dung: hai file giống hệt (ở cùng commit hay khác commit, khác thư mục) cho **cùng một hash** → Git chỉ lưu **một bản** blob đó, mọi tree tham chiếu lại cùng blob — không tốn thêm dung lượng.
 2. Ví dụ: dự án khai báo trực tiếp `A` (kéo theo `library-x:1.0` ở độ sâu 2) và `B` (kéo theo `library-x:2.0` ở độ sâu 3, qua `B → C → library-x:2.0`). "Nearest Wins" đếm khoảng cách từ **gốc dự án**: nhánh qua `A` ngắn hơn (2 bước) nhánh qua `B → C` (3 bước) → Maven chọn `library-x:1.0`, dù đó có thể **không phải** phiên bản bạn muốn (ví dụ bản mới hơn từ `B` sửa lỗi bảo mật). Không đoán được kết quả chỉ bằng đọc `pom.xml` vì độ sâu và tầng phụ thuộc thay đổi liên tục theo version — `dependency:tree` in ra chính xác cây thật đã resolve, kèm dòng ghi chú "(nearest wins used ...)" khi có xung đột.
-3. `common` không đổi. `core` khai báo `implementation 'lib:1.0'` — đổi sang `'lib:2.0'` chỉ ảnh hưởng **classpath biên dịch của chính `core`**; vì `lib` không lộ ra ngoài (`implementation`), Gradle biết **`api` bề mặt của `core` không đổi** → module `api` (phụ thuộc `core`) **không cần recompile**. Nếu khai báo `api 'lib:1.0'` trong `core` rồi đổi version — `lib` là một phần **bề mặt public** của `core` (transitively lộ cho `api`) → Gradle phải coi classpath của `api` đã đổi → recompile. Đây chính là "ẩn chi tiết cài đặt, chỉ lộ hợp đồng" (encapsulation/low coupling — Module 01.6) áp dụng ở cấp build graph, không chỉ cấp class.
+3. `common` không đổi. `core` khai báo `implementation 'lib:1.0'` — đổi sang `'lib:2.0'` chỉ ảnh hưởng **classpath biên dịch của chính `core`**; vì `lib` không lộ ra ngoài (`implementation`), Gradle biết **`api` bề mặt của `core` không đổi** → module `api` (phụ thuộc `core`) **không cần recompile**. Nếu khai báo `api 'lib:1.0'` trong `core` rồi đổi version — `lib` là một phần **bề mặt public** của `core` (transitively lộ cho `api`) → Gradle phải coi classpath của `api` đã đổi → recompile. Đây chính là "ẩn chi tiết cài đặt, chỉ lộ hợp đồng" (encapsulation/low coupling — Module 06) áp dụng ở cấp build graph, không chỉ cấp class.
 4. (a) Merge định kỳ: mỗi lần merge tạo một merge commit trên nhánh feature, lịch sử feature "rối" nhưng **mỗi người trong nhóm thấy đúng một chuỗi sự kiện chung, không ai bị đổi hash**. (b) Rebase định kỳ: lịch sử feature sạch/thẳng nhưng **mỗi lần rebase đổi hash toàn bộ commit đã có** trên nhánh đó — nếu nhiều người cùng làm chung nhánh, người khác đã pull các commit cũ sẽ bị phân kỳ, phải tự rebase/force theo, dễ gây mất đồng bộ và xung đột dây chuyền. Với **nhánh dùng chung nhiều người**, `merge` an toàn hơn hẳn; `rebase` chỉ nên dùng khi nhánh đó là **của riêng một người**, đồng bộ với `main` trước khi mở PR.
 5. Merge commit có **hai cha** (nhánh đích và nhánh được merge) — `git revert` cần biết "đảo ngược so với cha nào" nên bắt buộc cờ `-m <số thứ tự cha>` (thường `-m 1` = đảo theo nhánh chính). Hệ quả: sau khi revert một merge, Git coi merge đó **"chưa từng xảy ra"** đối với các thay đổi trong nó; nếu sau này muốn merge lại **đúng nhánh đó** (cùng các commit), Git sẽ không thấy gì để merge nữa (nó nghĩ nội dung đã có/đã bị revert) — phải revert **chính commit-revert** trước ("revert the revert") rồi mới merge lại được bình thường.
 6. Kém hiệu quả hơn ở độ chi tiết: `bisect` tìm ra **commit squash của cả PR** (chứa hàng chục thay đổi gộp lại), không chỉ ra chính xác dòng/commit nhỏ nào bên trong PR gây lỗi — phải tự đọc diff của PR đó bằng tay để khoanh vùng tiếp. Đánh đổi: `main` sạch, dễ đọc changelog (1 dòng = 1 tính năng) nhưng mất khả năng bisect ở độ hạt mịn; muốn cả hai thì giữ commit chi tiết **trong nhánh feature** (không xóa lịch sử làm việc) trong khi vẫn squash khi merge vào `main` — chấp nhận là hai cấp độ lịch sử phục vụ hai nhu cầu khác nhau.
@@ -827,4 +868,4 @@ Mô tả tình huống: đã `git commit` xong 2 tiếng làm việc, lỡ `git 
 
 ---
 
-*File tiếp theo trong lộ trình: **Module 10 — Database & SQL** (SELECT/JOIN, transaction ACID, index, thiết kế database, EXPLAIN).*
+*File tiếp theo trong lộ trình: **Module 18 — Database & SQL** (SELECT/JOIN, transaction ACID, index, thiết kế database, EXPLAIN).*

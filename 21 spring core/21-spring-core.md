@@ -1,9 +1,9 @@
-# Module 12 — Spring Framework Core
+# Module 21 — Spring Framework Core
 
 > **Mức ưu tiên: 🔴 Cao**
 > **Vì sao quan trọng:** Đây là "trái tim" của toàn bộ hệ sinh thái Spring — Spring Boot, Spring MVC, Spring Data, Spring Security... tất cả đều xây dựng trên nền tảng IoC Container và Dependency Injection. Không hiểu bản chất Bean Lifecycle, `ApplicationContext`, và cách Spring AOP hoạt động thì việc dùng `@Autowired`, `@Transactional`, `@Cacheable`... chỉ là "học vẹt annotation" — sẽ rất khó debug khi gặp lỗi `NoSuchBeanDefinitionException`, circular dependency, hay khi annotation "không có tác dụng" (thường do self-invocation với AOP proxy).
 >
-> **Phạm vi bài này:** cơ chế IoC Container, DI, Bean Lifecycle và AOP của Spring Framework thuần túy. Bài **không** đi sâu cấu hình Spring Boot (auto-configuration, `application.yml`, Profiles, Actuator — đó là Module 13) hay Spring Security/Spring MVC — chỉ dùng chúng làm ví dụ minh họa cơ chế nền tảng.
+> **Phạm vi bài này:** cơ chế IoC Container, DI, Bean Lifecycle và AOP của Spring Framework thuần túy. Bài **không** đi sâu cấu hình Spring Boot (auto-configuration, `application.yml`, Profiles, Actuator — đó là Module 22) hay Spring Security/Spring MVC — chỉ dùng chúng làm ví dụ minh họa cơ chế nền tảng.
 
 ---
 
@@ -63,7 +63,7 @@ public class OrderService {
 - Dễ dàng thay đổi implementation (Stripe/Paypal/Mock) mà không sửa `OrderService`
 - Dễ viết Unit Test — chỉ cần inject 1 mock `PaymentGateway`
 
-> **Đây chính là nguyên lý D trong SOLID (Dependency Inversion Principle)** đã học ở Module 02.3 — Spring là framework hiện thực hóa nguyên lý này ở quy mô toàn ứng dụng.
+> **Đây chính là nguyên lý D trong SOLID (Dependency Inversion Principle)** đã học ở Module 06 — Spring là framework hiện thực hóa nguyên lý này ở quy mô toàn ứng dụng.
 
 **IoC là khái niệm rộng hơn DI:** IoC là *nguyên lý* (đảo ngược quyền kiểm soát), còn **Dependency Injection (DI)** là *kỹ thuật cụ thể* để hiện thực IoC (còn có các kỹ thuật khác như Service Locator, Template Method — nhưng DI phổ biến nhất).
 
@@ -267,7 +267,7 @@ public class AppConfig {
 
     @Bean
     public DataSource dataSource() {
-        return new HikariDataSource(); // Connection Pool đã học nguyên lý ở Module 10
+        return new HikariDataSource(); // Connection Pool đã học nguyên lý ở Module 18
     }
 
     @Bean
@@ -507,7 +507,7 @@ public class PaymentService {
 }
 ```
 
-> **Liên hệ Design Pattern (Module 08):** Cách 3 chính là cách Spring hỗ trợ **Strategy Pattern** rất tự nhiên — không cần `if/else`/`switch` chọn implementation thủ công.
+> **Liên hệ Design Pattern (Module 16):** Cách 3 chính là cách Spring hỗ trợ **Strategy Pattern** rất tự nhiên — không cần `if/else`/`switch` chọn implementation thủ công.
 
 ### required = false — dependency tùy chọn
 
@@ -623,7 +623,7 @@ public class ServiceB {
 
 ## 9. @Value & SpEL — Inject giá trị cấu hình
 
-Bên cạnh inject Bean, Spring còn cho phép inject **giá trị cấu hình đơn giản** (String, số, boolean) trực tiếp từ file cấu hình (`application.properties`/`.yml` — cấu hình chi tiết sẽ học ở Module 13) vào field/tham số constructor bằng `@Value`.
+Bên cạnh inject Bean, Spring còn cho phép inject **giá trị cấu hình đơn giản** (String, số, boolean) trực tiếp từ file cấu hình (`application.properties`/`.yml` — cấu hình chi tiết sẽ học ở Module 22) vào field/tham số constructor bằng `@Value`.
 
 ### Cú pháp cơ bản
 
@@ -687,7 +687,7 @@ public class ConfigInspector {
     public void printConfig() {
         String host = environment.getProperty("mail.smtp.host");
         int port = environment.getProperty("mail.smtp.port", Integer.class, 587); // có default + ép kiểu
-        boolean isProd = environment.acceptsProfiles(Profiles.of("production")); // liên hệ Profile ở Module 13
+        boolean isProd = environment.acceptsProfiles(Profiles.of("production")); // liên hệ Profile ở Module 22
     }
 }
 ```
@@ -849,7 +849,7 @@ Có 2 loại Proxy Spring dùng:
 ```
 > Spring Boot mặc định **đã bật `proxyTargetClass = true`** từ Spring Boot 2.x trở đi — nghĩa là mặc định dùng CGLIB cho mọi trường hợp, kể cả Bean có interface, để tránh những khác biệt hành vi tinh vi giữa 2 loại proxy (VD: khi 1 field/biến khai báo kiểu chính là class thay vì interface, chỉ Proxy dạng CGLIB mới gán được).
 
-⚠️ **Đây chính là lý do giải thích bẫy self-invocation đã nói ở Module 11 (`@Transactional`):**
+⚠️ **Đây chính là lý do giải thích bẫy self-invocation đã nói ở Module 20 (`@Transactional`):**
 
 ```java
 @Service
@@ -883,7 +883,7 @@ public class OrderService {
     private final LoyaltyPointService loyaltyPointService;
     // Mỗi khi có nghiệp vụ MỚI cần chạy khi đặt hàng xong (VD: thêm gửi SMS),
     // lại phải SỬA OrderService để inject thêm Service và gọi thêm dòng code
-    // -> vi phạm Open/Closed Principle (SOLID, Module 02.3)
+    // -> vi phạm Open/Closed Principle (SOLID, Module 06)
 
     public void placeOrder(Order order) {
         orderRepository.save(order);
@@ -968,7 +968,7 @@ public class InventoryListener {
     }
 }
 ```
-> **Liên hệ Module 11 (`@Transactional`):** đây là cách kết hợp Event-driven với Transaction Management — tránh tình huống trừ tồn kho/gửi email cho 1 đơn hàng mà cuối cùng transaction chính lại rollback.
+> **Liên hệ Module 20 (`@Transactional`):** đây là cách kết hợp Event-driven với Transaction Management — tránh tình huống trừ tồn kho/gửi email cho 1 đơn hàng mà cuối cùng transaction chính lại rollback.
 
 ---
 
@@ -999,6 +999,69 @@ public class InventoryListener {
 12. **Publish Event nghiệp vụ quan trọng (trừ tồn kho, gửi thông báo thanh toán) mà không dùng `@TransactionalEventListener(AFTER_COMMIT)`** — có thể khiến listener chạy dựa trên dữ liệu của 1 transaction sau đó bị rollback, gây sai lệch nghiêm trọng (VD: đã trừ tồn kho cho 1 đơn hàng thực ra chưa từng được lưu thành công).
 
 ---
+
+### `SmartLifecycle` và thứ tự start/stop của hạ tầng
+
+Bean mở consumer, scheduler hoặc kết nối nền cần lifecycle rõ thay vì khởi chạy thread trong constructor. `SmartLifecycle` hỗ trợ auto-start, `phase` và callback stop bất đồng bộ; phase thấp start trước và stop sau, giúp dependency hạ tầng sống đủ lâu để component phía trên drain công việc.
+
+```java
+final class ConsumerLifecycle implements SmartLifecycle {
+    private volatile boolean running;
+    public void start() { consumer.start(); running = true; }
+    public void stop(Runnable done) { consumer.stop(() -> { running = false; done.run(); }); }
+    public boolean isRunning() { return running; }
+    public int getPhase() { return 100; }
+}
+```
+
+> ⚠️ `@PreDestroy` phù hợp cleanup ngắn, nhưng không biểu đạt dependency phase hoặc asynchronous drain. Graceful shutdown của Module 22 chỉ hiệu quả khi component nền thực sự tôn trọng lifecycle.
+
+### BeanPostProcessor là hạ tầng, không phải nơi giấu nghiệp vụ
+
+`BeanPostProcessor` có thể thay/wrap bean trước và sau initialization; Spring AOP và nhiều annotation processor dựa vào extension point này. Vì nó chạy trên rất nhiều bean và phụ thuộc thứ tự, chỉ nên dùng cho concern hạ tầng có contract rõ. Business rule ẩn trong post-processor khó trace, dễ chạy trước proxy mong muốn và làm startup khó chẩn đoán.
+
+### Flowchart: vòng đời Spring Bean và điểm proxy được tạo
+
+```mermaid
+flowchart TD
+    D["Đọc BeanDefinition"] --> I["Instantiate bean"]
+    I --> P["Populate dependencies"]
+    P --> A["Aware callbacks"]
+    A --> B1["BeanPostProcessor before initialization"]
+    B1 --> PC["@PostConstruct / afterPropertiesSet / init-method"]
+    PC --> B2["BeanPostProcessor after initialization"]
+    B2 --> PX["Có thể trả AOP proxy thay object gốc"]
+    PX --> R["Bean sẵn sàng phục vụ"]
+    R --> D1["@PreDestroy / destroy khi context đóng"]
+```
+
+Proxy xuất hiện sau nhiều bước initialization nên callback trên raw bean và lời gọi qua proxy không hoàn toàn cùng ngữ cảnh. Self-invocation bỏ qua proxy vì `this` trỏ object đích, giải thích vì sao `@Transactional/@Async` có thể không hoạt động khi method cùng class gọi nhau.
+
+### Sequence diagram: một HTTP request qua Spring MVC
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant F as Servlet Filters
+    participant D as DispatcherServlet
+    participant H as HandlerMapping / Adapter
+    participant CT as Controller
+    participant S as Service
+    participant R as Repository
+    C->>F: HTTP request
+    F->>D: request đã qua filter
+    D->>H: tìm handler và adapter
+    H->>CT: bind, validate và invoke
+    CT->>S: gọi use case
+    S->>R: truy cập dữ liệu trong transaction
+    R-->>S: result
+    S-->>CT: DTO/result
+    CT-->>D: response body hoặc model
+    D-->>F: serialize bằng message converter
+    F-->>C: HTTP response
+```
+
+Exception resolver, interceptor và argument resolver cắm quanh các bước tương ứng. Mental model này giúp đặt concern đúng chỗ: security ở filter chain, HTTP mapping ở controller, transaction/business invariant ở service, persistence ở repository.
 
 ## 13. Tổng kết — Bảng ghi nhớ nhanh
 
@@ -1360,4 +1423,4 @@ public class InventoryListener {
 
 ---
 
-*File tiếp theo trong lộ trình: **Module 13 — Spring Boot** (Auto-configuration, Starter dependencies, application.properties/yml, Profiles, Spring Boot Actuator, cấu trúc project chuẩn).*
+*File tiếp theo trong lộ trình: **Module 22 — Spring Boot** (Auto-configuration, Starter dependencies, application.properties/yml, Profiles, Spring Boot Actuator, cấu trúc project chuẩn).*

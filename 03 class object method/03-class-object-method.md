@@ -1,8 +1,8 @@
-# Module 01.3 — Class, Object, Method
+# Module 03 — Class, Object, Method
 
 > **Mức độ ưu tiên: Cao** — Đây là điểm chuyển từ "viết script chạy tuần tự" sang lập trình hướng đối tượng thực sự. Hiểu sai `static` vs instance, overload resolution, hay thứ tự khởi tạo sẽ tạo ra bug rất khó debug khi code lớn dần — và toàn bộ Dependency Injection của Spring dựa trên khái niệm *instance member* + *constructor injection*.
 
-> **Phạm vi bài học:** class & object (bao gồm reference, vòng đời, `record`, nested class ở mức tổng quan), constructor (chaining, `private`, thứ tự khởi tạo field), method (signature, overloading & overload resolution, varargs), `this` (kể cả qualified `this` và `this` trong lambda/anonymous), `static` vs instance, access modifier (kể cả nuance của `protected` và class), static/instance initializer block. Các chủ đề: kế thừa & `super`, `@Override`, đa hình runtime (Module 01.4), `equals`/`hashCode`/`toString` chi tiết (Module 01.7), interface (Module 01.5), Design Pattern (Module 01.16), đồng bộ hóa static state (Module 01.12) **không** thuộc bài này — chỉ nhắc khi liên quan trực tiếp.
+> **Phạm vi bài học:** class & object (bao gồm reference, vòng đời, `record`, nested class ở mức tổng quan), constructor (chaining, `private`, thứ tự khởi tạo field), method (signature, overloading & overload resolution, varargs), `this` (kể cả qualified `this` và `this` trong lambda/anonymous), `static` vs instance, access modifier (kể cả nuance của `protected` và class), static/instance initializer block. Các chủ đề: kế thừa & `super`, `@Override`, đa hình runtime (Module 04), `equals`/`hashCode`/`toString` chi tiết (Module 07), interface (Module 05), Design Pattern (Module 16), đồng bộ hóa static state (Module 12) **không** thuộc bài này — chỉ nhắc khi liên quan trực tiếp.
 
 ---
 
@@ -48,7 +48,7 @@ Student s3 = s1;              // s3 và s1 cùng trỏ MỘT object — sửa qu
 
 ### Reference — không phải object
 
-Biến kiểu class chỉ chứa **địa chỉ tham chiếu**, không chứa object. Hệ quả (xem thêm Module 01.1 §10 *pass-by-value*):
+Biến kiểu class chỉ chứa **địa chỉ tham chiếu**, không chứa object. Hệ quả (xem thêm Module 01 §10 *pass-by-value*):
 
 ```java
 Student a = new Student();
@@ -59,7 +59,7 @@ System.out.println(a.age);   // 99 — cùng một object
 Student x = new Student();
 Student y = new Student();
 System.out.println(x == y);        // false — hai object khác nhau (so sánh địa chỉ)
-System.out.println(x.equals(y));   // false — Object.equals mặc định cũng so sánh địa chỉ (đến khi override, Module 01.7)
+System.out.println(x.equals(y));   // false — Object.equals mặc định cũng so sánh địa chỉ (đến khi override, Module 07)
 
 Student z = null;
 z.printInfo();               // NullPointerException — reference rỗng, không trỏ object nào
@@ -78,7 +78,7 @@ z.printInfo();               // NullPointerException — reference rỗng, khôn
 Object sống tới khi **không còn reference nào** trỏ tới nó → trở thành "rác" và bị **Garbage Collector** thu hồi ở thời điểm không xác định.
 
 - Không có `delete`/`free` trong Java. Gán `ref = null` chỉ *gỡ* một tham chiếu.
-- `finalize()` đã **deprecated** (Java 9) và bị loại bỏ — không bao giờ dựa vào nó để dọn tài nguyên. Dùng `try-with-resources` / `AutoCloseable` (Module 01.11).
+- `finalize()` đã **deprecated** (Java 9) và bị loại bỏ — không bao giờ dựa vào nó để dọn tài nguyên. Dùng `try-with-resources` / `AutoCloseable` (Module 11).
 
 ### `Object` — gốc rễ chung của mọi class
 
@@ -274,7 +274,7 @@ public final class MathUtils {
 }
 ```
 
-Dùng cho **utility class** (toàn method `static`) và **Singleton** (Module 01.16).
+Dùng cho **utility class** (toàn method `static`) và **Singleton** (Module 16).
 
 ### Constructor có thể ném exception
 
@@ -299,11 +299,11 @@ public Student(Student other) {
 
 Java không có copy constructor tự động (khác C++). Cân nhắc *deep copy* nếu field là kiểu tham chiếu có thể thay đổi.
 
-> ⚠️ **Không gọi method có thể bị override trong constructor.** Khi constructor lớp cha chạy, phần lớp con **chưa khởi tạo**; nếu constructor cha gọi một method mà lớp con override, method đó chạy trên object nửa vời (field lớp con còn `null`/`0`). Chi tiết ở Module 01.4 — ở đây chỉ cần nhớ: **constructor chỉ nên gán field và gọi `private`/`final`/`static` method**.
+> ⚠️ **Không gọi method có thể bị override trong constructor.** Khi constructor lớp cha chạy, phần lớp con **chưa khởi tạo**; nếu constructor cha gọi một method mà lớp con override, method đó chạy trên object nửa vời (field lớp con còn `null`/`0`). Chi tiết ở Module 04 — ở đây chỉ cần nhớ: **constructor chỉ nên gán field và gọi `private`/`final`/`static` method**.
 
 ### Telescoping constructor — anti-pattern
 
-Chuỗi constructor "n tham số, n+1 tham số, n+2..." trở nên khó đọc khi nhiều field tuỳ chọn. Giải pháp là **Builder pattern** (Module 01.16). Ở bài này chỉ cần nhận diện vấn đề.
+Chuỗi constructor "n tham số, n+1 tham số, n+2..." trở nên khó đọc khi nhiều field tuỳ chọn. Giải pháp là **Builder pattern** (Module 16). Ở bài này chỉ cần nhận diện vấn đề.
 
 ---
 
@@ -343,7 +343,7 @@ class Calculator {
 }
 ```
 
-Việc chọn method nào diễn ra tại **compile-time**, dựa trên **kiểu tĩnh** của đối số — gọi là *static binding / compile-time polymorphism* (khác *overriding* là runtime, Module 01.4).
+Việc chọn method nào diễn ra tại **compile-time**, dựa trên **kiểu tĩnh** của đối số — gọi là *static binding / compile-time polymorphism* (khác *overriding* là runtime, Module 04).
 
 ### Overload Resolution — compiler chọn method thế nào (3 pha)
 
@@ -403,7 +403,7 @@ Quy tắc & bẫy:
 - Một method varargs `f(int...)` và một non-varargs `f(int, int)` cùng tồn tại → lời gọi `f(1, 2)` ưu tiên **non-varargs** (pha 3 xét sau).
 - `f((Object[]) null)` truyền `null` làm mảng → `NullPointerException` khi duyệt; `f((Object) null)` truyền mảng 1 phần tử `null`.
 - `printf`/`String.format` dùng varargs — truyền sai số lượng/kiểu tham số ⇒ `MissingFormatArgumentException` lúc runtime, compiler không bắt.
-- Truyền `T[]` vào `T...` generic có thể sinh cảnh báo *heap pollution* → đánh dấu `@SafeVarargs` nếu chắc chắn an toàn (chi tiết ở Module 01.9).
+- Truyền `T[]` vào `T...` generic có thể sinh cảnh báo *heap pollution* → đánh dấu `@SafeVarargs` nếu chắc chắn an toàn (chi tiết ở Module 09).
 
 ### Method trả về kiểu tham chiếu — trả về địa chỉ, không phải bản sao dữ liệu
 
@@ -584,7 +584,7 @@ Student.printTotal();                   // Tổng: 2
 > int t = s2.totalStudents; // KHÔNG NPE! — chỉ dùng KIỂU của s2 để tìm field static
 > ```
 
-> ⚠️ **static method không bị override, chỉ bị "che" (hiding).** Lời gọi static method phân giải theo **kiểu tĩnh**, không theo object. Chi tiết ở Module 01.4.
+> ⚠️ **static method không bị override, chỉ bị "che" (hiding).** Lời gọi static method phân giải theo **kiểu tĩnh**, không theo object. Chi tiết ở Module 04.
 
 ### Vì sao `main` là `static`
 
@@ -596,7 +596,7 @@ JVM gọi `main` **trước khi có object nào** → phải gọi được mà 
 
 ### Class được nạp & khởi tạo khi nào (class initialization)
 
-Static field initializer + static block chỉ chạy khi class **được khởi tạo lần đầu**, kích hoạt bởi: `new`, truy cập static field **không phải hằng compile-time**, gọi static method, khởi tạo class con, dùng reflection... Truy cập một `static final` **hằng compile-time** thì **không** kích hoạt nạp class (giá trị đã được inline — Module 01.1 §1).
+Static field initializer + static block chỉ chạy khi class **được khởi tạo lần đầu**, kích hoạt bởi: `new`, truy cập static field **không phải hằng compile-time**, gọi static method, khởi tạo class con, dùng reflection... Truy cập một `static final` **hằng compile-time** thì **không** kích hoạt nạp class (giá trị đã được inline — Module 01 §1).
 
 ### static import
 
@@ -617,7 +617,7 @@ Dùng tiết chế — lạm dụng làm mất dấu vết "hàm này ở đâu 
 | Hàm tiện ích thuần, không phụ thuộc trạng thái (`Math.sqrt`, `Integer.parseInt`) | Hành vi thao tác trên field của chính object |
 | `static final` constant | Field mô tả đặc điểm một đối tượng cụ thể |
 
-> ⚠️ **static field khả biến (mutable) = trạng thái toàn cục.** Nhiều thread cùng đọc/ghi → cần đồng bộ hóa (Module 01.12). Trong ứng dụng Spring, hầu như luôn ưu tiên *instance field của bean* thay vì `static`.
+> ⚠️ **static field khả biến (mutable) = trạng thái toàn cục.** Nhiều thread cùng đọc/ghi → cần đồng bộ hóa (Module 12). Trong ứng dụng Spring, hầu như luôn ưu tiên *instance field của bean* thay vì `static`.
 
 ---
 
@@ -704,7 +704,7 @@ public class Student {
 
 ### Module system (Java 9+) — nhắc ngắn
 
-`module-info.java` với `exports <package>` thêm một tầng kiểm soát *trên cả* `public`: một class `public` trong package **không được `exports`** vẫn không nhìn thấy từ module khác. Chi tiết ở Module 01.14.
+`module-info.java` với `exports <package>` thêm một tầng kiểm soát *trên cả* `public`: một class `public` trong package **không được `exports`** vẫn không nhìn thấy từ module khác. Chi tiết ở Module 14.
 
 ---
 
@@ -806,9 +806,52 @@ new Sub();
 // C D E F       (lần 2: static block KHÔNG chạy lại)
 ```
 
-> Mọi constructor mà không viết `this(...)` hoặc `super(...)` ở dòng đầu thì compiler **tự chèn `super();`** (gọi constructor không tham số của lớp cha). Nếu lớp cha **không có** constructor không tham số → lỗi compile, phải gọi `super(...)` tường minh (chi tiết Module 01.4).
+> Mọi constructor mà không viết `this(...)` hoặc `super(...)` ở dòng đầu thì compiler **tự chèn `super();`** (gọi constructor không tham số của lớp cha). Nếu lớp cha **không có** constructor không tham số → lỗi compile, phải gọi `super(...)` tường minh (chi tiết Module 04).
 
 ---
+
+### Class identity thực sự: tên đầy đủ **và** ClassLoader
+
+Trong JVM, hai class có cùng package + tên nhưng do hai `ClassLoader` khác nhau nạp vẫn là **hai kiểu khác nhau**. Vì vậy hệ plugin, application server hoặc hot reload có thể gặp `ClassCastException` trông rất lạ: `com.acme.User cannot be cast to com.acme.User`.
+
+```java
+Class<?> a = loaderA.loadClass("com.acme.User");
+Class<?> b = loaderB.loadClass("com.acme.User");
+System.out.println(a == b); // false
+```
+
+Class loader dùng parent delegation để ưu tiên class từ cha, tránh một module tự thay thế các class nền tảng. Chi tiết nạp–liên kết–khởi tạo xem Module 15; ở đây cần nhớ `static` thuộc về **một class identity**, không phải chỉ thuộc về tên class.
+
+### Object escape trong constructor
+
+Không publish `this` từ constructor (đăng ký listener, khởi chạy thread, gọi callback có thể override). Object có thể bị luồng khác quan sát trước khi constructor hoàn tất, phá vỡ invariant và quy tắc safe publication của Module 12.
+
+> ⚠️ Dùng static factory: tạo object hoàn chỉnh trước, sau đó mới đăng ký/khởi chạy. Constructor nên chỉ thiết lập trạng thái, không làm công việc có side effect bên ngoài.
+
+### Sơ đồ vòng đời một object Java
+
+```mermaid
+stateDiagram-v2
+    [*] --> Allocated: cấp phát bộ nhớ và zero-value
+    Allocated --> Initializing: field initializer và constructor
+    Initializing --> Reachable: constructor hoàn tất
+    Reachable --> Reachable: method làm thay đổi state hợp lệ
+    Reachable --> Unreachable: không còn strong reference từ GC root
+    Unreachable --> Reclaimed: GC thu hồi khi phù hợp
+    Reclaimed --> [*]
+```
+
+Đây là **mô hình reachability**, không phải lời hứa về thời điểm: object unreachable chỉ trở thành ứng viên GC, không được thu hồi ngay. JVM cũng không bảo đảm `finalize()` chạy; resource ngoài heap phải đóng bằng try-with-resources (Module 11).
+
+Luồng khởi tạo chi tiết:
+
+1. JVM bảo đảm class đã được initialize khi cần.
+2. Cấp phát vùng nhớ và đặt field về zero-value.
+3. Gọi constructor cha; chạy field initializer/instance block theo thứ tự văn bản của từng lớp.
+4. Chạy thân constructor lớp hiện tại.
+5. Chỉ sau khi invariant hoàn chỉnh mới publish reference ra ngoài.
+
+> ⚠️ Sơ đồ cố ý không có trạng thái “đã destroy”: Java object không có deterministic destructor. Vòng đời resource và vòng đời object là hai khái niệm khác nhau.
 
 ## 9. Tổng kết — Bảng ghi nhớ nhanh
 
@@ -825,7 +868,7 @@ new Sub();
 | Constructor & override | Đừng gọi method bị override trong constructor — object còn nửa vời |
 | Method signature | tên + kiểu tham số; **không** gồm kiểu trả về / tên tham số / `throws` |
 | Overload resolution | Pha 1 widening → Pha 2 boxing → Pha 3 varargs; chọn "most specific"; `f(null)` giữa 2 reference → ambiguous |
-| Overload vs override | Overload = compile-time (static binding); override = runtime (Module 01.4) |
+| Overload vs override | Overload = compile-time (static binding); override = runtime (Module 04) |
 | Varargs | `T...` là `T[]`; phải là tham số cuối; non-varargs thắng varargs; `printf` sai đối số → lỗi runtime |
 | `this` | object hiện tại; không có trong static; `Outer.this` trong inner class |
 | `this` lambda vs anonymous | lambda mượn `this` của method bao ngoài; anonymous class có `this` riêng |
@@ -1093,4 +1136,4 @@ public Temperature(String raw) {
 
 ---
 
-*File tiếp theo trong lộ trình: **Module 01.4 — 4 trụ cột OOP** (Encapsulation, Inheritance, Polymorphism, Abstraction).*
+*File tiếp theo trong lộ trình: **Module 04 — 4 trụ cột OOP** (Encapsulation, Inheritance, Polymorphism, Abstraction).*

@@ -1,8 +1,8 @@
-# Module 02.4 — equals(), hashCode(), toString()
+# Module 07 — equals(), hashCode(), toString()
 
-> **Mức độ ưu tiên: Trung bình–Cao** — Không "hot" bằng SOLID hay đa hình trong phỏng vấn lý thuyết, nhưng lại là nguyên nhân của **rất nhiều bug runtime khó hiểu nhất** trong thực tế: object "biến mất" khỏi `HashSet`, `HashMap.get()` trả về `null` với đúng key, `TreeSet` và `HashSet` cho kết quả khác nhau trên cùng dữ liệu, `list.sort()` ném `IllegalArgumentException`... Bắt buộc nắm chắc trước khi làm việc với Collections nâng cao (Module 03.1) và Entity trong JPA/Hibernate (Module 11).
+> **Mức độ ưu tiên: Trung bình–Cao** — Không "hot" bằng SOLID hay đa hình trong phỏng vấn lý thuyết, nhưng lại là nguyên nhân của **rất nhiều bug runtime khó hiểu nhất** trong thực tế: object "biến mất" khỏi `HashSet`, `HashMap.get()` trả về `null` với đúng key, `TreeSet` và `HashSet` cho kết quả khác nhau trên cùng dữ liệu, `list.sort()` ném `IllegalArgumentException`... Bắt buộc nắm chắc trước khi làm việc với Collections nâng cao (Module 08) và Entity trong JPA/Hibernate (Module 20).
 
-> **Phạm vi bài này:** ba method `Object.toString()` / `Object.equals()` / `Object.hashCode()`, *contract* ràng buộc giữa chúng, `record` ở khía cạnh nó tự sinh ba method này, và hai interface sắp xếp `Comparable` / `Comparator` (vì `compareTo` cũng có contract và có quan hệ "nên nhất quán với `equals`"). **Không** đi vào: chi tiết cài đặt `HashMap` (Module 03.1), annotation JPA (Module 11), Stream/Collector (Module 03.3). Những chỗ chạm tới các chủ đề đó chỉ nêu đủ để hiểu *vì sao* ba method này quan trọng.
+> **Phạm vi bài này:** ba method `Object.toString()` / `Object.equals()` / `Object.hashCode()`, *contract* ràng buộc giữa chúng, `record` ở khía cạnh nó tự sinh ba method này, và hai interface sắp xếp `Comparable` / `Comparator` (vì `compareTo` cũng có contract và có quan hệ "nên nhất quán với `equals`"). **Không** đi vào: chi tiết cài đặt `HashMap` (Module 08), annotation JPA (Module 20), Stream/Collector (Module 10). Những chỗ chạm tới các chủ đề đó chỉ nêu đủ để hiểu *vì sao* ba method này quan trọng.
 
 ---
 
@@ -29,7 +29,7 @@
 
 ## 1. `toString()` — biểu diễn object dưới dạng chuỗi
 
-Mọi class trong Java **ngầm kế thừa** `toString()` từ `java.lang.Object` (nhắc lại từ Module 02.1). Mặc định, nó trả về `getClass().getName() + "@" + Integer.toHexString(hashCode())` — dạng `TênClass@1b6d3586` — gần như **vô dụng** để debug:
+Mọi class trong Java **ngầm kế thừa** `toString()` từ `java.lang.Object` (nhắc lại từ Module 04). Mặc định, nó trả về `getClass().getName() + "@" + Integer.toHexString(hashCode())` — dạng `TênClass@1b6d3586` — gần như **vô dụng** để debug:
 
 ```java
 public class Student {
@@ -214,9 +214,9 @@ Student other = (Student) o;
 Giả sử `Point{x,y}` và `ColorPoint extends Point { color }`:
 
 - **Dùng `instanceof`:** để `point.equals(colorPoint)` trả `true` (Point bỏ qua màu) thì `colorPoint.equals(point)` cũng phải `true` → `ColorPoint` buộc phải bỏ qua màu khi so với `Point` thuần → **mất tính bắc cầu** giữa hai `ColorPoint` khác màu và một `Point`.
-- **Dùng `getClass()`:** đối xứng và bắc cầu OK, nhưng `new ColorPoint(1,2,RED).equals(new Point(1,2))` luôn `false` → một `ColorPoint` **không bao giờ** bằng `Point` dù cùng tọa độ. Điều này vi phạm tinh thần **LSP** (Module 01.6): code nhận `Point` không dùng được `ColorPoint` như một `Point` thực thụ trong ngữ cảnh so sánh.
+- **Dùng `getClass()`:** đối xứng và bắc cầu OK, nhưng `new ColorPoint(1,2,RED).equals(new Point(1,2))` luôn `false` → một `ColorPoint` **không bao giờ** bằng `Point` dù cùng tọa độ. Điều này vi phạm tinh thần **LSP** (Module 06): code nhận `Point` không dùng được `ColorPoint` như một `Point` thực thụ trong ngữ cảnh so sánh.
 
-> **Kết luận (Effective Java):** *Không có cách nào mở rộng một lớp instantiable và thêm field giá trị mà vẫn giữ trọn vẹn contract của `equals()`.* Giải pháp là **composition thay cho inheritance** (Module 01.6): cho `ColorPoint` **chứa** một `Point` và một `Color`, cộng thêm method `asPoint()` để "view" khi cần.
+> **Kết luận (Effective Java):** *Không có cách nào mở rộng một lớp instantiable và thêm field giá trị mà vẫn giữ trọn vẹn contract của `equals()`.* Giải pháp là **composition thay cho inheritance** (Module 06): cho `ColorPoint` **chứa** một `Point` và một `Color`, cộng thêm method `asPoint()` để "view" khi cần.
 
 ### Vậy nên chọn cái nào?
 
@@ -234,7 +234,7 @@ Giả sử `Point{x,y}` và `ColorPoint extends Point { color }`:
 
 `hashCode()` trả về một `int` đại diện cho object, dùng để **xác định nhanh "cái giỏ" (bucket)** mà object nên nằm trong các cấu trúc dựa trên băm: `HashMap`, `HashSet`, `Hashtable`, `LinkedHashMap`, `ConcurrentHashMap`.
 
-### Cơ chế (tóm tắt — chi tiết ở Module 03.1)
+### Cơ chế (tóm tắt — chi tiết ở Module 08)
 
 ```
 put(key, value):
@@ -521,7 +521,7 @@ public record Tags(String name, String[] values) {
 
 **3. Override được nhưng phải giữ contract.** Có thể override bất kỳ method sinh sẵn nào trong `record`, nhưng nếu override `equals()` thì gần như luôn phải override `hashCode()` kèm theo cho khớp — `record` không "vá" giúp phần còn lại.
 
-> `record` immutable ⇒ an toàn làm key `HashMap`, phần tử `HashSet`, không dính bẫy mục 8.3. Rất hợp cho **DTO**, khóa phức hợp (composite key), kiểu trả về nhiều giá trị. Sẽ dùng nhiều ở Module 16 (Spring REST).
+> `record` immutable ⇒ an toàn làm key `HashMap`, phần tử `HashSet`, không dính bẫy mục 8.3. Rất hợp cho **DTO**, khóa phức hợp (composite key), kiểu trả về nhiều giá trị. Sẽ dùng nhiều ở Module 23 (RESTful API Design).
 
 ---
 
@@ -734,7 +734,7 @@ TimSort **tự phát hiện** comparator mâu thuẫn (thiếu phản đối x�
 
 ## 12. equals/hashCode cho Entity JPA/Hibernate — nhìn trước
 
-> Chi tiết JPA ở **Module 11**. Ở đây chỉ chốt phần *liên quan trực tiếp tới `equals`/`hashCode`*, vì đây là nơi người mới sai nhiều nhất.
+> Chi tiết JPA ở **Module 20**. Ở đây chỉ chốt phần *liên quan trực tiếp tới `equals`/`hashCode`*, vì đây là nơi người mới sai nhiều nhất.
 
 Entity JPA có ba đặc điểm phá vỡ các cách viết `equals()` "sách giáo khoa":
 
@@ -808,6 +808,38 @@ public class Account {
   Nên thêm cho mọi class có `equals()` viết tay — bắt lỗi mà mắt người hay bỏ sót.
 
 ---
+
+### Hash collision, hash flooding và giới hạn của `hashCode()`
+
+`hashCode()` là số 32-bit nên collision là tất yếu; contract chỉ yêu cầu object bằng nhau có cùng hash, không yêu cầu chiều ngược lại. `HashMap` vẫn gọi `equals()` để phân biệt key trong cùng bucket. Từ Java 8, bucket quá đông **có thể** chuyển thành cây khi đủ điều kiện, giảm trường hợp xấu từ tuyến tính xuống gần `O(log n)`, nhưng hash tốt vẫn quan trọng.
+
+> ⚠️ Không dùng `hashCode()` làm ID, chữ ký bảo mật hay checksum chống sửa đổi. Giá trị có thể collision, implementation có thể đổi giữa phiên bản, và nhiều class không cam kết ổn định giữa các lần chạy.
+
+### Equality của entity qua các trạng thái vòng đời
+
+Entity JPA đi qua transient → managed → detached; ID sinh bởi database thường chưa có trước `persist/flush`. Nếu `equals/hashCode` chỉ dựa vào ID nullable, hai entity mới có thể bị coi là bằng nhau hoặc hash thay đổi sau khi đã nằm trong `HashSet`. Nếu dùng business key, key đó phải thật sự duy nhất và bất biến.
+
+Hibernate proxy còn khiến `getClass()` trực tiếp khác class thực. Vì vậy phải chọn chiến lược nhất quán cho toàn dự án, test cả proxy/detached entity, và liên hệ Persistence Context/Identity Map ở Module 20 — không có một template `equals()` đúng cho mọi entity.
+
+### Sơ đồ lookup của hash-based collection
+
+```mermaid
+flowchart TD
+    K["Key cần tìm"] --> H["Gọi hashCode"]
+    H --> I["Trộn hash và chọn bucket"]
+    I --> E{"Bucket rỗng?"}
+    E -- "Có" --> N["Không tìm thấy"]
+    E -- "Không" --> C["So hash với từng candidate"]
+    C --> Q{"Hash bằng và equals trả true?"}
+    Q -- "Có" --> F["Tìm thấy entry"]
+    Q -- "Không" --> T{"Còn candidate?"}
+    T -- "Có" --> C
+    T -- "Không" --> N
+```
+
+Mental model gồm hai tầng: `hashCode()` **thu hẹp vùng tìm kiếm**, `equals()` **xác nhận identity logic**. Vì vậy collision không làm sai kết quả, chỉ làm tăng số candidate; contract sai mới làm key “biến mất”.
+
+Nếu field tham gia hash thay đổi sau `put`, lookup tính bucket mới trong khi entry còn ở bucket cũ. Collection không tự re-index vì không biết object đã đổi — lý do key nên immutable hoặc ít nhất identity field phải bất biến.
 
 ## 14. Tổng kết — Bảng ghi nhớ nhanh
 
@@ -988,4 +1020,4 @@ Viết `Version{ int major, int minor }` với `equals()`/`hashCode()` dựa **c
 
 ---
 
-*File tiếp theo trong lộ trình: **Module 03.1 — Collections Framework** (List, Set, Map — độ phức tạp Big-O, cây vs băm, khi nào chọn cấu trúc nào).*
+*File tiếp theo trong lộ trình: **Module 08 — Collections Framework** (List, Set, Map — độ phức tạp Big-O, cây vs băm, khi nào chọn cấu trúc nào).*

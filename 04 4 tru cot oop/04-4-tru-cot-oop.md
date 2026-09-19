@@ -1,8 +1,8 @@
-# Module 02.1 — 4 Trụ Cột OOP (Object-Oriented Programming)
+# Module 04 — 4 Trụ Cột OOP (Object-Oriented Programming)
 
-> **Mức độ ưu tiên: Cao** — Phần **gần như chắc chắn bị hỏi** trong mọi buổi phỏng vấn Java. Yêu cầu không phải định nghĩa suông mà phải giải thích bằng ví dụ thực tế, phân biệt được **overriding / overloading / hiding / shadowing**, hiểu **field không đa hình còn method thì có**, và biết **khi nào chọn kế thừa, khi nào chọn composition**. Đây cũng là nền tảng để hiểu IoC/DI của Spring (Module 01.21).
+> **Mức độ ưu tiên: Cao** — Phần **gần như chắc chắn bị hỏi** trong mọi buổi phỏng vấn Java. Yêu cầu không phải định nghĩa suông mà phải giải thích bằng ví dụ thực tế, phân biệt được **overriding / overloading / hiding / shadowing**, hiểu **field không đa hình còn method thì có**, và biết **khi nào chọn kế thừa, khi nào chọn composition**. Đây cũng là nền tảng để hiểu IoC/DI của Spring (Module 21).
 
-> **Phạm vi bài học:** 4 trụ cột (Encapsulation, Inheritance, Polymorphism, Abstraction); `extends` / `super`; quy tắc override đầy đủ (covariant return, exception, access); dynamic dispatch; upcasting/downcasting & `instanceof`; hiding vs overriding vs shadowing; `abstract class`; kế thừa vs composition; `final`/`sealed` class ở mức nhận biết. Các chủ đề: `interface` chi tiết + `default`/`static` method (Module 01.5), SOLID (Module 01.6), `equals`/`hashCode` (Module 01.7), Generics & bridge method (Module 01.9), Design Pattern (Module 01.16) **không** thuộc bài này — chỉ nhắc khi liên quan.
+> **Phạm vi bài học:** 4 trụ cột (Encapsulation, Inheritance, Polymorphism, Abstraction); `extends` / `super`; quy tắc override đầy đủ (covariant return, exception, access); dynamic dispatch; upcasting/downcasting & `instanceof`; hiding vs overriding vs shadowing; `abstract class`; kế thừa vs composition; `final`/`sealed` class ở mức nhận biết. Các chủ đề: `interface` chi tiết + `default`/`static` method (Module 05), SOLID (Module 06), `equals`/`hashCode` (Module 07), Generics & bridge method (Module 09), Design Pattern (Module 16) **không** thuộc bài này — chỉ nhắc khi liên quan.
 
 ---
 
@@ -85,7 +85,7 @@ public class Team {
 ### Các tầng đóng gói khác `private`
 
 - **package-private** (default): ẩn khỏi mọi package khác — hữu ích để một nhóm class hợp tác chặt mà không lộ ra API công khai.
-- **module** (JPMS, Java 9): package không `exports` thì `public` cũng vô hình với module khác (Module 01.14).
+- **module** (JPMS, Java 9): package không `exports` thì `public` cũng vô hình với module khác (Module 14).
 
 > **Liên hệ Spring/JPA:** Entity có field `private` + accessor là để Hibernate truy cập *có kiểm soát*, và để tách business logic khỏi thao tác field trực tiếp.
 
@@ -124,7 +124,7 @@ public class Car extends Vehicle {
 | `super.method()` | Gọi phiên bản method **của lớp cha**, kể cả khi con đã override |
 | `super.field` | Truy cập field lớp cha khi con có field trùng tên (xem §6 — shadowing) |
 
-### Constructor & chuỗi khởi tạo (nối tiếp Module 01.3 §8)
+### Constructor & chuỗi khởi tạo (nối tiếp Module 03 §8)
 
 - **Constructor không được kế thừa.** Lớp con phải tự khai báo constructor (hoặc nhận default constructor nếu không viết cái nào).
 - Constructor con nếu không gọi `this(...)`/`super(...)` tường minh ở dòng đầu → compiler **tự chèn `super();`**.
@@ -183,11 +183,11 @@ class Car extends Vehicle { }              // OK
 // class Car extends Vehicle, Machine { }  // ❌ Java không cho đa kế thừa class
 ```
 
-Java né **Diamond Problem** (hai lớp cha cùng method, con không biết chọn bản nào) bằng cách chỉ cho `extends` một class, và cho `implements` nhiều interface (Module 01.5).
+Java né **Diamond Problem** (hai lớp cha cùng method, con không biết chọn bản nào) bằng cách chỉ cho `extends` một class, và cho `implements` nhiều interface (Module 05).
 
 ### `Object` — gốc của mọi class
 
-Class không `extends` gì thì ngầm `extends java.lang.Object` → mọi object có sẵn `toString()`, `equals()`, `hashCode()`, `getClass()` (chi tiết Module 01.7).
+Class không `extends` gì thì ngầm `extends java.lang.Object` → mọi object có sẵn `toString()`, `equals()`, `hashCode()`, `getClass()` (chi tiết Module 07).
 
 ### Kế thừa làm suy yếu đóng gói của lớp cha
 
@@ -203,7 +203,7 @@ final class Circle extends Shape { }
 non-sealed class Square extends Shape { }              // "mở lại" cho kế thừa tự do
 ```
 
-`sealed` giúp compiler biết **danh sách đóng** các lớp con → `switch` pattern matching có thể kiểm tra bao phủ đầy đủ (Module 01.2 §5).
+`sealed` giúp compiler biết **danh sách đóng** các lớp con → `switch` pattern matching có thể kiểm tra bao phủ đầy đủ (Module 02 §5).
 
 ---
 
@@ -254,7 +254,7 @@ if (v instanceof Car c) {
 
 Hai dạng:
 
-### (a) Compile-time (Overloading) — Module 01.3
+### (a) Compile-time (Overloading) — Module 03
 
 Cùng tên, khác signature. Method được chọn tại **compile-time** theo kiểu tĩnh của đối số (*static binding*).
 
@@ -332,7 +332,7 @@ class Sub extends Base {
 new Sub();
 ```
 
-Khi `Base()` chạy, phần khởi tạo field của `Sub` **chưa xảy ra** (Module 01.3 §8) → `name` vẫn `null`. **Quy tắc:** constructor chỉ nên gọi `private`/`final`/`static` method.
+Khi `Base()` chạy, phần khởi tạo field của `Sub` **chưa xảy ra** (Module 03 §8) → `name` vẫn `null`. **Quy tắc:** constructor chỉ nên gọi `private`/`final`/`static` method.
 
 ### Field KHÔNG đa hình — chỉ method mới đa hình
 
@@ -436,7 +436,7 @@ for (Shape s : shapes) s.describe();     // gọi thống nhất — không cầ
 
 > Abstraction thường **đi cùng Polymorphism**: định nghĩa hợp đồng (`area()` phải tồn tại) là abstraction; mỗi lớp con thực thi riêng và JVM chọn đúng bản lúc runtime là polymorphism.
 
-### `interface` — nhắc ngắn (chi tiết Module 01.5)
+### `interface` — nhắc ngắn (chi tiết Module 05)
 
 ```java
 public interface Payable {
@@ -455,7 +455,7 @@ public class CreditCard implements Payable {
 | Method có thân | concrete method | `default` / `static` / `private` (Java 8/9+) |
 | Ý nghĩa quan hệ | "is-a" chặt, chia sẻ code chung | "có khả năng..." (capability) |
 
-Bảng đầy đủ + "khi nào dùng cái nào" ở **Module 01.5**.
+Bảng đầy đủ + "khi nào dùng cái nào" ở **Module 05**.
 
 ### Lớp vô danh (Anonymous class) — cài đặt nhanh mà không đặt tên lớp
 
@@ -482,7 +482,7 @@ Giới hạn của anonymous class: không có constructor tường minh (chỉ 
 
 ### Vì sao Abstraction quan trọng ở backend
 
-Lập trình dựa trên **interface** (`PaymentService`) thay vì lớp cụ thể (`CreditCardPaymentServiceImpl`) → đổi implementation (thẻ → ví điện tử) mà **không sửa** nơi sử dụng. Đây là **Dependency Inversion Principle** (chữ D của SOLID — Module 01.6) và cốt lõi của Dependency Injection.
+Lập trình dựa trên **interface** (`PaymentService`) thay vì lớp cụ thể (`CreditCardPaymentServiceImpl`) → đổi implementation (thẻ → ví điện tử) mà **không sửa** nơi sử dụng. Đây là **Dependency Inversion Principle** (chữ D của SOLID — Module 06) và cốt lõi của Dependency Injection.
 
 > ⚠️ **Leaky abstraction:** khi chi tiết cài đặt "rò" ra API (ví dụ interface `Repository` ném `SQLException`, hoặc trả về kiểu `ResultSet`). Abstraction tốt che được cả kiểu lỗi và kiểu dữ liệu của tầng dưới.
 
@@ -599,6 +599,40 @@ public class Payroll {
 Đoạn code này thể hiện **cả 4 trụ cột phối hợp** — cách tư duy OOP "chuẩn" mà phỏng vấn muốn nghe.
 
 ---
+
+### Đa hình chưa đủ: kiểm tra Liskov ở mức hành vi
+
+Override đúng cú pháp vẫn có thể sai thiết kế. Một subtype thay thế được supertype khi nó không siết chặt precondition, không làm yếu postcondition và giữ invariant mà client đang dựa vào. Ví dụ `ReadOnlyAccount extends Account` nhưng override `withdraw()` để ném `UnsupportedOperationException` là tín hiệu quan hệ “is-a” không đúng.
+
+| Kiểm tra khi review subtype | Câu hỏi |
+|---|---|
+| Tiền điều kiện | Lớp con có đòi input chặt hơn không? |
+| Hậu điều kiện | Lớp con có trả kết quả yếu hơn hoặc đổi side effect không? |
+| Ngoại lệ | Có phát sinh lỗi mà contract cha không dự kiến không? |
+| Invariant | Có phá trạng thái hợp lệ của abstraction cha không? |
+
+Nếu không bảo toàn contract, ưu tiên composition hoặc tách interface theo capability (liên hệ ISP ở Module 06). “Tái sử dụng code” một mình không đủ để biện minh cho kế thừa.
+
+### Double dispatch và giới hạn của overload
+
+Java chọn overload theo **kiểu tĩnh** lúc compile, còn override theo **kiểu động** lúc runtime. Khi hành vi phụ thuộc đồng thời hai kiểu runtime, một lần gọi đa hình không đủ; Visitor/Double Dispatch (Module 16) là một cách biểu diễn rõ ma trận kết hợp đó.
+
+### Sơ đồ resolve lời gọi method: overload trước, override sau
+
+```mermaid
+flowchart TD
+    C["Compiler thấy lời gọi obj.pay(arg)"] --> O["Chọn overload bằng kiểu tĩnh của obj và arg"]
+    O --> BC["Ghi chữ ký đã chọn vào bytecode"]
+    BC --> K{"Method có thể dispatch động?"}
+    K -- "static, private, final" --> F["Gọi implementation đã xác định"]
+    K -- "instance method override được" --> R["Runtime đọc class thật của receiver"]
+    R --> V["Tìm override gần nhất trong virtual method table"]
+    V --> I["Thực thi implementation của subtype"]
+```
+
+Vì sao Java tách hai bước? Overload là tiện ích chọn **chữ ký API** và phải xác định được khi compile để type-check; override là cơ chế đa hình theo object thật và chỉ biết chắc ở runtime. Hệ quả interview quan trọng: đổi kiểu khai báo của argument có thể đổi overload, còn đổi object thật của receiver có thể đổi override.
+
+Field access, static method và private method không đi qua virtual dispatch nên không đa hình. Bridge method do compiler sinh cho generics (Module 09) giúp giữ cùng contract dispatch sau type erasure.
 
 ## 10. Tổng kết — Bảng ghi nhớ nhanh
 
@@ -847,4 +881,4 @@ class UserRepo extends Repo { @Override User load() {...} }
 
 ---
 
-*File tiếp theo trong lộ trình: **Module 01.5 — Interface vs Abstract Class** (khi nào dùng cái nào, `default`/`static`/`private` method trong interface, đa kế thừa hành vi qua interface).*
+*File tiếp theo trong lộ trình: **Module 05 — Interface vs Abstract Class** (khi nào dùng cái nào, `default`/`static`/`private` method trong interface, đa kế thừa hành vi qua interface).*

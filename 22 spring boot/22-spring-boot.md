@@ -1,9 +1,9 @@
-# Module 13 — Spring Boot
+# Module 22 — Spring Boot
 
 > **Mức ưu tiên: 🔴 Cao**
 > **Vì sao quan trọng:** Spring Boot là cách gần như 100% dự án Java Backend hiện nay dùng Spring Framework trong thực tế. Hiểu **Auto-configuration** hoạt động thế nào giúp bạn debug được lỗi "vì sao Bean này tự có mà tôi không khai báo", cấu hình đúng `application.yml` theo từng môi trường (dev/staging/production) bằng **Profiles**, và dùng **Actuator** để giám sát ứng dụng — đây đều là kỹ năng bắt buộc khi đi làm, không chỉ để chạy `mvn spring-boot:run` là xong.
 >
-> **Phạm vi bài này:** cơ chế Spring Boot — auto-configuration, cấu hình, Profile, Actuator, đóng gói/triển khai. Bài **không** đi sâu thiết kế REST endpoint (`@RestController`, status code, versioning — đó là Module 14) hay Testing (`@SpringBootTest`, `@WebMvcTest` — module Testing riêng) — chỉ nhắc tới như ví dụ minh họa.
+> **Phạm vi bài này:** cơ chế Spring Boot — auto-configuration, cấu hình, Profile, Actuator, đóng gói/triển khai. Bài **không** đi sâu thiết kế REST endpoint (`@RestController`, status code, versioning — đó là Module 23) hay Testing (`@SpringBootTest`, `@WebMvcTest` — module Testing riêng) — chỉ nhắc tới như ví dụ minh họa.
 
 ---
 
@@ -31,7 +31,7 @@
 
 ## 1. Spring Boot là gì?
 
-**Spring Boot không phải là 1 framework khác thay thế Spring** — nó là 1 lớp **convention-over-configuration** xây dựng trên nền Spring Framework (đã học ở Module 12), với mục tiêu: **giảm tối đa cấu hình thủ công (boilerplate config)** để bạn tập trung vào business logic.
+**Spring Boot không phải là 1 framework khác thay thế Spring** — nó là 1 lớp **convention-over-configuration** xây dựng trên nền Spring Framework (đã học ở Module 21), với mục tiêu: **giảm tối đa cấu hình thủ công (boilerplate config)** để bạn tập trung vào business logic.
 
 ### Trước Spring Boot (Spring "cổ điển" — chỉ để tham khảo lịch sử)
 
@@ -106,7 +106,7 @@ public class MyApp {
 @SpringBootConfiguration  // = @Configuration -> class này có thể khai báo @Bean
 @EnableAutoConfiguration  // Bật cơ chế Auto-configuration (mục 3)
 @ComponentScan            // Quét @Component/@Service/@Repository/@Controller
-                           // trong package hiện tại + package con (đã học ở Module 12)
+                           // trong package hiện tại + package con (đã học ở Module 21)
 public @interface SpringBootApplication { }
 ```
 
@@ -272,7 +272,7 @@ my-spring-app/
 └── README.md
 ```
 
-**Kiến trúc phân lớp (Layered Architecture) này ánh xạ trực tiếp với các annotation đã học ở Module 12:**
+**Kiến trúc phân lớp (Layered Architecture) này ánh xạ trực tiếp với các annotation đã học ở Module 21:**
 
 ```
 Controller (@RestController)
@@ -453,7 +453,7 @@ public class MailConfig {
 }
 ```
 
-> **Liên hệ Module 12:** `@Profile` thực chất là 1 dạng `@Conditional` chuyên biệt (`@ConditionalOnExpression` phía dưới) — cùng họ hàng với `@ConditionalOnClass`/`@ConditionalOnMissingBean` đã học ở mục 3, chỉ khác điều kiện kiểm tra là "Profile nào đang active" thay vì "classpath có class gì".
+> **Liên hệ Module 21:** `@Profile` thực chất là 1 dạng `@Conditional` chuyên biệt (`@ConditionalOnExpression` phía dưới) — cùng họ hàng với `@ConditionalOnClass`/`@ConditionalOnMissingBean` đã học ở mục 3, chỉ khác điều kiện kiểm tra là "Profile nào đang active" thay vì "classpath có class gì".
 
 **Nhiều Profile cùng lúc & Profile Group:**
 
@@ -548,7 +548,7 @@ public class MailService {
 
 ### Phong cách hiện đại — `@ConfigurationProperties` với `record` (Java 17+, immutable)
 
-Kết hợp với kiến thức `record` đã học ở Module 09, `@ConfigurationProperties` **không bắt buộc** phải là class có getter/setter — có thể dùng `record` để config **immutable** ngay từ khi khởi động, gọn hơn nhiều:
+Kết hợp với kiến thức `record` đã học ở Module 14, `@ConfigurationProperties` **không bắt buộc** phải là class có getter/setter — có thể dùng `record` để config **immutable** ngay từ khi khởi động, gọn hơn nhiều:
 
 ```java
 @ConfigurationProperties(prefix = "app.mail")
@@ -560,7 +560,7 @@ public record MailProperties(
     public record Smtp(String host, int port) {}
 }
 ```
-> Với `record`, Spring Boot dùng **constructor binding** (thay vì gọi setter) để gán giá trị từ file cấu hình — không cần thêm annotation gì khác, không cần no-arg constructor. Cách này được khuyến khích cho project mới vì tận dụng đúng tinh thần bất biến (immutability) đã học ở Module 09, tránh việc cấu hình bị vô tình sửa đổi ở đâu đó giữa lúc ứng dụng chạy.
+> Với `record`, Spring Boot dùng **constructor binding** (thay vì gọi setter) để gán giá trị từ file cấu hình — không cần thêm annotation gì khác, không cần no-arg constructor. Cách này được khuyến khích cho project mới vì tận dụng đúng tinh thần bất biến (immutability) đã học ở Module 14, tránh việc cấu hình bị vô tình sửa đổi ở đâu đó giữa lúc ứng dụng chạy.
 
 ---
 
@@ -640,9 +640,9 @@ public class StartupChecker implements ApplicationRunner {
 | Tham số `run()` | `String... args` (thô) | `ApplicationArguments` (đã parse) |
 | Khi dùng | Đơn giản, không cần phân biệt loại argument | Cần đọc argument dạng `--key=value` |
 
-> **Thứ tự thực thi khi có nhiều Runner:** dùng `@Order(n)` để kiểm soát — số nhỏ hơn chạy trước, giống nguyên tắc `@Order` cho nhiều Aspect đã học ở Module 12.
+> **Thứ tự thực thi khi có nhiều Runner:** dùng `@Order(n)` để kiểm soát — số nhỏ hơn chạy trước, giống nguyên tắc `@Order` cho nhiều Aspect đã học ở Module 21.
 
-⚠️ **Lưu ý:** không nên dùng `CommandLineRunner` để seed dữ liệu **thật** ở production (dễ chạy nhầm nhiều lần khi có nhiều instance backend khởi động — liên hệ khái niệm nhiều instance đã bàn ở Module 10) — với migration/seed dữ liệu bền vững, công cụ chuyên dụng như **Flyway/Liquibase** (đã nhắc ở mục 7) vẫn là lựa chọn đúng đắn hơn.
+⚠️ **Lưu ý:** không nên dùng `CommandLineRunner` để seed dữ liệu **thật** ở production (dễ chạy nhầm nhiều lần khi có nhiều instance backend khởi động — liên hệ khái niệm nhiều instance đã bàn ở Module 28 và 31) — với migration/seed dữ liệu bền vững, công cụ chuyên dụng như **Flyway/Liquibase** (đã nhắc ở mục 7) vẫn là lựa chọn đúng đắn hơn.
 
 ---
 
@@ -910,6 +910,48 @@ app:
     sender-id: MyCompany
 ```
 > Dự án dùng thư viện này **không cần viết bất kỳ `@Bean` nào** — hoàn toàn giống trải nghiệm dùng `spring-boot-starter-data-jpa` ở mục 3, vì bản chất chính là **cùng 1 cơ chế** mà Spring Boot team dùng để xây dựng mọi starter chính thức.
+
+### Configuration precedence — cùng một key, nguồn nào thắng?
+
+Spring Boot hợp nhất property từ nhiều nguồn theo thứ tự ưu tiên; nguồn ưu tiên cao override nguồn thấp (ví dụ command-line thường cao hơn config file). Profile-specific document chỉ nên chứa phần khác biệt, còn secret lấy từ secret manager/environment thay vì commit vào Git.
+
+Để tránh "máy tôi chạy được", log **nguồn cấu hình** qua Actuator `env/configprops` trong môi trường được bảo vệ, dùng `@ConfigurationProperties` + validation và fail fast khi thiếu giá trị bắt buộc.
+
+> ⚠️ Không log raw secret khi debug precedence. Endpoint Actuator chứa cấu hình phải được giới hạn network/quyền truy cập và bật sanitization.
+
+### Test auto-configuration bằng `ApplicationContextRunner`
+
+Auto-configuration phải kiểm thử ma trận điều kiện: class/property/bean có hoặc thiếu và hành vi back-off khi user tự khai báo bean.
+
+```java
+new ApplicationContextRunner()
+    .withConfiguration(AutoConfigurations.of(AcmeAutoConfiguration.class))
+    .withPropertyValues("acme.enabled=true")
+    .run(ctx -> assertThat(ctx).hasSingleBean(AcmeClient.class));
+```
+
+Test này nhẹ hơn `@SpringBootTest` và cho failure report sát condition; nối trực tiếp với Module 26.
+
+### Flowchart: Spring Boot quyết định auto-configuration
+
+```mermaid
+flowchart TD
+    S["SpringApplication.run"] --> E["Chuẩn bị Environment và profiles"]
+    E --> C["Tạo ApplicationContext"]
+    C --> U["Nạp user configuration"]
+    U --> A["Import auto-configuration candidates"]
+    A --> Q{"Conditions khớp class, property, bean, resource?"}
+    Q -- "Không" --> SK["Bỏ qua và ghi condition outcome"]
+    Q -- "Có" --> B{"User đã có bean tương ứng?"}
+    B -- "Có" --> BO["Back off"]
+    B -- "Không" --> REG["Đăng ký bean mặc định"]
+    REG --> REF["Refresh context và chạy lifecycle"]
+    BO --> REF
+```
+
+Auto-configuration là **conditional default**, không phải phép thuật quét mọi thứ. `@ConditionalOnMissingBean` cho phép user override; condition evaluation report giải thích vì sao một config được áp dụng hoặc bỏ qua.
+
+Vì sao Boot ưu tiên convention? Phần lớn ứng dụng cần cùng plumbing, nên default giảm quyết định lặp lại. Escape hatch vẫn tồn tại qua property, bean override hoặc exclude; cấu hình production tốt là explicit ở những điểm khác default, không copy toàn bộ default vào file.
 
 ---
 
@@ -1320,4 +1362,4 @@ public class InventoryServiceHealthIndicator implements HealthIndicator {
 
 ---
 
-*File tiếp theo trong lộ trình: **Module 14 — RESTful API Design** (HTTP methods đúng chuẩn REST, status code, versioning API, HATEOAS, Idempotency, Pagination/Filtering/Sorting, Error Response chuẩn hóa).*
+*File tiếp theo trong lộ trình: **Module 23 — RESTful API Design** (HTTP methods đúng chuẩn REST, status code, versioning API, HATEOAS, Idempotency, Pagination/Filtering/Sorting, Error Response chuẩn hóa).*

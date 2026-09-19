@@ -1,9 +1,9 @@
-# Module 20 — DevOps cơ bản cho Backend Developer
+# Module 29 — DevOps cơ bản cho Backend Developer
 
 > **Mức ưu tiên: 🟡 Trung bình (nhưng gần như bắt buộc trong công việc thực tế)**
 > **Vì sao quan trọng:** Bạn có thể viết code Java Backend hoàn hảo, nhưng nếu không biết đóng gói (Docker) và triển khai (CI/CD) nó, sản phẩm không bao giờ tới được tay người dùng. Đây là kỹ năng "cầu nối" giữa Developer và Operations — hầu hết công ty hiện nay yêu cầu Backend Developer hiểu ít nhất ở mức cơ bản Docker/CI-CD, dù không cần thành thạo như 1 DevOps Engineer chuyên trách. Không biết Docker cũng đồng nghĩa không hiểu được câu nói quen thuộc "chạy được trên máy tôi mà" (works on my machine) — vấn đề Docker sinh ra để giải quyết.
 
-> **Phạm vi bài này:** Tập trung vào Docker (đóng gói) và CI/CD (tự động hóa build/test/deploy) ở mức **Backend Developer cần biết để làm việc hiệu quả** với DevOps Engineer, cùng khái niệm cốt lõi của Kubernetes để đọc hiểu file cấu hình. Không đi sâu Observability (structured logging, metrics, distributed tracing chi tiết — thuộc Module 21 tiếp theo) hay vận hành Kubernetes cấp production (Helm, Operator, Service Mesh).
+> **Phạm vi bài này:** Tập trung vào Docker (đóng gói) và CI/CD (tự động hóa build/test/deploy) ở mức **Backend Developer cần biết để làm việc hiệu quả** với DevOps Engineer, cùng khái niệm cốt lõi của Kubernetes để đọc hiểu file cấu hình. Không đi sâu Observability (structured logging, metrics, distributed tracing chi tiết — thuộc Module 30 tiếp theo) hay vận hành Kubernetes cấp production (Helm, Operator, Service Mesh).
 
 ---
 
@@ -20,8 +20,9 @@
 9. [Deployment Strategy: Rolling Update, Blue-Green, Canary](#9-deployment-strategy)
 10. [Môi trường Dev/Staging/Production, IaC, Git Branching, Feature Flag](#10-môi-trường-devstagingproduction-iac-git-branching-feature-flag)
 11. [⚠️ Các bẫy hay gặp](#11-các-bẫy-hay-gặp)
-12. [Tổng kết — Bảng ghi nhớ nhanh](#12-tổng-kết--bảng-ghi-nhớ-nhanh)
-13. [Bài tập luyện tập](#13-bài-tập-luyện-tập)
+12. [GitOps & Guardrail Kubernetes nâng cao](#12-gitops--guardrail-kubernetes-nâng-cao)
+13. [Tổng kết — Bảng ghi nhớ nhanh](#13-tổng-kết--bảng-ghi-nhớ-nhanh)
+14. [Bài tập luyện tập](#14-bài-tập-luyện-tập)
 
 ---
 
@@ -354,7 +355,7 @@ chmod 755 script.sh     # Set quyền chi tiết: owner=rwx(7), group=rx(5), oth
 chown user:group file   # Đổi chủ sở hữu file
 ```
 
-### Biến môi trường (liên hệ trực tiếp application.yml — Module 13)
+### Biến môi trường (liên hệ trực tiếp application.yml — Module 22)
 
 ```bash
 export DB_PASSWORD=secret123    # Set biến môi trường (chỉ tồn tại trong phiên terminal hiện tại)
@@ -400,7 +401,7 @@ Developer push code
 CI Pipeline TỰ ĐỘNG chạy:
   1. Checkout code
   2. Build (mvn compile)
-  3. Chạy Unit Test + Integration Test (Module 17)
+  3. Chạy Unit Test + Integration Test (Module 26)
   4. Kiểm tra Code Coverage
   5. Kiểm tra Code Style (Checkstyle/SonarQube)
      │
@@ -462,7 +463,7 @@ jobs:
         run: mvn test
 
       - name: Generate test coverage report
-        run: mvn jacoco:report      # Liên hệ Module 17 - JaCoCo Coverage
+        run: mvn jacoco:report      # Liên hệ Module 26 - JaCoCo Coverage
 
       - name: Build Docker Image
         if: github.ref == 'refs/heads/main'  # CHỈ build Image khi push vào nhánh main
@@ -476,7 +477,7 @@ jobs:
         # secrets.* -> GitHub Secrets, KHÔNG BAO GIỜ hardcode password trực tiếp trong file YAML
 ```
 
-⚠️ **Bẫy bảo mật quan trọng:** TUYỆT ĐỐI không hardcode password/API key trực tiếp trong file YAML (dù file này có commit riêng tư) — luôn dùng **GitHub Secrets** (Settings → Secrets and variables → Actions), tương tự nguyên tắc "không hardcode secret trong `application.yml`" đã học ở Module 13.
+⚠️ **Bẫy bảo mật quan trọng:** TUYỆT ĐỐI không hardcode password/API key trực tiếp trong file YAML (dù file này có commit riêng tư) — luôn dùng **GitHub Secrets** (Settings → Secrets and variables → Actions), tương tự nguyên tắc "không hardcode secret trong `application.yml`" đã học ở Module 22.
 
 ### Cache Docker Layer trong CI — tăng tốc build đáng kể
 
@@ -557,9 +558,9 @@ deploy-job:
 |---|---|
 | **Pod** | Đơn vị triển khai nhỏ nhất trong K8s — chứa 1 (hoặc vài) container liên quan chặt chẽ |
 | **Deployment** | Định nghĩa "muốn chạy BAO NHIÊU replica (bản sao) của Pod này" — K8s tự động đảm bảo LUÔN đủ số lượng |
-| **Service** | Điểm truy cập ổn định (địa chỉ cố định) tới 1 nhóm Pod — liên hệ trực tiếp **Service Discovery** đã học ở Module 19 |
+| **Service** | Điểm truy cập ổn định (địa chỉ cố định) tới 1 nhóm Pod — liên hệ trực tiếp **Service Discovery** đã học ở Module 28 |
 | **ConfigMap/Secret** | Lưu cấu hình/secret riêng biệt khỏi Image — liên hệ `application.yml`/biến môi trường đã học |
-| **Ingress** | Định tuyến traffic từ bên ngoài vào cluster — liên hệ **API Gateway** đã học ở Module 19 |
+| **Ingress** | Định tuyến traffic từ bên ngoài vào cluster — liên hệ **API Gateway** đã học ở Module 28 |
 | **HPA (Horizontal Pod Autoscaler)** | Tự động tăng/giảm số lượng Pod dựa trên tải (CPU/Memory/custom metrics) |
 
 ### Ví dụ file cấu hình Deployment cơ bản
@@ -585,7 +586,7 @@ spec:
           image: myregistry/order-service:1.0
           ports:
             - containerPort: 8080
-          livenessProbe:            # Liên hệ Module 13 - Actuator /actuator/health
+          livenessProbe:            # Liên hệ Module 22 - Actuator /actuator/health
             httpGet:
               path: /actuator/health
               port: 8080
@@ -722,7 +723,7 @@ Nếu v2 phát hiện lỗi ở BẤT KỲ giai đoạn nào -> route traffic NG
 ```
 
 **Ưu điểm:** Rủi ro thấp nhất trong 3 chiến lược — nếu phiên bản mới có bug, chỉ 1 phần nhỏ user bị ảnh hưởng, phát hiện sớm trước khi rollout toàn bộ.
-**Nhược điểm:** Phức tạp nhất để triển khai — cần công cụ hỗ trợ định tuyến theo tỷ lệ phần trăm (Ingress nâng cao, Service Mesh như Istio) và hệ thống giám sát (Observability — Module 21) đủ tốt để tự động phát hiện canary có vấn đề hay không.
+**Nhược điểm:** Phức tạp nhất để triển khai — cần công cụ hỗ trợ định tuyến theo tỷ lệ phần trăm (Ingress nâng cao, Service Mesh như Istio) và hệ thống giám sát (Observability — Module 30) đủ tốt để tự động phát hiện canary có vấn đề hay không.
 
 ### So sánh tổng quan
 
@@ -876,7 +877,63 @@ app:
 
 ---
 
-## 12. Tổng kết — Bảng ghi nhớ nhanh
+## 12. GitOps & Guardrail Kubernetes nâng cao
+
+### GitOps — desired state có audit trail
+
+Trong GitOps, Git lưu desired state; controller trong cluster reconcile trạng thái thật về trạng thái mong muốn. Promotion là PR thay image digest/config, giúp review, audit và rollback khai báo. Pipeline build/push artifact nhưng không cần giữ credential admin cluster dài hạn.
+
+> ⚠️ `git revert` không luôn đảo được migration dữ liệu hoặc side effect ngoài Kubernetes. Rollback plan phải tách app, schema và dữ liệu; secret không commit plaintext chỉ vì repo là private.
+
+### Guardrail Kubernetes tối thiểu cho production
+
+```yaml
+spec:
+  minAvailable: 1             # PodDisruptionBudget
+  # Deployment còn cần requests/limits, probes và strategy phù hợp
+```
+
+- `NetworkPolicy`: default-deny rồi allow traffic cần thiết;
+- `PodDisruptionBudget`: giữ đủ replica khi voluntary disruption, không bảo vệ node crash;
+- requests/limits: scheduler đặt chỗ đúng và tránh noisy neighbor;
+- runAsNonRoot/readOnlyRootFilesystem/drop capabilities: giảm quyền container;
+- image digest + SBOM/signature: nối chuỗi cung ứng từ Module 17/32.
+
+Các guardrail nên được policy-as-code kiểm tra trước deploy, không dựa vào checklist thủ công.
+
+### Flowchart: Kubernetes reconciliation thay vì script tuần tự
+
+```mermaid
+flowchart LR
+    G["Git desired state"] --> CD["GitOps controller"]
+    CD --> API["Kubernetes API Server"]
+    API --> ETCD["Lưu desired/current state"]
+    API --> CTRL["Deployment controller"]
+    CTRL --> RS["ReplicaSet"]
+    RS --> POD["Pods"]
+    POD --> OBS["Readiness, status và events"]
+    OBS --> API
+    API -. "state khác desired" .-> CTRL
+```
+
+Controller chạy vòng lặp quan sát–so sánh–hành động liên tục; deploy không phải một script “tạo pod rồi xong”. Đây là lý do manifest phải khai báo trạng thái mong muốn và operation nên idempotent: controller có thể reconcile nhiều lần.
+
+### Flow Rolling Update và khả năng rollback
+
+```mermaid
+flowchart LR
+    O["ReplicaSet cũ đang Ready"] --> N["Tạo một phần Pod phiên bản mới"]
+    N --> P{"Readiness đạt?"}
+    P -- "Có" --> D["Giảm dần Pod cũ"]
+    D --> M{"Đã đủ replica mới?"}
+    M -- "Chưa" --> N
+    M -- "Rồi" --> F["Hoàn tất rollout"]
+    P -- "Không" --> H["Dừng tiến độ và điều tra/rollback"]
+```
+
+Readiness bảo vệ traffic, còn liveness chỉ quyết định restart; dùng liveness cho dependency tạm lỗi có thể tạo restart storm. Rollback application không đảo migration phá hủy dữ liệu, nên schema cần chiến lược expand–migrate–contract tương thích rolling deploy.
+
+## 13. Tổng kết — Bảng ghi nhớ nhanh
 
 | Khái niệm | Ghi nhớ nhanh |
 |---|---|
@@ -902,7 +959,7 @@ app:
 
 ---
 
-## 13. Bài tập luyện tập
+## 14. Bài tập luyện tập
 
 ### Phần A — Trắc nghiệm nhận định (Đúng/Sai + giải thích)
 
@@ -1124,7 +1181,7 @@ docker system prune -a
 
 2. **`COPY . .` không có `.dockerignore`** — có nguy cơ copy nhầm `.git/`, file `.env`, `target/` cũ vào Image, làm phình to Image và có thể rò rỉ thông tin nhạy cảm.
 
-3. **Hardcode secret trực tiếp trong Dockerfile** (`ENV DB_PASSWORD=mySecretPassword123`) — bất kỳ ai có quyền truy cập Image (hoặc chỉ cần chạy `docker history`) đều có thể xem được password này — vi phạm nghiêm trọng nguyên tắc bảo mật đã học ở Module 13/16.
+3. **Hardcode secret trực tiếp trong Dockerfile** (`ENV DB_PASSWORD=mySecretPassword123`) — bất kỳ ai có quyền truy cập Image (hoặc chỉ cần chạy `docker history`) đều có thể xem được password này — vi phạm nghiêm trọng nguyên tắc bảo mật đã học ở Module 22/25.
 
 **Sửa lại:**
 
@@ -1211,4 +1268,4 @@ spec:
 
 ---
 
-*File tiếp theo trong lộ trình: **Module 21 — Observability** (Structured Logging, Distributed Tracing với Zipkin/Jaeger, Metrics với Micrometer & Prometheus, Grafana Dashboard, ELK Stack cho tập trung log).*
+*File tiếp theo trong lộ trình: **Module 30 — Observability** (Structured Logging, Distributed Tracing với Zipkin/Jaeger, Metrics với Micrometer & Prometheus, Grafana Dashboard, ELK Stack cho tập trung log).*

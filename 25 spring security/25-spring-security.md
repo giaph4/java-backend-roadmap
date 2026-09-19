@@ -1,4 +1,4 @@
-# Module 16 — Spring Security
+# Module 25 — Spring Security
 
 > **Mức ưu tiên: 🔴 Cao**
 > **Vì sao quan trọng:** Bảo mật không phải là tính năng "thêm vào sau" — 1 lỗ hổng bảo mật (JWT không verify đúng, password lưu plaintext, thiếu CORS/CSRF protection) có thể làm lộ toàn bộ dữ liệu người dùng và phá hủy uy tín hệ thống. Đây cũng là chủ đề bị hỏi sâu nhất trong phỏng vấn Backend — không chỉ "dùng annotation nào" mà là **hiểu đúng cơ chế** Filter Chain, vì sao JWT phù hợp với REST hơn Session, và các lỗ hổng bảo mật kinh điển (OWASP Top 10 liên quan) để tránh mắc phải.
@@ -30,7 +30,7 @@
 
 ## 1. Authentication vs Authorization
 
-Đây là 2 khái niệm **bị nhầm lẫn nhiều nhất** kể cả bởi dev có kinh nghiệm — cũng chính là điều đã đề cập ở Module 14 khi phân biệt `401` vs `403`.
+Đây là 2 khái niệm **bị nhầm lẫn nhiều nhất** kể cả bởi dev có kinh nghiệm — cũng chính là điều đã đề cập ở Module 23 khi phân biệt `401` vs `403`.
 
 ```
 Authentication (Xác thực)  -> "Bạn là ai?"       -> Trả lời SAI/thiếu -> 401 Unauthorized
@@ -84,7 +84,7 @@ String username = auth.getName();
 Collection<? extends GrantedAuthority> roles = auth.getAuthorities();
 ```
 
-> **Liên hệ:** `AuditorAware` ở Module 15 lấy username từ chính `SecurityContextHolder` này — đây là lý do vì sao Auditing tự động biết "ai đang đăng nhập" mà không cần truyền tham số qua từng method.
+> **Liên hệ:** `AuditorAware` ở Module 24 lấy username từ chính `SecurityContextHolder` này — đây là lý do vì sao Auditing tự động biết "ai đang đăng nhập" mà không cần truyền tham số qua từng method.
 
 ### Cấu hình Filter Chain (Spring Security 6+ — dùng SecurityFilterChain Bean, KHÔNG dùng WebSecurityConfigurerAdapter đã deprecated)
 
@@ -213,7 +213,7 @@ Giải pháp truyền thống: Sticky Session (Load Balancer luôn route cùng u
    -> đều thêm độ phức tạp hạ tầng
 ```
 
-> **Đây chính là lý do REST API hiện đại ưu tiên JWT** — vì bản chất "Stateless" (đã học ở Module 14) giúp scale ngang dễ dàng hơn nhiều, không cần đồng bộ session giữa các server.
+> **Đây chính là lý do REST API hiện đại ưu tiên JWT** — vì bản chất "Stateless" (đã học ở Module 23) giúp scale ngang dễ dàng hơn nhiều, không cần đồng bộ session giữa các server.
 
 ---
 
@@ -631,7 +631,7 @@ public class OrderService {
 }
 ```
 
-> **Liên hệ:** `@PreAuthorize`/`@PostAuthorize` cũng hoạt động dựa trên **Spring AOP** (đã học ở Module 12) — cùng cơ chế Proxy với `@Transactional`, nên cũng gặp **bẫy self-invocation** tương tự nếu gọi qua `this`.
+> **Liên hệ:** `@PreAuthorize`/`@PostAuthorize` cũng hoạt động dựa trên **Spring AOP** (đã học ở Module 21) — cùng cơ chế Proxy với `@Transactional`, nên cũng gặp **bẫy self-invocation** tương tự nếu gọi qua `this`.
 
 **Khi nào dùng Method-level Security thay vì URL-based:**
 - Logic phân quyền phức tạp, phụ thuộc vào dữ liệu cụ thể (VD: "chỉ chủ sở hữu mới được sửa")
@@ -722,7 +722,7 @@ http.csrf(csrf -> csrf
 
 ## 11. Xử lý lỗi Authentication/Authorization
 
-Mặc định, khi request bị từ chối, Spring Security trả về response **HTML/plain text đơn giản** (không phải JSON) — không nhất quán với format Error Response đã chuẩn hóa qua `@RestControllerAdvice` ở Module 14. Cần khai báo tường minh 2 handler để REST API luôn trả JSON nhất quán:
+Mặc định, khi request bị từ chối, Spring Security trả về response **HTML/plain text đơn giản** (không phải JSON) — không nhất quán với format Error Response đã chuẩn hóa qua `@RestControllerAdvice` ở Module 23. Cần khai báo tường minh 2 handler để REST API luôn trả JSON nhất quán:
 
 ```java
 @Component
@@ -769,7 +769,7 @@ public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
 }
 ```
 
-> **Vì sao cần tách riêng 2 handler này khỏi `@RestControllerAdvice`:** `GlobalExceptionHandler` (Module 14) chỉ bắt được exception ném ra **từ trong Controller trở đi** — `AuthenticationException`/`AccessDeniedException` bị Spring Security chặn **ở tầng Filter, TRƯỚC KHI** request chạm tới `DispatcherServlet`/Controller, nên `@ExceptionHandler` thông thường **không bắt được**. Đây là lý do Spring Security cần cơ chế riêng (`AuthenticationEntryPoint`/`AccessDeniedHandler`) để đảm bảo response lỗi vẫn nhất quán format với phần còn lại của API.
+> **Vì sao cần tách riêng 2 handler này khỏi `@RestControllerAdvice`:** `GlobalExceptionHandler` (Module 23) chỉ bắt được exception ném ra **từ trong Controller trở đi** — `AuthenticationException`/`AccessDeniedException` bị Spring Security chặn **ở tầng Filter, TRƯỚC KHI** request chạm tới `DispatcherServlet`/Controller, nên `@ExceptionHandler` thông thường **không bắt được**. Đây là lý do Spring Security cần cơ chế riêng (`AuthenticationEntryPoint`/`AccessDeniedHandler`) để đảm bảo response lỗi vẫn nhất quán format với phần còn lại của API.
 
 ---
 
@@ -884,7 +884,7 @@ http.headers(headers -> headers
 
 9. **Quên `@EnableMethodSecurity`** khi dùng `@PreAuthorize`/`@PostAuthorize` → annotation không có tác dụng gì, không báo lỗi rõ ràng.
 
-10. **Self-invocation với `@PreAuthorize`** (giống bẫy `@Transactional` ở Module 12) — gọi qua `this.method()` sẽ bỏ qua kiểm tra phân quyền hoàn toàn.
+10. **Self-invocation với `@PreAuthorize`** (giống bẫy `@Transactional` ở Module 21) — gọi qua `this.method()` sẽ bỏ qua kiểm tra phân quyền hoàn toàn.
 
 11. **Không validate/sanitize input trước khi query DB** → lỗ hổng SQL Injection (dù dùng JPA/Hibernate với JPQL/Query Method đã tự động parameterize, vẫn cần cẩn thận với Native Query nối chuỗi thủ công).
 
@@ -892,9 +892,76 @@ http.headers(headers -> headers
 
 13. **Quên tiền tố `"ROLE_"` khi tạo `GrantedAuthority`** → `hasRole("ADMIN")` không bao giờ khớp vì nó ngầm so với `"ROLE_ADMIN"`, gây lỗi 403 khó hiểu dù role đã đúng.
 
-14. **Không giới hạn số lần đăng nhập sai (Brute-force login)** — thiếu cơ chế khóa tạm thời tài khoản/rate limit endpoint `/login` khiến kẻ tấn công có thể thử mật khẩu không giới hạn số lần (liên hệ `429`/Rate Limiting đã học ở Module 14).
+14. **Không giới hạn số lần đăng nhập sai (Brute-force login)** — thiếu cơ chế khóa tạm thời tài khoản/rate limit endpoint `/login` khiến kẻ tấn công có thể thử mật khẩu không giới hạn số lần (liên hệ `429`/Rate Limiting đã học ở Module 23).
 
 ---
+
+### Password hash migration không cần reset đồng loạt
+
+Khi đổi cost/algorithm (ví dụ bcrypt → Argon2), lưu prefix định danh encoder cùng hash và dùng `DelegatingPasswordEncoder`. Sau khi user đăng nhập thành công bằng hash cũ, re-hash mật khẩu vừa xác minh bằng encoder mới rồi cập nhật atomically. Tài khoản không đăng nhập lâu có thể buộc reset theo policy.
+
+> ⚠️ Không “giải mã” password hash cũ — hash đúng thiết kế là một chiều. Pepper nếu dùng phải nằm ngoài database (secret manager) và rotation cần kế hoạch riêng.
+
+### BOLA/IDOR — authenticate đúng vẫn có thể authorize sai object
+
+Endpoint `GET /orders/{id}` không an toàn chỉ vì user đã login. Service phải kiểm tra order thuộc tenant/user hoặc caller có permission trên **object cụ thể**, tốt nhất đưa scope vào query:
+
+```java
+orderRepository.findByIdAndTenantId(orderId, currentTenantId)
+    .orElseThrow(NotFoundException::new);
+```
+
+Kiểm tra ở query giảm nguy cơ quên check sau khi load và tránh lộ sự tồn tại object qua khác biệt 403/404. Test phải có hai user/tenant và thử truy cập chéo; đây là authorization nghiệp vụ, không chỉ là cấu hình URL trong `SecurityFilterChain`.
+
+### Sequence diagram: request qua Spring Security Filter Chain
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant D as DelegatingFilterProxy
+    participant P as FilterChainProxy
+    participant SC as SecurityFilterChain phù hợp
+    participant A as AuthenticationManager
+    participant Z as AuthorizationManager
+    participant MVC as DispatcherServlet
+    C->>D: HTTP request
+    D->>P: delegate
+    P->>SC: chọn chain theo RequestMatcher
+    SC->>A: trích credential và authenticate
+    A-->>SC: Authentication hoặc failure
+    SC->>Z: authorize request với principal/authorities
+    alt được phép
+        Z-->>SC: granted
+        SC->>MVC: tiếp tục application chain
+        MVC-->>C: response
+    else bị từ chối
+        Z-->>SC: denied
+        SC-->>C: 401 hoặc 403 qua handler
+    end
+```
+
+Authentication trả lời “ai”, authorization trả lời “được làm gì trên resource nào”. Filter order quan trọng vì filter sau dựa vào `SecurityContext` do filter trước thiết lập; tự chèn filter sai vị trí có thể bỏ qua exception translation hoặc chạy trước context persistence.
+
+### Sequence diagram: JWT access token và refresh rotation
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant AS as Authorization server
+    participant API as Resource server
+    participant RS as Refresh-token store
+    C->>AS: login / authorization grant
+    AS->>RS: lưu refresh token family
+    AS-->>C: short-lived access token + refresh token
+    C->>API: Bearer access token
+    API->>API: verify signature, issuer, audience, expiry
+    API-->>C: protected response
+    C->>AS: refresh token cũ
+    AS->>RS: atomically consume và rotate
+    AS-->>C: access token mới + refresh token mới
+```
+
+JWT được ký chứ mặc định không mã hóa; payload client và log/proxy có thể đọc, nên không chứa secret. Short lifetime giới hạn cửa sổ thiệt hại, còn refresh rotation phát hiện reuse và cho phép revoke theo token family.
 
 ## 15. Tổng kết — Bảng ghi nhớ nhanh
 
@@ -949,7 +1016,7 @@ configuration.setAllowedOrigins(List.of("*"));
 configuration.setAllowCredentials(true);
 ```
 
-**Bài 6:** Viết `AuthenticationEntryPoint` và `AccessDeniedHandler` trả về JSON theo format `ErrorResponse` chuẩn đã học ở Module 14 (gồm `timestamp`, `status`, `error`, `message`, `path`), và đăng ký cả 2 vào `SecurityFilterChain`.
+**Bài 6:** Viết `AuthenticationEntryPoint` và `AccessDeniedHandler` trả về JSON theo format `ErrorResponse` chuẩn đã học ở Module 23 (gồm `timestamp`, `status`, `error`, `message`, `path`), và đăng ký cả 2 vào `SecurityFilterChain`.
 
 ### Phần C — Gợi ý đáp án
 
@@ -1241,4 +1308,4 @@ public class SecurityConfig {
 
 ---
 
-*File tiếp theo trong lộ trình: **Module 17 — Testing** (JUnit 5, Mockito, @SpringBootTest, Testcontainers, Test Pyramid, MockMvc cho Controller Test, Integration Test vs Unit Test).*
+*File tiếp theo trong lộ trình: **Module 26 — Testing** (JUnit 5, Mockito, @SpringBootTest, Testcontainers, Test Pyramid, MockMvc cho Controller Test, Integration Test vs Unit Test).*

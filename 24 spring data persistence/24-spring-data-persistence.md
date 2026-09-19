@@ -1,9 +1,9 @@
-# Module 15 — Spring Data & Persistence nâng cao
+# Module 24 — Spring Data & Persistence nâng cao
 
 > **Mức ưu tiên: 🔴 Cao**
-> **Vì sao quan trọng:** Module 11 đã cho bạn nền tảng JPA/Hibernate; module này đưa bạn tới mức **thực chiến production**. Query động phức tạp (Specification/Querydsl), audit tự động (ai tạo/sửa record lúc nào), xử lý **race condition** khi nhiều request cùng sửa 1 dòng dữ liệu (Locking), và quản lý schema database qua version control (Flyway/Liquibase) — đây đều là những kỹ năng phân biệt rõ ràng giữa "biết dùng Spring Data JPA" và "dùng Spring Data JPA đúng cách trong hệ thống thật có nhiều người dùng đồng thời".
+> **Vì sao quan trọng:** Module 20 đã cho bạn nền tảng JPA/Hibernate; module này đưa bạn tới mức **thực chiến production**. Query động phức tạp (Specification/Querydsl), audit tự động (ai tạo/sửa record lúc nào), xử lý **race condition** khi nhiều request cùng sửa 1 dòng dữ liệu (Locking), và quản lý schema database qua version control (Flyway/Liquibase) — đây đều là những kỹ năng phân biệt rõ ràng giữa "biết dùng Spring Data JPA" và "dùng Spring Data JPA đúng cách trong hệ thống thật có nhiều người dùng đồng thời".
 
-> **Phạm vi bài này:** Tập trung vào các kỹ thuật Spring Data JPA/Hibernate **nâng cao ở tầng Repository/Persistence**. Kiến thức nền tảng (Entity mapping, quan hệ, vòng đời, N+1 cơ bản) thuộc Module 11 và không nhắc lại chi tiết. Authentication/Authorization (ai được phép gọi API) thuộc Module Spring Security — ở đây chỉ dùng `AuditorAware` để trả lời "ai đã sửa record", không đi sâu cơ chế xác thực.
+> **Phạm vi bài này:** Tập trung vào các kỹ thuật Spring Data JPA/Hibernate **nâng cao ở tầng Repository/Persistence**. Kiến thức nền tảng (Entity mapping, quan hệ, vòng đời, N+1 cơ bản) thuộc Module 20 và không nhắc lại chi tiết. Authentication/Authorization (ai được phép gọi API) thuộc Module Spring Security — ở đây chỉ dùng `AuditorAware` để trả lời "ai đã sửa record", không đi sâu cơ chế xác thực.
 
 ---
 
@@ -48,7 +48,7 @@ JpaRepository<T, ID>                 (+ flush, saveAndFlush, deleteAllInBatch,
 public interface UserRepository extends JpaRepository<User, Long> {
     // Kế thừa sẵn: save(), findById(), findAll(), deleteById(), count()...
     // KHÔNG cần viết implementation - Spring Data JPA tự sinh code lúc runtime
-    // bằng Dynamic Proxy (giống cơ chế AOP Proxy đã học ở Module 12)
+    // bằng Dynamic Proxy (giống cơ chế AOP Proxy đã học ở Module 21)
 }
 ```
 
@@ -117,7 +117,7 @@ public interface OrderRepository extends JpaRepository<Order, Long>, OrderReposi
 
 ## 2. Derived Query Methods nâng cao
 
-Đã học cơ bản ở Module 11 — đây là các pattern nâng cao hơn.
+Đã học cơ bản ở Module 20 — đây là các pattern nâng cao hơn.
 
 ```java
 public interface OrderRepository extends JpaRepository<Order, Long> {
@@ -258,7 +258,7 @@ public class OrderExportService {
 
 ## 3. Specification API
 
-**Specification** là cách xây dựng query **động** (dynamic query) bằng code Java, dựa trên **Criteria API** (đã giới thiệu sơ lược ở Module 11) — cực kỳ hữu ích khi API có **nhiều tham số filter tùy chọn** (search form với 10+ field, người dùng có thể điền bất kỳ tổ hợp nào).
+**Specification** là cách xây dựng query **động** (dynamic query) bằng code Java, dựa trên **Criteria API** (đã giới thiệu sơ lược ở Module 20) — cực kỳ hữu ích khi API có **nhiều tham số filter tùy chọn** (search form với 10+ field, người dùng có thể điền bất kỳ tổ hợp nào).
 
 ### Setup
 
@@ -471,7 +471,7 @@ public class MyApp { }
 
 ## 6. Optimistic Locking vs Pessimistic Locking
 
-Đây là kiến thức **cực kỳ quan trọng** để xử lý **Race Condition** — khi nhiều request cùng đọc/sửa 1 dòng dữ liệu đồng thời (đã giới thiệu khái niệm ở Module 05 Thread và Module 10 Isolation Level, giờ áp dụng cụ thể vào JPA).
+Đây là kiến thức **cực kỳ quan trọng** để xử lý **Race Condition** — khi nhiều request cùng đọc/sửa 1 dòng dữ liệu đồng thời (đã giới thiệu khái niệm ở Module 12 Thread và Module 18 Isolation Level, giờ áp dụng cụ thể vào JPA).
 
 ### Vấn đề: Lost Update
 
@@ -581,7 +581,7 @@ public class ProductService {
 | Rủi ro | Có thể fail nhiều lần nếu xung đột thường xuyên (nhiều lần retry) | Rủi ro **Deadlock** nếu khóa nhiều resource theo thứ tự khác nhau |
 | Phù hợp | Xung đột hiếm, ưu tiên throughput | Xung đột thường xuyên, ưu tiên tính đúng đắn tuyệt đối |
 
-> **Liên hệ:** Chủ đề "trừ tồn kho không bị oversell khi flash sale" — 1 bài toán kinh điển trong phỏng vấn — chính là ứng dụng trực tiếp của Pessimistic Locking (hoặc các giải pháp nâng cao hơn như Redis distributed lock, sẽ gặp ở Module Microservices/System Design). Ở tầng HTTP, khái niệm tương đương là `ETag`/`If-Match` — xem lại Module 14 (RESTful API Design).
+> **Liên hệ:** Chủ đề "trừ tồn kho không bị oversell khi flash sale" — một bài toán kinh điển trong phỏng vấn — chính là ứng dụng trực tiếp của Pessimistic Locking (hoặc các giải pháp nâng cao hơn như Redis distributed lock, sẽ gặp ở Module 28 và 31). Ở tầng HTTP, khái niệm tương đương là `ETag`/`If-Match` — xem lại Module 23 (RESTful API Design).
 
 ---
 
@@ -712,7 +712,7 @@ public class OrderService {
 
 ## 7. Database Migration
 
-**Vấn đề:** Khi team nhiều người cùng làm việc, database schema thay đổi liên tục (thêm cột, tạo bảng mới...) — nếu chỉ dựa vào `ddl-auto: update` của Hibernate (đã cảnh báo ở Module 13 là nguy hiểm ở production), sẽ **không có lịch sử thay đổi schema**, không thể rollback, không đồng bộ được giữa các môi trường (dev/staging/prod).
+**Vấn đề:** Khi team nhiều người cùng làm việc, database schema thay đổi liên tục (thêm cột, tạo bảng mới...) — nếu chỉ dựa vào `ddl-auto: update` của Hibernate (đã cảnh báo ở Module 22 là nguy hiểm ở production), sẽ **không có lịch sử thay đổi schema**, không thể rollback, không đồng bộ được giữa các môi trường (dev/staging/prod).
 
 **Giải pháp:** Quản lý schema như quản lý code — mỗi thay đổi là 1 file **migration script** có version, được version control (Git) cùng source code.
 
@@ -814,7 +814,7 @@ liquibase rollback-count 1
 
 ## 8. Projection
 
-Đã giới thiệu DTO Projection ở Module 11 để giải quyết N+1 — đây là các cách projection khác trong Spring Data JPA.
+Đã giới thiệu DTO Projection ở Module 20 để giải quyết N+1 — đây là các cách projection khác trong Spring Data JPA.
 
 ### Interface-based Projection (đơn giản nhất)
 
@@ -860,14 +860,14 @@ List<Order> fullOrders = orderRepository.findByStatus(OrderStatus.PENDING, Order
 
 **Vấn đề:** Projection (mục 8) giải quyết N+1 bằng cách **không load Entity đầy đủ**. Nhưng đôi khi bạn **cần** Entity đầy đủ (để gọi method nghiệp vụ, cascade save...) và chỉ muốn kiểm soát **quan hệ LAZY nào cần fetch kèm luôn** trong 1 query — đây chính là mục đích của `@EntityGraph`.
 
-### Vấn đề N+1 nhắc lại nhanh (đã học ở Module 11)
+### Vấn đề N+1 nhắc lại nhanh (đã học ở Module 20)
 
 ```java
 List<Order> orders = orderRepository.findAll();     // 1 query lấy Order
 orders.forEach(o -> o.getUser().getFullName());     // N query lấy User (LAZY) -> N+1!
 ```
 
-Module 11 đã giới thiệu `JOIN FETCH` trong JPQL để giải quyết. `@EntityGraph` là cách làm **tương đương nhưng khai báo (declarative)**, không cần viết JPQL thủ công:
+Module 20 đã giới thiệu `JOIN FETCH` trong JPQL để giải quyết. `@EntityGraph` là cách làm **tương đương nhưng khai báo (declarative)**, không cần viết JPQL thủ công:
 
 ### Named EntityGraph khai báo trên Entity
 
@@ -996,7 +996,7 @@ public void importProducts(List<ProductImportRow> rows) {
 
 8. **Interface-based Projection với quan hệ sâu** (`getUser().getAddress().getCity()`) có thể vẫn gây N+1 nếu không cẩn thận — nên ưu tiên Class-based Projection với JPQL tường minh.
 
-9. **Không đặt Index cho cột thường dùng để `WHERE`/`ORDER BY`** trong Specification/Querydsl query động → query chậm dần khi dữ liệu lớn (liên hệ Module 10 — Index).
+9. **Không đặt Index cho cột thường dùng để `WHERE`/`ORDER BY`** trong Specification/Querydsl query động → query chậm dần khi dữ liệu lớn (liên hệ Module 18 — Index).
 
 10. **Auditing không set `AuditorAware` đúng cách** → field `createdBy`/`updatedBy` luôn là `null` hoặc giá trị sai, audit trail vô nghĩa.
 
@@ -1005,6 +1005,60 @@ public void importProducts(List<ProductImportRow> rows) {
 12. **Batch insert khối lượng lớn với `GenerationType.IDENTITY`** → JDBC Batching bị vô hiệu hóa hoàn toàn, hiệu năng import tệ hơn nhiều so với mong đợi dù đã cấu hình `batch_size`.
 
 ---
+
+### `Page` vs `Slice` và chi phí count query
+
+`Page<T>` cần tổng số phần tử nên thường chạy thêm `COUNT`; với join/filter phức tạp, count có thể đắt ngang hoặc hơn query dữ liệu. `Slice<T>` chỉ lấy `size + 1` để biết còn trang sau, phù hợp infinite scroll/API không cần tổng số chính xác.
+
+| Nhu cầu | Lựa chọn |
+|---|---|
+| UI cần tổng trang chính xác | `Page` + tối ưu/count query riêng |
+| Chỉ cần next/hasNext | `Slice` |
+| Feed/bảng rất sâu | Keyset/scroll theo khóa ổn định |
+
+### Keyset pagination với Spring Data
+
+Offset sâu vẫn chậm dù dùng `Pageable`. Với sort `(createdAt DESC, id DESC)`, query tiếp theo phải lọc lexicographic theo cả hai cột và có index tương ứng. Cursor nên opaque, ký/validate để client không chèn sort key bất hợp lệ.
+
+> ⚠️ Chỉ dùng `createdAt` không đủ khi nhiều row trùng timestamp: có thể lặp/mất row. Luôn thêm tie-breaker duy nhất như `id`. Liên hệ contract HTTP/cursor ở Module 23 và SARGable/index ở Module 18.
+
+Repository method có thể trả `Slice<Projection>` để kết hợp giảm column, tránh entity materialization và bỏ count — nhưng vẫn phải kiểm tra SQL thật bằng log/plan.
+
+### Flowchart: từ Repository method tới SQL
+
+```mermaid
+flowchart LR
+    M["Gọi repository method"] --> PX["Spring Data proxy"]
+    PX --> Q{"Nguồn query"}
+    Q -->|"Tên method"| D["Query derivation"]
+    Q -->|"@Query"| J["JPQL / native query"]
+    Q -->|"Specification / Querydsl"| C["Criteria được compose"]
+    D --> B["Bind parameter, sort và pagination"]
+    J --> B
+    C --> B
+    B --> ORM["EntityManager / Hibernate"]
+    ORM --> SQL["Sinh và thực thi SQL"]
+    SQL --> MAP["Map entity / projection / DTO"]
+```
+
+Repository abstraction giảm boilerplate nhưng không xóa cost model của database. Chữ ký return type quyết định thêm hành vi: `Page` kích hoạt count, projection đổi select list, entity có thể đi vào Persistence Context và dirty checking.
+
+### Flow chọn chiến lược đọc dữ liệu
+
+```mermaid
+flowchart TD
+    U["Use case đọc dữ liệu"] --> W{"Có cần cập nhật entity trong transaction?"}
+    W -- "Có" --> E["Load entity với fetch plan rõ"]
+    W -- "Không" --> P["Ưu tiên DTO/projection"]
+    E --> G{"Có association cần ngay?"}
+    G -- "Có" --> F["EntityGraph / fetch join / batch fetch"]
+    G -- "Không" --> L["Giữ lazy và không truy cập ngoài boundary"]
+    P --> PG{"Cần tổng số chính xác?"}
+    PG -- "Có" --> PA["Page và tối ưu count"]
+    PG -- "Không" --> SL["Slice hoặc keyset cursor"]
+```
+
+Mental model bắt đầu từ read shape/use case, không từ annotation tiện nhất; điều này giảm cả N+1 lẫn over-fetch.
 
 ## 12. Tổng kết — Bảng ghi nhớ nhanh
 
@@ -1337,7 +1391,7 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
 
 **Vì sao tốt hơn gọi trực tiếp sau `findAll()`:**
 
-Nếu gọi `orderRepository.findAll()` rồi lặp qua từng `order.getUser().getFullName()`, mỗi lần truy cập `getUser()` với quan hệ `LAZY` sẽ kích hoạt **1 câu SELECT riêng** tới bảng `users` — với N order sẽ có N câu SELECT phụ, cộng với 1 câu SELECT ban đầu lấy Order → tổng **N+1 query** (vấn đề N+1 đã học ở Module 11).
+Nếu gọi `orderRepository.findAll()` rồi lặp qua từng `order.getUser().getFullName()`, mỗi lần truy cập `getUser()` với quan hệ `LAZY` sẽ kích hoạt **1 câu SELECT riêng** tới bảng `users` — với N order sẽ có N câu SELECT phụ, cộng với 1 câu SELECT ban đầu lấy Order → tổng **N+1 query** (vấn đề N+1 đã học ở Module 20).
 
 Dùng `@EntityGraph("Order.withUser")`, Hibernate nhận biết cần fetch kèm `user` ngay trong **1 câu JOIN FETCH duy nhất** khi thực thi `findByStatus()` — kết quả trả về Order đã có sẵn User được load đầy đủ, không còn câu SELECT nào phát sinh thêm khi truy cập `order.getUser()` sau đó. Tổng số query giảm từ N+1 xuống còn **1 query duy nhất**.
 
@@ -1345,4 +1399,4 @@ Dùng `@EntityGraph("Order.withUser")`, Hibernate nhận biết cần fetch kèm
 
 ---
 
-*File tiếp theo trong lộ trình: **Module 16 — Spring Security** (Authentication vs Authorization, Security Filter Chain, JWT, OAuth2/OpenID Connect, Password Encoding, CORS, CSRF, Method-level Security).*
+*File tiếp theo trong lộ trình: **Module 25 — Spring Security** (Authentication vs Authorization, Security Filter Chain, JWT, OAuth2/OpenID Connect, Password Encoding, CORS, CSRF, Method-level Security).*

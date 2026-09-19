@@ -1,7 +1,7 @@
-# Module 22 — System Design cơ bản cho Backend
+# Module 31 — System Design cơ bản cho Backend
 
 > **Mức ưu tiên: 🔴 Cao**
-> **Vì sao quan trọng:** Đây là module **tổng hợp toàn bộ lộ trình** — Load Balancing, Scaling, Replication/Sharding, CDN, Rate Limiting đều là những khái niệm bạn đã chạm tới rải rác (Module 10, 18, 19) nhưng giờ được ghép lại thành **tư duy thiết kế hệ thống end-to-end**. System Design Interview là vòng phỏng vấn **quyết định** cho vị trí Mid/Senior Backend — không đánh giá "bạn code giỏi không" mà đánh giá "bạn có hiểu đánh đổi (trade-off) khi xây hệ thống chịu được hàng triệu user không". Đây cũng là kỹ năng trực tiếp áp dụng khi bạn thiết kế kiến trúc cho đồ án/dự án thực tế.
+> **Vì sao quan trọng:** Đây là module **tổng hợp toàn bộ lộ trình** — Load Balancing, Scaling, Replication/Sharding, CDN, Rate Limiting đều là những khái niệm bạn đã chạm tới rải rác (Module 18, 27, 28) nhưng giờ được ghép lại thành **tư duy thiết kế hệ thống end-to-end**. System Design Interview là vòng phỏng vấn **quyết định** cho vị trí Mid/Senior Backend — không đánh giá "bạn code giỏi không" mà đánh giá "bạn có hiểu đánh đổi (trade-off) khi xây hệ thống chịu được hàng triệu user không". Đây cũng là kỹ năng trực tiếp áp dụng khi bạn thiết kế kiến trúc cho đồ án/dự án thực tế.
 
 > **Phạm vi bài này:** Tập trung vào các khái niệm/pattern nền tảng của System Design và 2 case study kinh điển để luyện tư duy. Không đi sâu vào các bài toán System Design chuyên biệt khác (Chat system, Ride-sharing, Search Engine...) — cấu trúc tư duy ở mục 7 áp dụng được cho mọi bài toán tương tự, phần thực hành thêm nên tự luyện dựa trên khung đó.
 
@@ -51,11 +51,11 @@ Sau:   4 server, mỗi cái (4 CPU, 8GB RAM)  <- NHIỀU máy giống nhau, ch�
 
 | Ưu điểm | Nhược điểm |
 |---|---|
-| **Không giới hạn** — thêm máy khi cần (đã có nền tảng ở Module 19/20: Kubernetes tự scale) | **Phức tạp hơn** — cần Load Balancer, Service Discovery |
-| **Chịu lỗi tốt hơn** — 1 máy chết, các máy khác vẫn phục vụ | Vấn đề **đồng bộ trạng thái** giữa các instance (Session, Cache — đã học Module 16, 18) |
+| **Không giới hạn** — thêm máy khi cần (đã có nền tảng ở Module 28–29: Microservices và Kubernetes) | **Phức tạp hơn** — cần Load Balancer, Service Discovery |
+| **Chịu lỗi tốt hơn** — 1 máy chết, các máy khác vẫn phục vụ | Vấn đề **đồng bộ trạng thái** giữa các instance (Session, Cache — đã học Module 25 và 27) |
 | Chi phí tăng TUYẾN TÍNH (thêm máy giá tương đương) | Database thường khó horizontal scale hơn Application server (mục 3, 4) |
 
-> **Nguyên tắc thực chiến:** Ứng dụng hiện đại luôn thiết kế để **Stateless** (đã học ở Module 14, 16 — JWT thay vì Session lưu server) chính là để **horizontal scale dễ dàng** — bất kỳ instance nào cũng xử lý được request bất kỳ, không cần "dính" vào 1 server cụ thể.
+> **Nguyên tắc thực chiến:** Ứng dụng hiện đại luôn thiết kế để **Stateless** (đã học ở Module 23 và 25 — JWT thay vì Session lưu server) chính là để **horizontal scale dễ dàng** — bất kỳ instance nào cũng xử lý được request bất kỳ, không cần "dính" vào 1 server cụ thể.
 
 ---
 
@@ -80,7 +80,7 @@ Client ────────────►│Load Balancer  │
 |---|---|
 | **Round Robin** | Phân phối lần lượt theo vòng tròn (Server 1 → 2 → 3 → 1 → ...) — đơn giản, phổ biến nhất |
 | **Least Connections** | Route request tới server đang có **ÍT connection đang xử lý nhất** — công bằng hơn khi các request có độ nặng khác nhau |
-| **IP Hash** | Hash địa chỉ IP client → LUÔN route về CÙNG 1 server — hữu ích khi cần "Sticky Session" (dù bản thân Sticky Session không phải best practice, đã bàn ở Module 16) |
+| **IP Hash** | Hash địa chỉ IP client → LUÔN route về CÙNG 1 server — hữu ích khi cần "Sticky Session" (dù bản thân Sticky Session không phải best practice, đã bàn ở Module 25) |
 | **Weighted Round Robin** | Server mạnh hơn nhận tỷ trọng traffic cao hơn (VD: Server A gấp đôi CPU Server B → nhận gấp đôi request) |
 
 ### Layer 4 vs Layer 7 Load Balancer
@@ -89,13 +89,13 @@ Client ────────────►│Load Balancer  │
 |---|---|---|
 | Dựa trên | IP + Port (TCP/UDP) | Nội dung HTTP (path, header, cookie) |
 | Tốc độ | Nhanh hơn (ít xử lý) | Chậm hơn 1 chút (phải đọc nội dung HTTP) |
-| Khả năng route thông minh | Hạn chế | **Cao** — route theo path (`/api/orders` → Order Service, `/api/users` → User Service — liên hệ API Gateway ở Module 19) |
+| Khả năng route thông minh | Hạn chế | **Cao** — route theo path (`/api/orders` → Order Service, `/api/users` → User Service — liên hệ API Gateway ở Module 28) |
 | Ví dụ | AWS Network Load Balancer (NLB) | Nginx, AWS Application Load Balancer (ALB), Spring Cloud Gateway |
 
 ### Health Check — Load Balancer cần biết Server nào còn "sống"
 
 ```
-Load Balancer định kỳ gọi GET /actuator/health (liên hệ Module 13) tới từng server
+Load Balancer định kỳ gọi GET /actuator/health (liên hệ Module 22) tới từng server
      │
      ├─► Server phản hồi 200 OK -> tiếp tục nhận traffic
      └─► Server không phản hồi/lỗi -> LOẠI KHỎI danh sách, KHÔNG route traffic tới nữa
@@ -257,9 +257,9 @@ SELECT * FROM orders WHERE user_id = 12345;  -- 1 query, 1 DB
 -- -> phải query TỪNG shard riêng biệt, rồi TỔNG HỢP kết quả ở tầng ứng dụng (Scatter-Gather)
 ```
 
-⚠️ **Đây chính là lý do Sharding thường đi kèm với các giải pháp khác** (Read Replica cho từng Shard, hoặc tổng hợp dữ liệu riêng vào 1 Data Warehouse/Read Model dùng cho báo cáo/thống kê tổng thể — liên hệ CQRS đã giới thiệu ở Module 19).
+⚠️ **Đây chính là lý do Sharding thường đi kèm với các giải pháp khác** (Read Replica cho từng Shard, hoặc tổng hợp dữ liệu riêng vào 1 Data Warehouse/Read Model dùng cho báo cáo/thống kê tổng thể — liên hệ CQRS đã giới thiệu ở Module 28).
 
-> **Liên hệ Module 19 (Database per Service):** Sharding và "Database per Service" trong Microservices thực chất giải quyết **CÙNG 1 vấn đề cốt lõi** (chia nhỏ dữ liệu để scale) — chỉ khác là Sharding chia theo **giá trị dữ liệu** (user_id), còn Database per Service chia theo **ranh giới nghiệp vụ** (domain boundary).
+> **Liên hệ Module 28 (Database per Service):** Sharding và "Database per Service" trong Microservices thực chất giải quyết **CÙNG 1 vấn đề cốt lõi** (chia nhỏ dữ liệu để scale) — chỉ khác là Sharding chia theo **giá trị dữ liệu** (user_id), còn Database per Service chia theo **ranh giới nghiệp vụ** (domain boundary).
 
 ---
 
@@ -296,7 +296,7 @@ User ở Việt Nam -> Request TỚI CDN node GẦN NHẤT (VD: Singapore) -> tr
 - Giảm tải cho Origin Server (CDN đã "chặn" phần lớn request tới nội dung tĩnh)
 - Chống DDoS tốt hơn (CDN có hạ tầng lớn, hấp thụ được traffic bất thường)
 
-> **Liên hệ trực tiếp Caching (Module 18):** CDN về bản chất là **Cache-Aside pattern** đã học, chỉ khác là áp dụng ở **quy mô địa lý toàn cầu**, cho nội dung TĨNH, thay vì cache dữ liệu động trong 1 Redis server như đã học.
+> **Liên hệ trực tiếp Caching (Module 27):** CDN về bản chất là **Cache-Aside pattern** đã học, chỉ khác là áp dụng ở **quy mô địa lý toàn cầu**, cho nội dung TĨNH, thay vì cache dữ liệu động trong 1 Redis server như đã học.
 
 ---
 
@@ -311,7 +311,7 @@ User ở Việt Nam -> Request TỚI CDN node GẦN NHẤT (VD: Singapore) -> tr
 ```
 Bucket chứa TỐI ĐA N token, được "refill" (nạp thêm) theo tốc độ cố định (VD: 10 token/giây)
 Mỗi request TIÊU THỤ 1 token
-Bucket HẾT token -> request bị TỪ CHỐI (429 Too Many Requests - đã học Module 14)
+Bucket HẾT token -> request bị TỪ CHỐI (429 Too Many Requests - đã học Module 23)
 
 Ưu điểm: Cho phép "burst" (đợt tăng đột biến ngắn hạn) miễn là bucket còn token,
          phù hợp traffic thực tế không đều đặn tuyệt đối
@@ -357,7 +357,7 @@ Hết khung -> reset counter về 0
       gấp ĐÔI giới hạn cho phép mà không bị chặn
 ```
 
-### Triển khai Rate Limiting với Redis (liên hệ Module 18)
+### Triển khai Rate Limiting với Redis (liên hệ Module 27)
 
 ```java
 @Component
@@ -379,7 +379,7 @@ public class RateLimitingFilter extends OncePerRequestFilter {
         }
 
         if (currentCount > MAX_REQUESTS) {
-            response.setStatus(429); // Too Many Requests - đã học ở Module 14
+            response.setStatus(429); // Too Many Requests - đã học ở Module 23
             response.getWriter().write("{\"message\": \"Vượt quá giới hạn request, vui lòng thử lại sau\"}");
             return;
         }
@@ -389,7 +389,7 @@ public class RateLimitingFilter extends OncePerRequestFilter {
 }
 ```
 
-> **Nơi triển khai Rate Limiting trong thực tế:** Thường đặt tại **API Gateway** (đã học Module 19) — tập trung tại 1 điểm, áp dụng cho toàn hệ thống, không cần lặp lại logic ở từng service riêng lẻ (giống nguyên tắc tập trung Authentication tại Gateway).
+> **Nơi triển khai Rate Limiting trong thực tế:** Thường đặt tại **API Gateway** (đã học Module 28) — tập trung tại 1 điểm, áp dụng cho toàn hệ thống, không cần lặp lại logic ở từng service riêng lẻ (giống nguyên tắc tập trung Authentication tại Gateway).
 
 ---
 
@@ -441,7 +441,7 @@ Kiểm tra phần tử y có trong Filter không:
 
 Mọi quyết định kiến trúc ở các mục trước (Replication, Sharding) đều ẩn chứa 1 đánh đổi nền tảng mà **CAP Theorem** mô tả chính xác — đáng để nhìn lại và áp dụng tường minh trước khi bước vào quy trình thiết kế đầy đủ.
 
-### Nhắc lại CAP Theorem (đã giới thiệu ở Module 10 — RDBMS & NoSQL)
+### Nhắc lại CAP Theorem (đã giới thiệu ở Module 19 — RDBMS & NoSQL)
 
 Trong hệ thống phân tán, khi xảy ra **Network Partition** (lỗi mạng giữa các node), hệ thống chỉ có thể chọn **TỐI ĐA 2 trong 3** tính chất:
 
@@ -504,8 +504,8 @@ Bước 2: ƯỚC LƯỢNG QUY MÔ (Capacity Estimation)
    - Tỷ lệ Đọc:Ghi (Read:Write ratio)
 
 Bước 3: THIẾT KẾ API/DATA MODEL (High-level Design)
-   - API endpoint chính (liên hệ Module 14 - REST API Design)
-   - Database schema cơ bản (liên hệ Module 10, 11)
+   - API endpoint chính (liên hệ Module 23 - REST API Design)
+   - Database schema cơ bản (liên hệ Module 18, 20)
 
 Bước 4: THIẾT KẾ KIẾN TRÚC TỔNG THỂ (Architecture Diagram)
    - Vẽ sơ đồ: Client -> LB -> App Server -> Cache -> Database
@@ -552,7 +552,7 @@ VD: 10 triệu bài post/ngày, mỗi post ~1KB (text) -> 10M × 1KB × 365 ≈ 
 | Round-trip network KHÁC datacenter/khu vực | ~50-150ms |
 | Đọc từ Disk quay (HDD) | ~5-10ms (chậm hơn SSD hàng chục lần) |
 
-> **Cách dùng thực tế:** Không cần nhớ chính xác từng con số, chỉ cần nhớ **thứ tự chênh lệch** — Cache nhanh hơn DB khoảng 10-100 lần, network khác khu vực địa lý chậm hơn cùng datacenter khoảng 100 lần. Đây chính là lý do trực tiếp giải thích "vì sao cần Cache" (Module 18) và "vì sao cần CDN" (mục 5) — không phải vì lý thuyết suông, mà vì con số chênh lệch cụ thể quá lớn để bỏ qua.
+> **Cách dùng thực tế:** Không cần nhớ chính xác từng con số, chỉ cần nhớ **thứ tự chênh lệch** — Cache nhanh hơn DB khoảng 10-100 lần, network khác khu vực địa lý chậm hơn cùng datacenter khoảng 100 lần. Đây chính là lý do trực tiếp giải thích "vì sao cần Cache" (Module 27) và "vì sao cần CDN" (mục 5) — không phải vì lý thuyết suông, mà vì con số chênh lệch cụ thể quá lớn để bỏ qua.
 
 ---
 
@@ -583,7 +583,7 @@ CREATE TABLE urls (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     expires_at TIMESTAMP NULL
 );
-CREATE INDEX idx_short_code ON urls(short_code); -- Liên hệ Module 10 - Index cực kỳ quan trọng cho lookup
+CREATE INDEX idx_short_code ON urls(short_code); -- Liên hệ Module 18 - Index cực kỳ quan trọng cho lookup
 ```
 
 **Thuật toán sinh Short Code — Base62 Encoding (chuyển ID số thành chuỗi ngắn):**
@@ -603,7 +603,7 @@ public String encode(long id) {
 }
 ```
 
-> **Đây chính là ứng dụng thực tế của Auto-increment ID (Module 11 — GenerationType.IDENTITY/SEQUENCE)** — tận dụng ID tăng dần sẵn có, encode thành chuỗi ngắn thay vì tự sinh chuỗi ngẫu nhiên (tránh trùng lặp phức tạp).
+> **Đây chính là ứng dụng thực tế của Auto-increment ID (Module 20 — GenerationType.IDENTITY/SEQUENCE)** — tận dụng ID tăng dần sẵn có, encode thành chuỗi ngắn thay vì tự sinh chuỗi ngẫu nhiên (tránh trùng lặp phức tạp).
 
 ### Bước 4-5: Kiến trúc tổng thể & Deep Dive
 
@@ -611,7 +611,7 @@ public String encode(long id) {
 Client -> Load Balancer -> App Server (nhiều instance, Stateless)
                               │
                               ├─► Cache (Redis) - CHECK TRƯỚC khi query DB
-                              │    (liên hệ Module 18 - Cache-Aside Pattern,
+                              │    (liên hệ Module 27 - Cache-Aside Pattern,
                               │     vì tỷ lệ Đọc:Ghi = 100:1, cache cực kỳ hiệu quả ở đây)
                               │
                               └─► Database (URL mapping)
@@ -675,7 +675,7 @@ Khi follower B mở app xem feed -> CHỈ CẦN đọc feed ĐÃ TÍNH SẴN (c�
 @Service
 public class PostService {
 
-    @Async // Xử lý fan-out bất đồng bộ (liên hệ Module 18) - không chặn response của việc đăng bài
+    @Async // Xử lý fan-out bất đồng bộ (liên hệ Module 27) - không chặn response của việc đăng bài
     public void fanOutToFollowers(Post post) {
         List<Long> followerIds = followRepository.findFollowerIds(post.getUserId());
         for (Long followerId : followerIds) {
@@ -744,6 +744,55 @@ Khi user B xem feed:
 11. **Chỉ đưa ra 1 giải pháp mà không thảo luận đánh đổi (Trade-off)** — trong phỏng vấn, thể hiện khả năng phân tích NHIỀU phương án và đánh đổi giữa chúng quan trọng hơn nhiều so với việc đưa ra "câu trả lời đúng" duy nhất.
 
 ---
+
+### Overload control: queue hữu hạn, deadline và load shedding
+
+Khi arrival rate vượt service rate, queue tăng làm latency tăng; client timeout rồi retry khiến tải lớn hơn — positive feedback dẫn tới retry storm. Thiết kế ổn định cần:
+
+1. queue/concurrency hữu hạn theo tài nguyên downstream;
+2. deadline truyền xuyên service, bỏ việc đã hết giá trị;
+3. retry budget + exponential backoff/jitter;
+4. load shedding/admission control, ưu tiên traffic quan trọng;
+5. metric saturation, queue time và shed rate.
+
+> ⚠️ Autoscaling phản ứng chậm hơn spike và không cứu được bottleneck cố định như DB connection/lock. Backpressure phải xuất hiện trước điểm nghẽn, không chỉ thêm instance phía trước nó.
+
+### Hot key/hot partition trong case study
+
+Phân phối trung bình che được “celebrity problem”: một short URL viral hoặc một author có hàng triệu follower có thể dồn tải vào một cache key/partition. Biện pháp gồm request coalescing, local cache nhiều tầng, replicate key nóng, shard counter, và hybrid fan-out cho celebrity (đã dùng ở News Feed).
+
+Trong phỏng vấn, sau sơ đồ happy path hãy chọn một skew scenario và trả lời bốn câu: phát hiện bằng metric nào, boundary nào bão hòa, degrade ra sao, khôi phục thế nào. Đây thường là phần phân biệt thiết kế “chạy được” với thiết kế vận hành được.
+
+### Flowchart: quy trình System Design sáu bước
+
+```mermaid
+flowchart TD
+    R["1. Làm rõ functional và non-functional requirements"] --> E["2. Ước lượng traffic, storage, bandwidth"]
+    E --> A["3. Định nghĩa API và data model"]
+    A --> H["4. Vẽ high-level architecture và critical path"]
+    H --> D["5. Deep dive bottleneck, consistency, failure mode"]
+    D --> O["6. Vận hành: observability, rollout, cost, security"]
+    O --> V{"Trade-off có đáp ứng requirement?"}
+    V -- "Chưa" --> E
+    V -- "Rồi" --> C["Chốt decision và rủi ro còn lại"]
+```
+
+Thứ tự này ngăn “solution-first”: chọn Kafka/sharding trước khi biết tải và invariant. Ước lượng không cần chính xác tuyệt đối; mục tiêu là phát hiện bậc độ lớn và component nào có thể bão hòa.
+
+### Sơ đồ partitioning: average load và hot key là hai lớp khác nhau
+
+```mermaid
+flowchart LR
+    K["Request key"] --> H["Hash / routing function"]
+    H --> P1["Partition A"]
+    H --> P2["Partition B"]
+    H --> P3["Partition C"]
+    HOT["Một key viral"] --> P2
+    P2 --> SAT["CPU/cache/lock của một partition bão hòa"]
+    SAT --> MIT["Replicate, split key, coalesce hoặc special routing"]
+```
+
+Thêm partition cải thiện capacity tổng nhưng không tự chia một key đơn lẻ. Thiết kế phải kiểm tra cả uniform distribution lẫn skew/celebrity workload và xác định degradation khi một shard lỗi.
 
 ## 12. Tổng kết — Bảng ghi nhớ nhanh
 
@@ -1010,14 +1059,14 @@ public class PostService {
 
 **Bước 2 - Ước lượng quy mô:**
 - Giả sử: 1 video hot có thể nhận 10,000 view/giây tại thời điểm cao điểm
-- Nếu MỖI view đều `UPDATE videos SET view_count = view_count + 1` trực tiếp vào DB → 10,000 UPDATE/giây vào CÙNG 1 dòng → **Row-level Lock Contention** cực nghiêm trọng (liên hệ Module 15 - Pessimistic/Optimistic Locking) — DB sẽ nghẽn ngay lập tức
+- Nếu MỖI view đều `UPDATE videos SET view_count = view_count + 1` trực tiếp vào DB → 10,000 UPDATE/giây vào CÙNG 1 dòng → **Row-level Lock Contention** cực nghiêm trọng (liên hệ Module 24 - Pessimistic/Optimistic Locking) — DB sẽ nghẽn ngay lập tức
 
 **Bước 3-4 - Thiết kế:**
 ```
 Client xem video -> gửi event "view" (KHÔNG update DB trực tiếp)
      │
      ▼
-Message Queue (Kafka - liên hệ Module 18, phù hợp vì throughput cực cao)
+Message Queue (Kafka - liên hệ Module 27, phù hợp vì throughput cực cao)
      │
      ▼
 Consumer gộp (aggregate) số lượng view theo BATCH (VD: mỗi 10 giây,
@@ -1034,7 +1083,7 @@ Câu trả lời: **KHÔNG cần Strong Consistency** cho View Count hiển th�
 - User sẽ KHÔNG để ý (và không quan trọng) nếu View Count hiển thị "10,234" thay vì con số chính xác tuyệt đối "10,241" tại đúng khoảnh khắc đó
 - Đổi lại, việc **BATCH/gộp** số lượng view (thay vì update DB theo từng view riêng lẻ) giúp giảm tải DB **hàng nghìn lần**, tránh Lock Contention hoàn toàn
 
-Có thể cache View Count trong Redis (Counter — liên hệ Module 18) để đọc cực nhanh, đồng bộ định kỳ xuống DB làm nguồn "sự thật" lâu dài (persist).
+Có thể cache View Count trong Redis (Counter — liên hệ Module 27) để đọc cực nhanh, đồng bộ định kỳ xuống DB làm nguồn "sự thật" lâu dài (persist).
 
 **Bước 6 - Trade-off:**
 Đánh đổi: chấp nhận View Count hiển thị có độ trễ nhỏ (vài giây tới vài chục giây) để đổi lấy khả năng chịu tải cực cao — đây là lựa chọn ĐÚNG ĐẮN cho bài toán này, vì tính chính xác tuyệt đối theo thời gian thực **không mang lại giá trị nghiệp vụ tương xứng** với chi phí kỹ thuật phải trả (khác hẳn với bài toán như số dư tài khoản ngân hàng — nơi Strong Consistency là BẮT BUỘC).
@@ -1068,8 +1117,8 @@ Dung lượng/năm = 500,000,000 × 2KB × 365
 **(c) Vì sao cần thêm tầng Cache:**
 
 Theo bảng Latency Numbers, đọc từ Redis (in-memory) mất khoảng ~1ms, trong khi query Database (dù có Index) mất khoảng 1-10ms — chênh lệch **10 lần trở lên**. Với Peak QPS ~17,000 request/giây, nếu để MỌI request đọc thẳng từ Database:
-- Database phải xử lý 17,000 query/giây liên tục — dễ gây quá tải Connection Pool (liên hệ Module 15 - HikariCP) và tăng độ trễ response cho user
-- Với Cache-Aside pattern (Module 18), phần lớn request (đặc biệt dữ liệu được đọc lặp lại nhiều - "hot data") được phục vụ từ Redis chỉ trong ~1ms, giảm tải Database xuống chỉ còn các request cache-miss
+- Database phải xử lý 17,000 query/giây liên tục — dễ gây quá tải Connection Pool (liên hệ Module 18) và tăng độ trễ response cho user
+- Với Cache-Aside pattern (Module 27), phần lớn request (đặc biệt dữ liệu được đọc lặp lại nhiều - "hot data") được phục vụ từ Redis chỉ trong ~1ms, giảm tải Database xuống chỉ còn các request cache-miss
 
 Kết luận: Với khối lượng QPS lớn như vậy, thêm tầng Cache không phải "tùy chọn" mà gần như là **yêu cầu bắt buộc** để hệ thống vận hành ổn định trong ngân sách hạ tầng hợp lý.
 
@@ -1077,4 +1126,4 @@ Kết luận: Với khối lượng QPS lớn như vậy, thêm tầng Cache kh�
 
 ---
 
-*File tiếp theo trong lộ trình: **Module 23 — Bảo mật ứng dụng nâng cao (OWASP Top 10)** (SQL Injection, XSS, CSRF nâng cao, Broken Access Control, Security Misconfiguration, Insecure Deserialization, và checklist bảo mật cho Backend Developer).*
+*File tiếp theo trong lộ trình: **Module 32 — Bảo mật ứng dụng nâng cao (OWASP Top 10)** (SQL Injection, XSS, CSRF nâng cao, Broken Access Control, Security Misconfiguration, Insecure Deserialization, và checklist bảo mật cho Backend Developer).*

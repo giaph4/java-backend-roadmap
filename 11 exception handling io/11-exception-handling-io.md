@@ -1,8 +1,8 @@
-# Module 04 — Exception Handling & I/O
+# Module 11 — Exception Handling & I/O
 
-> **Mức độ ưu tiên: Cao** — Backend chuyên nghiệp = xử lý lỗi tử tế: không để một exception không bắt được làm sập service, không "nuốt" lỗi rồi tiếp tục như không có gì, luôn giữ được nguyên nhân gốc trong log. Đây cũng là nền tảng để hiểu `@ControllerAdvice`/`@ExceptionHandler` (Module 13) và connection pool (Module 12).
+> **Mức độ ưu tiên: Cao** — Backend chuyên nghiệp = xử lý lỗi tử tế: không để một exception không bắt được làm sập service, không "nuốt" lỗi rồi tiếp tục như không có gì, luôn giữ được nguyên nhân gốc trong log. Đây cũng là nền tảng để hiểu `@ControllerAdvice`/`@ExceptionHandler` (Module 22) và connection pool (Module 21).
 
-> **Phạm vi bài này:** cơ chế exception của Java (hierarchy, checked/unchecked, `try`/`catch`/`finally`, try-with-resources, custom exception, chaining, best practice), File I/O với `java.nio.file` + `java.io` luồng, và Serialization cơ bản. **Chỉ nhắc tên, không đi sâu:** `@ControllerAdvice`/HTTP error mapping (Module 13), Bean Validation (Module 13), JDBC/connection pool (Module 12), Concurrency (Module 09 — trừ phần `InterruptedException` nêu vừa đủ), logging framework (Module 21). Các chỗ chạm chủ đề khác chỉ nêu đủ để bài trọn vẹn.
+> **Phạm vi bài này:** cơ chế exception của Java (hierarchy, checked/unchecked, `try`/`catch`/`finally`, try-with-resources, custom exception, chaining, best practice), File I/O với `java.nio.file` + `java.io` luồng, và Serialization cơ bản. **Chỉ nhắc tên, không đi sâu:** `@ControllerAdvice`/HTTP error mapping (Module 23), Bean Validation (Module 23), JDBC/connection pool (Module 18), Concurrency (Module 13 — trừ phần `InterruptedException` nêu vừa đủ), logging framework (Module 30). Các chỗ chạm chủ đề khác chỉ nêu đủ để bài trọn vẹn.
 
 ---
 
@@ -19,8 +19,9 @@
 9. [`java.io` — luồng byte vs luồng ký tự](#9-javaio--luồng-byte-vs-luồng-ký-tự)
 10. [Serialization](#10-serialization)
 11. [Java Networking cơ bản — Socket, TCP, UDP](#11-java-networking-cơ-bản--socket-tcp-udp)
-12. [Tổng kết — Bảng ghi nhớ nhanh](#12-tổng-kết--bảng-ghi-nhớ-nhanh)
-13. [Bài tập luyện tập](#13-bài-tập-luyện-tập)
+12. [Minh họa bổ sung: LIFO try-with-resources, TCP handshake & Deserialization filter](#12-minh-họa-bổ-sung-lifo-try-with-resources-tcp-handshake--deserialization-filter)
+13. [Tổng kết — Bảng ghi nhớ nhanh](#13-tổng-kết--bảng-ghi-nhớ-nhanh)
+14. [Bài tập luyện tập](#14-bài-tập-luyện-tập)
 
 ---
 
@@ -64,11 +65,11 @@ catch (Exception e) {
 }
 ```
 
-> `printStackTrace()` chỉ dùng khi thử nhanh. Code production luôn dùng logger (`SLF4J`/`Logback` — Module 21) để log có timestamp, level, và đi đúng đích (file/aggregator).
+> `printStackTrace()` chỉ dùng khi thử nhanh. Code production luôn dùng logger (`SLF4J`/`Logback` — Module 30) để log có timestamp, level, và đi đúng đích (file/aggregator).
 
 ### `Error` đáng biết (đã gặp ở các module trước)
 
-`ExceptionInInitializerError` → khi static initializer ném exception; kéo theo `NoClassDefFoundError` ở lần dùng class sau đó (Module 01.3). `StackOverflowError` → đệ quy không điểm dừng / không có tối ưu đuôi (Module 01.2).
+`ExceptionInInitializerError` → khi static initializer ném exception; kéo theo `NoClassDefFoundError` ở lần dùng class sau đó (Module 03). `StackOverflowError` → đệ quy không điểm dừng / không có tối ưu đuôi (Module 02).
 
 ### Exception ném ra từ constructor, static block, finalizer/cleaner
 
@@ -133,7 +134,7 @@ try {
 }
 ```
 
-> Tranh luận thực tế: nhiều người thấy checked exception gây "mệt mỏi" (`throws Exception` lan truyền, xung đột với lambda/Stream — Module 03.3). Nguyên tắc dung hòa: dùng checked khi caller **thật sự** có phương án xử lý; ngoài ra dùng unchecked và **dịch (translate)** lỗi tầng dưới thành lỗi hợp với tầng của mình (mục 6).
+> Tranh luận thực tế: nhiều người thấy checked exception gây "mệt mỏi" (`throws Exception` lan truyền, xung đột với lambda/Stream — Module 10). Nguyên tắc dung hòa: dùng checked khi caller **thật sự** có phương án xử lý; ngoài ra dùng unchecked và **dịch (translate)** lỗi tầng dưới thành lỗi hợp với tầng của mình (mục 6).
 
 ### Checked exception — đặc sản riêng của Java, và vì sao gây tranh cãi
 
@@ -341,7 +342,7 @@ throw new ResourceNotFoundException("User", 42L);   // message: "User không tì
 
 ### Checked hay unchecked?
 
-- **Unchecked** (kế thừa `RuntimeException`) — mặc định cho code backend hiện đại: lỗi validate, "không tìm thấy", vi phạm quy tắc nghiệp vụ. Xử lý tập trung bằng `@ControllerAdvice` (Module 13).
+- **Unchecked** (kế thừa `RuntimeException`) — mặc định cho code backend hiện đại: lỗi validate, "không tìm thấy", vi phạm quy tắc nghiệp vụ. Xử lý tập trung bằng `@ControllerAdvice` (Module 22).
 - **Checked** (kế thừa `Exception`) — chỉ khi caller **thật sự** phải có phương án xử lý ngay tại chỗ và bạn muốn compiler ép điều đó.
 
 ### Exception "tín hiệu" tần suất cao — tắt stack trace (nâng cao, hiếm)
@@ -633,7 +634,7 @@ private void readObject(ObjectInputStream in) throws IOException, ClassNotFoundE
 
 `record` được serialize **an toàn hơn**: qua canonical constructor → chạy validation, không bị bypass.
 
-> **Thực tế backend:** Java Serialization hầu như **không dùng để trao đổi dữ liệu** nữa — REST API dùng **JSON** (Jackson — Module 16). `Serializable`/`transient`/`serialVersionUID` vẫn gặp ở session của Spring Security, cache phân tán (Hazelcast/Redis với Java serializer), và RMI cũ.
+> **Thực tế backend:** Java Serialization hầu như **không dùng để trao đổi dữ liệu** nữa — REST API dùng **JSON** (Jackson — Module 25). `Serializable`/`transient`/`serialVersionUID` vẫn gặp ở session của Spring Security, cache phân tán (Hazelcast/Redis với Java serializer), và RMI cũ.
 
 ---
 
@@ -816,7 +817,52 @@ while (true) {
 
 ---
 
-## 12. Tổng kết — Bảng ghi nhớ nhanh
+## 12. Minh họa bổ sung: LIFO try-with-resources, TCP handshake & Deserialization filter
+
+### Deserialization filter — hàng rào cho Java Serialization
+
+Không deserialize byte không tin cậy. Khi buộc phải tương thích hệ cũ, dùng JEP 290 `ObjectInputFilter` để allowlist class, giới hạn depth, reference count và kích thước mảng; tốt hơn nữa là chuyển boundary sang JSON/Protobuf với schema và validation rõ ràng.
+
+> ⚠️ `serialVersionUID` chỉ hỗ trợ kiểm tra version, không biến Java Serialization thành định dạng an toàn.
+
+### Flowchart: try-with-resources đóng theo LIFO
+
+```mermaid
+flowchart TD
+    O1["Mở resource A"] --> O2["Mở resource B"]
+    O2 --> T["Chạy thân try"]
+    T --> C2["Đóng B trước"]
+    C2 --> C1["Đóng A sau"]
+    C1 --> P{"Có exception chính?"}
+    P -- "Có" --> S["Lỗi lúc close trở thành suppressed"]
+    P -- "Không" --> R["Nếu close lỗi, propagate lỗi close"]
+```
+
+Thứ tự ngược bảo toàn dependency: resource mở sau thường bọc/phụ thuộc resource mở trước (`BufferedReader` bọc `Reader`). Exception từ thân `try` giữ vai trò chính để không mất root cause; lỗi đóng resource xem qua `getSuppressed()`.
+
+### Sequence diagram: TCP client–server từ handshake tới đóng kết nối
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant S as Server
+    C->>S: SYN
+    S-->>C: SYN-ACK
+    C->>S: ACK
+    Note over C,S: Kết nối established
+    C->>S: byte stream request
+    S-->>C: byte stream response
+    C->>S: FIN
+    S-->>C: ACK
+    S-->>C: FIN
+    C->>S: ACK
+```
+
+TCP bảo đảm thứ tự byte chứ không bảo đảm ranh giới message; application protocol vẫn cần framing (đã bàn kỹ ở §11.8 phía trên) — sơ đồ trên minh họa lại đúng luồng 3-way handshake bằng hình ảnh thay vì chỉ mô tả bằng lời. Timeout, half-close và lỗi giữa chừng phải là một phần thiết kế, không chỉ là nhánh exception "hiếm".
+
+---
+
+## 13. Tổng kết — Bảng ghi nhớ nhanh
 
 | Khái niệm | Điểm mấu chốt |
 |---|---|
@@ -844,7 +890,7 @@ while (true) {
 
 ---
 
-## 13. Bài tập luyện tập
+## 14. Bài tập luyện tập
 
 ### Phần A — Trắc nghiệm nhận định (giải thích lý do)
 
@@ -911,7 +957,7 @@ catch (InterruptedException e) { log.warn("bị gián đoạn", e); }
 `DatabaseConnection` và `FileLock` cùng implement `AutoCloseable` (constructor + `close()` in log; `close()` của `FileLock` **cố tình ném** exception). Dùng cả hai trong một khối try-with-resources, body ném `RuntimeException`. In ra: thứ tự đóng (ngược khai báo), exception nào ra caller, `e.getSuppressed()` chứa gì.
 
 **Bài 4 — Xử lý file log lớn bằng `Files.lines()`.**
-Tạo `app.log` ≥ 1000 dòng (bằng code, `Random` trộn `INFO`/`WARN`/`ERROR`). Dùng `Files.lines()` (không `readAllLines`) + try-with-resources để: đếm số dòng mỗi level (`Collectors.groupingBy` + `counting` — Module 03.3); in 5 dòng `ERROR` đầu tiên; tìm dòng `ERROR` **cuối cùng**. Truyền `StandardCharsets.UTF_8` tường minh.
+Tạo `app.log` ≥ 1000 dòng (bằng code, `Random` trộn `INFO`/`WARN`/`ERROR`). Dùng `Files.lines()` (không `readAllLines`) + try-with-resources để: đếm số dòng mỗi level (`Collectors.groupingBy` + `counting` — Module 10); in 5 dòng `ERROR` đầu tiên; tìm dòng `ERROR` **cuối cùng**. Truyền `StandardCharsets.UTF_8` tường minh.
 
 **Bài 5 — Duyệt cây thư mục bằng `Files.walk()`.**
 Viết `Map<String, Long> countBytesByExtension(Path root)` — duyệt toàn bộ cây thư mục, với mỗi file thường lấy phần mở rộng (`.java`, `.md`, `.txt`...) và cộng dồn `Files.size()`. Trả `Map` sắp giảm dần theo tổng byte. Dùng try-with-resources cho `Stream<Path>`, bắt `IOException` của `Files.size` từng file (file có thể bị xóa giữa chừng) và bỏ qua file đó thay vì làm hỏng cả pipeline.
@@ -969,7 +1015,7 @@ Cả ba unchecked, kế thừa một lớp cha chung `RegistrationException`. `m
 - **Bài 2:** `try (var in = Files.newInputStream(Path.of(path))) { var p = new Properties(); p.load(in); return p; } catch (IOException e) { throw new ConfigLoadException("Không đọc được config: " + path, e); }`. `main`: bắt `ConfigLoadException`, `while (root.getCause() != null) root = root.getCause();` → root là `NoSuchFileException`.
 - **Bài 3:** Đóng theo thứ tự ngược: `FileLock.close()` trước → ném → `DatabaseConnection.close()` vẫn chạy. Ra caller: `RuntimeException` của body. `e.getSuppressed()[0]` = exception của `FileLock.close()`.
 - **Bài 4:** `try (Stream<String> lines = Files.lines(path, StandardCharsets.UTF_8)) { Map<String,Long> byLevel = lines.map(Bai4::level).collect(groupingBy(x -> x, counting())); }`. Dòng ERROR cuối: `Files.lines(...).filter(l -> l.contains("ERROR")).reduce((a,b) -> b)` → `Optional`.
-- **Bài 5:** `try (Stream<Path> s = Files.walk(root)) { return s.filter(Files::isRegularFile).collect(groupingBy(Bai5::ext, summingLong(Bai5::sizeQuiet))); }` với `sizeQuiet` bọc `Files.size` trong try/catch trả `0L` khi lỗi. Sắp giảm dần → đổ vào `LinkedHashMap` (Module 03.3).
+- **Bài 5:** `try (Stream<Path> s = Files.walk(root)) { return s.filter(Files::isRegularFile).collect(groupingBy(Bai5::ext, summingLong(Bai5::sizeQuiet))); }` với `sizeQuiet` bọc `Files.size` trong try/catch trả `0L` khi lỗi. Sắp giảm dần → đổ vào `LinkedHashMap` (Module 10).
 - **Bài 6:** `sealed class RegistrationException permits ...` hoặc lớp cha thường; mỗi lớp con 1 message mặc định. `register` kiểm tra tuần tự, `throw` ngay khi sai. `main`: `catch (RegistrationException e) { System.out.println(e.getClass().getSimpleName() + ": " + e.getMessage()); }`.
 - **Bài 7:** (a) Thêm component → `serialVersionUID` khai báo vẫn `= 1L` nhưng cấu trúc lệch → khi đọc: nếu giữ nguyên UID thì `record` deserialize gọi canonical constructor với field thiếu → tùy JDK có thể `InvalidClassException` hoặc gán mặc định; nếu bỏ UID thì UID tự sinh đổi → chắc chắn `InvalidClassException`. (b) `ObjectInputFilter.Config.createFilter("java.base/*;com.myapp.**;!*")` — chặn mọi class ngoài allowlist trước khi nó được khởi tạo → vô hiệu hóa gadget chain.
 
@@ -990,4 +1036,4 @@ Cả ba unchecked, kế thừa một lớp cha chung `RegistrationException`. `m
 
 ---
 
-*File tiếp theo trong lộ trình: **Module 05.1 — Thread cơ bản** (Thread vs Runnable, thread lifecycle, synchronized, volatile, race condition, deadlock).*
+*File tiếp theo trong lộ trình: **Module 12 — Thread cơ bản** (Thread vs Runnable, thread lifecycle, synchronized, volatile, race condition, deadlock).*

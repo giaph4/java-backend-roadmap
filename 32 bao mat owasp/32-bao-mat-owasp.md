@@ -1,9 +1,9 @@
-# Module 23 — Bảo mật ứng dụng nâng cao (OWASP Top 10)
+# Module 32 — Bảo mật ứng dụng nâng cao (OWASP Top 10)
 
 > **Mức ưu tiên: 🔴 Cao**
-> **Vì sao quan trọng:** Module 16 (Spring Security) đã cho bạn nền tảng Authentication/Authorization/JWT — module này mở rộng sang **toàn bộ các lớp lỗ hổng phổ biến nhất** mà OWASP (Open Web Application Security Project) tổng hợp từ hàng nghìn vụ tấn công thực tế trên toàn thế giới. Đây không phải kiến thức "để biết cho vui" — 1 lỗ hổng SQL Injection hay Broken Access Control có thể khiến toàn bộ dữ liệu người dùng bị đánh cắp, và là chủ đề bị soi kỹ trong mọi cuộc security audit/code review nghiêm túc.
+> **Vì sao quan trọng:** Module 25 (Spring Security) đã cho bạn nền tảng Authentication/Authorization/JWT — module này mở rộng sang **toàn bộ các lớp lỗ hổng phổ biến nhất** mà OWASP (Open Web Application Security Project) tổng hợp từ hàng nghìn vụ tấn công thực tế trên toàn thế giới. Đây không phải kiến thức "để biết cho vui" — 1 lỗ hổng SQL Injection hay Broken Access Control có thể khiến toàn bộ dữ liệu người dùng bị đánh cắp, và là chủ đề bị soi kỹ trong mọi cuộc security audit/code review nghiêm túc.
 
-> **Phạm vi bài này:** Bao quát các lớp lỗ hổng OWASP Top 10 liên quan trực tiếp tới code Backend Spring Boot. A04 (Insecure Design) và A07 (Identification & Authentication Failures) không có mục riêng — A07 đã học kỹ ở Module 16, còn A04 là nguyên tắc thiết kế tổng quát thấm xuyên suốt mọi mục dưới đây hơn là 1 lỗ hổng kỹ thuật cụ thể có thể demo bằng code.
+> **Phạm vi bài này:** Bao quát các lớp lỗ hổng OWASP Top 10 liên quan trực tiếp tới code Backend Spring Boot. A04 (Insecure Design) và A07 (Identification & Authentication Failures) không có mục riêng — A07 đã học kỹ ở Module 25, còn A04 là nguyên tắc thiết kế tổng quát thấm xuyên suốt mọi mục dưới đây hơn là 1 lỗ hổng kỹ thuật cụ thể có thể demo bằng code.
 
 ---
 
@@ -12,7 +12,7 @@
 1. [OWASP Top 10 là gì?](#1-owasp-top-10-là-gì)
 2. [A03: Injection (SQL Injection & các biến thể)](#2-a03-injection)
 3. [A03: XSS (Cross-Site Scripting)](#3-a03-xss)
-4. [CSRF nâng cao (bổ sung Module 16)](#4-csrf-nâng-cao)
+4. [CSRF nâng cao (bổ sung Module 25)](#4-csrf-nâng-cao)
 5. [A01: Broken Access Control](#5-a01-broken-access-control)
 6. [A05: Security Misconfiguration](#6-a05-security-misconfiguration)
 7. [A08: Insecure Deserialization](#7-a08-insecure-deserialization)
@@ -23,8 +23,9 @@
 12. [A04: Insecure Design & Nguyên tắc "Security by Design"](#12-a04-insecure-design--nguyên-tắc-security-by-design)
 13. [Checklist bảo mật cho Backend Developer](#13-checklist-bảo-mật-cho-backend-developer)
 14. [⚠️ Các bẫy hay gặp](#14-các-bẫy-hay-gặp)
-15. [Tổng kết — Bảng ghi nhớ nhanh](#15-tổng-kết--bảng-ghi-nhớ-nhanh)
-16. [Bài tập luyện tập](#16-bài-tập-luyện-tập)
+15. [Threat Modeling & Data-Flow nâng cao](#15-threat-modeling--data-flow-nâng-cao)
+16. [Tổng kết — Bảng ghi nhớ nhanh](#16-tổng-kết--bảng-ghi-nhớ-nhanh)
+17. [Bài tập luyện tập](#17-bài-tập-luyện-tập)
 
 ---
 
@@ -39,7 +40,7 @@ A03: Injection                      <- SQL Injection, XSS (mục 2, 3)
 A04: Insecure Design
 A05: Security Misconfiguration      (mục 6)
 A06: Vulnerable and Outdated Components (mục 9)
-A07: Identification & Authentication Failures  <- Đã học ở Module 16
+A07: Identification & Authentication Failures  <- Đã học ở Module 25
 A08: Software and Data Integrity Failures (Insecure Deserialization - mục 7)
 A09: Security Logging & Monitoring Failures (mục 10)
 A10: Server-Side Request Forgery (SSRF)  (mục 11)
@@ -93,7 +94,7 @@ stmt.setString(2, password);
 ResultSet rs = stmt.executeQuery();
 ```
 
-⚠️ **Tin tốt cực kỳ quan trọng cho Backend Developer dùng Spring:** **JPA/Hibernate với JPQL và Derived Query Method** (đã học Module 11, 15) **TỰ ĐỘNG dùng Parameterized Query bên dưới** — đây là lý do dùng Spring Data JPA đúng cách gần như **miễn nhiễm** với SQL Injection **THÔNG THƯỜNG**:
+⚠️ **Tin tốt cực kỳ quan trọng cho Backend Developer dùng Spring:** **JPA/Hibernate với JPQL và Derived Query Method** (đã học Module 20 và 24) **TỰ ĐỘNG dùng Parameterized Query bên dưới** — đây là lý do dùng Spring Data JPA đúng cách gần như **miễn nhiễm** với SQL Injection **THÔNG THƯỜNG**:
 
 ```java
 // ✅ AN TOÀN - JPQL với @Param, Hibernate tự parameterize
@@ -120,7 +121,7 @@ Optional<User> findByUsernameNative(@Param("username") String username);
 jdbcTemplate.queryForObject("SELECT * FROM users WHERE username = ?", new Object[]{username}, User.class);
 ```
 
-> **Liên hệ Module 15 (Specification/Querydsl):** Cả 2 công cụ này khi dùng đúng cách (không tự String-concat giá trị vào) đều **tự động parameterize**, an toàn với SQL Injection.
+> **Liên hệ Module 24 (Specification/Querydsl):** Cả 2 công cụ này khi dùng đúng cách (không tự String-concat giá trị vào) đều **tự động parameterize**, an toàn với SQL Injection.
 
 ### Command Injection & LDAP Injection — cùng nguyên lý, khác ngữ cảnh
 
@@ -224,13 +225,13 @@ public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
 }
 ```
 
-⚠️ **Bẫy quan trọng:** Việc validate input (VD: `@Pattern`, `@Size` ở Module 14) giúp giảm bề mặt tấn công nhưng **KHÔNG THAY THẾ** được việc escape output. Dữ liệu hợp lệ (VD: tên "O'Brien <script>") vẫn cần được escape đúng cách khi hiển thị.
+⚠️ **Bẫy quan trọng:** Việc validate input (VD: `@Pattern`, `@Size` ở Module 23) giúp giảm bề mặt tấn công nhưng **KHÔNG THAY THẾ** được việc escape output. Dữ liệu hợp lệ (VD: tên "O'Brien <script>") vẫn cần được escape đúng cách khi hiển thị.
 
 ---
 
 ## 4. CSRF nâng cao
 
-Module 16 đã giải thích CSRF là gì và vì sao JWT (Header) miễn nhiễm với nó. Ở đây bổ sung thêm các tình huống **KHÔNG THỂ tránh dùng Cookie** (VD: cần `httpOnly` Cookie để chống XSS đánh cắp token — 1 đánh đổi bảo mật thực tế).
+Module 25 đã giải thích CSRF là gì và vì sao JWT (Header) miễn nhiễm với nó. Ở đây bổ sung thêm các tình huống **KHÔNG THỂ tránh dùng Cookie** (VD: cần `httpOnly` Cookie để chống XSS đánh cắp token — 1 đánh đổi bảo mật thực tế).
 
 ### Khi VẪN PHẢI dùng Cookie (không dùng JWT trong Header) — vì sao?
 
@@ -248,7 +249,7 @@ ResponseCookie cookie = ResponseCookie.from("jwt", token)
 response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
 ```
 
-### SameSite Cookie Attribute — giải pháp CSRF hiện đại (bổ sung quan trọng cho Module 16)
+### SameSite Cookie Attribute — giải pháp CSRF hiện đại (bổ sung quan trọng cho Module 25)
 
 | Giá trị `SameSite` | Cơ chế | Chống CSRF? |
 |---|---|---|
@@ -288,13 +289,13 @@ public OrderResponse getOrder(@PathVariable Long orderId, Authentication authent
 
     String currentUsername = authentication.getName();
     if (!order.getUser().getUsername().equals(currentUsername)) {
-        throw new AccessDeniedException("Bạn không có quyền xem đơn hàng này"); // -> 403 (Module 14)
+        throw new AccessDeniedException("Bạn không có quyền xem đơn hàng này"); // -> 403 (Module 23)
     }
 
     return OrderResponse.from(order);
 }
 
-// Hoặc dùng @PostAuthorize (đã học Module 16) - cách khai báo (declarative) rõ ràng hơn
+// Hoặc dùng @PostAuthorize (đã học Module 25) - cách khai báo (declarative) rõ ràng hơn
 @PostAuthorize("returnObject.user.username == authentication.name")
 public OrderResponse getOrder(@PathVariable Long orderId) {
     Order order = orderRepository.findById(orderId).orElseThrow();
@@ -325,7 +326,7 @@ public UserResponse updateProfile(@PathVariable Long id, @RequestBody UserUpdate
 }
 ```
 
-> **Liên hệ trực tiếp Module 14 (DTO Design):** Đây chính là 1 trong những lý do **quan trọng nhất** vì sao luôn dùng DTO riêng cho Request thay vì bind trực tiếp vào Entity — không chỉ vì "gọn gàng", mà vì **lý do bảo mật cốt lõi**: DTO đóng vai trò như 1 "whitelist" — chỉ những field được khai báo tường minh mới có thể bị thay đổi.
+> **Liên hệ trực tiếp Module 23 (DTO Design):** Đây chính là 1 trong những lý do **quan trọng nhất** vì sao luôn dùng DTO riêng cho Request thay vì bind trực tiếp vào Entity — không chỉ vì "gọn gàng", mà vì **lý do bảo mật cốt lõi**: DTO đóng vai trò như 1 "whitelist" — chỉ những field được khai báo tường minh mới có thể bị thay đổi.
 
 ---
 
@@ -336,7 +337,7 @@ Lỗ hổng đến từ việc **cấu hình sai/thiếu cấu hình bảo mật
 ### Các ví dụ Misconfiguration phổ biến
 
 ```yaml
-# ❌ NGUY HIỂM - Expose toàn bộ Actuator endpoint (đã cảnh báo ở Module 13)
+# ❌ NGUY HIỂM - Expose toàn bộ Actuator endpoint (đã cảnh báo ở Module 22)
 management:
   endpoints:
     web:
@@ -352,7 +353,7 @@ management:
 ```
 
 ```java
-// ❌ NGUY HIỂM - Bật debug/stacktrace chi tiết ở production (liên hệ Module 14)
+// ❌ NGUY HIỂM - Bật debug/stacktrace chi tiết ở production (liên hệ Module 23)
 server:
   error:
     include-stacktrace: always  // Lộ cấu trúc code, đường dẫn file, thư viện đang dùng cho MỌI người dùng
@@ -364,7 +365,7 @@ server:
 ```
 
 ```java
-// ❌ NGUY HIỂM - CORS cho phép MỌI origin (đã cảnh báo ở Module 16)
+// ❌ NGUY HIỂM - CORS cho phép MỌI origin (đã cảnh báo ở Module 25)
 configuration.setAllowedOrigins(List.of("*"));
 
 // ❌ NGUY HIỂM - Tài khoản/mật khẩu mặc định KHÔNG ĐỔI (VD: database admin/admin)
@@ -422,7 +423,7 @@ public interface PaymentMethod { }
 
 ## 8. A02: Cryptographic Failures
 
-Đây là phần **mở rộng trực tiếp** kiến thức BCrypt đã học ở Module 16 — bao quát rộng hơn về mã hóa dữ liệu nói chung.
+Đây là phần **mở rộng trực tiếp** kiến thức BCrypt đã học ở Module 25 — bao quát rộng hơn về mã hóa dữ liệu nói chung.
 
 ### Phân biệt Hashing vs Encryption — nhầm lẫn phổ biến
 
@@ -493,8 +494,8 @@ mvn dependency-check:check
 ```
 
 **Thực hành tốt:**
-- Tích hợp quét dependency vào CI Pipeline (liên hệ Module 20) — tự động cảnh báo khi có CVE mới phát hiện
-- **Cập nhật thường xuyên** (không đợi tới khi bị tấn công mới update) — nhưng cũng cần kiểm tra kỹ (test đầy đủ — Module 17) trước khi update version lớn (tránh breaking change)
+- Tích hợp quét dependency vào CI Pipeline (liên hệ Module 29) — tự động cảnh báo khi có CVE mới phát hiện
+- **Cập nhật thường xuyên** (không đợi tới khi bị tấn công mới update) — nhưng cũng cần kiểm tra kỹ (test đầy đủ — Module 26) trước khi update version lớn (tránh breaking change)
 - Dùng **Dependabot** (GitHub) hoặc **Renovate Bot** — tự động tạo Pull Request khi có dependency mới có bản vá bảo mật
 
 > **Ví dụ thực tế nổi tiếng:** Lỗ hổng **Log4Shell (CVE-2021-44228)** trong thư viện Log4j — 1 lỗ hổng Insecure Deserialization/RCE (Remote Code Execution) trong thư viện logging cực kỳ phổ biến, ảnh hưởng **hàng triệu ứng dụng Java trên toàn thế giới**, gây chấn động ngành bảo mật năm 2021 — minh chứng rõ ràng nhất cho tầm quan trọng của việc theo dõi lỗ hổng ở TẦNG DEPENDENCY, không chỉ ở code của riêng mình.
@@ -503,7 +504,7 @@ mvn dependency-check:check
 
 ## 10. A09: Security Logging & Monitoring Failures
 
-Liên hệ trực tiếp Module 21 (Observability) — nhưng dưới góc độ **bảo mật cụ thể**: nếu không ghi log đầy đủ các **sự kiện liên quan bảo mật**, không thể phát hiện/điều tra khi có tấn công xảy ra.
+Liên hệ trực tiếp Module 30 (Observability) — nhưng dưới góc độ **bảo mật cụ thể**: nếu không ghi log đầy đủ các **sự kiện liên quan bảo mật**, không thể phát hiện/điều tra khi có tấn công xảy ra.
 
 ### Các sự kiện BẮT BUỘC phải log (Security Audit Log)
 
@@ -535,7 +536,7 @@ public class SecurityAuditLogger {
 - Thay đổi quyền/role của user
 - Truy cập vào dữ liệu nhạy cảm (VD: admin xem thông tin tài chính của user khác)
 
-### Kết hợp với Alerting (đã học Module 21)
+### Kết hợp với Alerting (đã học Module 30)
 
 ```yaml
 # Alert rule ví dụ - phát hiện Brute-force
@@ -547,7 +548,7 @@ public class SecurityAuditLogger {
     summary: "Phát hiện > 10 lần đăng nhập thất bại/5 phút cho user {{ $labels.username }}"
 ```
 
-> **Nguyên tắc quan trọng:** Log bảo mật KHÔNG chỉ để "xem lại khi có sự cố" — nên kết hợp với **Alerting chủ động** (Module 21) để phát hiện tấn công **ĐANG DIỄN RA**, không phải chỉ điều tra SAU KHI đã xảy ra thiệt hại.
+> **Nguyên tắc quan trọng:** Log bảo mật KHÔNG chỉ để "xem lại khi có sự cố" — nên kết hợp với **Alerting chủ động** (Module 30) để phát hiện tấn công **ĐANG DIỄN RA**, không phải chỉ điều tra SAU KHI đã xảy ra thiệt hại.
 
 ---
 
@@ -776,7 +777,61 @@ Danh sách kiểm tra thực chiến trước khi đưa API/tính năng mới l�
 
 ---
 
-## 15. Tổng kết — Bảng ghi nhớ nhanh
+## 15. Threat Modeling & Data-Flow nâng cao
+
+### Threat modeling nhẹ với trust boundary
+
+Không đợi pentest mới nghĩ về attacker. Với mỗi data flow, vẽ actor → entry point → service → datastore/third party, đánh dấu nơi đổi mức tin cậy, rồi dùng STRIDE để hỏi có spoofing, tampering, repudiation, information disclosure, denial of service hay elevation of privilege không.
+
+Mỗi threat cần asset, precondition, impact, control phòng ngừa/phát hiện và owner. Ưu tiên theo likelihood × impact; model phải cập nhật khi thêm upload, webhook, admin endpoint hoặc tích hợp ngoài.
+
+### Checklist bảo mật theo tầng
+
+| Tầng | Control tối thiểu |
+|---|---|
+| Edge/API | TLS, size/rate limit, schema validation, timeout |
+| Identity | MFA/admin, token lifetime, rotation/revocation |
+| Authorization | deny-by-default, object/tenant scope (BOLA/IDOR) |
+| Application | output encoding, parameterized query, safe file handling |
+| Data | least privilege, encryption, backup/restore test, audit |
+| Runtime/supply chain | patched image, non-root, SBOM/signature, secret manager |
+| Detection | security event chuẩn hóa, alert có runbook, time sync |
+
+> ⚠️ “Đã login” không chứng minh user được phép đọc `{id}` bất kỳ. Authorization phải kiểm tra object-level ở mọi entry point, kể cả batch/export và message consumer; liên hệ Module 25.
+
+Defense in depth nghĩa là một control bị bypass vẫn còn lớp khác giảm impact, không phải sao chép cùng một check ở nhiều nơi thiếu nhất quán.
+
+### Data-flow diagram: trust boundary của một backend điển hình
+
+```mermaid
+flowchart LR
+    U["Untrusted client"] -->|"TLS + input"| WAF["Edge / WAF / rate limit"]
+    WAF -->|"Authenticated request"| API["Backend API"]
+    API -->|"Parameterized query + least privilege"| DB[("Database")]
+    API -->|"Allowlist + timeout"| EXT["Third-party service"]
+    API -->|"Validated event"| MQ["Message broker"]
+    ADM["Admin / operator"] -->|"MFA + audited privileged path"| API
+    SEC["Secret manager"] -->|"Short-lived credential"| API
+```
+
+Mỗi mũi tên qua trust boundary phải trả lời: ai xác thực ai, dữ liệu được validate ở đâu, quyền tối thiểu là gì, timeout/size limit ra sao, log nào đủ điều tra nhưng không lộ secret. Security control gắn vào data flow cụ thể dễ review hơn checklist rời rạc.
+
+### Flow xử lý một threat
+
+```mermaid
+flowchart TD
+    A["Asset và entry point"] --> T["Threat theo STRIDE / abuse case"]
+    T --> R["Đánh giá likelihood và impact"]
+    R --> P["Preventive control"]
+    R --> D["Detective control và telemetry"]
+    P --> V["Verify bằng test / review / scan"]
+    D --> V
+    V --> O["Owner, residual risk và ngày review lại"]
+```
+
+Control không được verify chỉ là giả định. Threat model phải sống cùng kiến trúc: thêm webhook/upload/admin flow nghĩa là thêm trust boundary và abuse case mới.
+
+## 16. Tổng kết — Bảng ghi nhớ nhanh
 
 | Khái niệm | Ghi nhớ nhanh |
 |---|---|
@@ -798,7 +853,7 @@ Danh sách kiểm tra thực chiến trước khi đưa API/tính năng mới l�
 
 ---
 
-## 16. Bài tập luyện tập
+## 17. Bài tập luyện tập
 
 ### Phần A — Trắc nghiệm nhận định (Đúng/Sai + giải thích)
 
@@ -956,7 +1011,7 @@ public class AuthCookieService {
                 .secure(true)         // CHỈ gửi qua kết nối HTTPS -> chống nghe lén
                 .sameSite("Strict")   // KHÔNG gửi kèm khi request xuất phát từ site KHÁC -> chống CSRF
                 .path("/")
-                .maxAge(Duration.ofMinutes(15)) // Thời gian sống ngắn, tương ứng Access Token (Module 16)
+                .maxAge(Duration.ofMinutes(15)) // Thời gian sống ngắn, tương ứng Access Token (Module 25)
                 .build();
 
         response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
@@ -1072,4 +1127,4 @@ Kỹ thuật **DNS Rebinding** khai thác khoảng thời gian giữa lúc **val
 
 ---
 
-*File tiếp theo trong lộ trình: **Module 24 — Soft Skills & Career cho Backend Developer** (Đọc hiểu & viết Technical Documentation, Code Review hiệu quả, Git workflow nâng cao, chuẩn bị phỏng vấn Backend, lộ trình phát triển Junior → Senior).*
+*File tiếp theo trong lộ trình: **Module 33 — Soft Skills & Career cho Backend Developer** (Đọc hiểu & viết Technical Documentation, Code Review hiệu quả, Git workflow nâng cao, chuẩn bị phỏng vấn Backend, lộ trình phát triển Junior → Senior).*

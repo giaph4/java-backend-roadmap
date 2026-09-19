@@ -1,8 +1,8 @@
-# Module 03.2 — Generics
+# Module 09 — Generics
 
 > **Mức độ ưu tiên: Cao** — Generics là kiến thức **bắt buộc** để đọc hiểu source Spring/Hibernate (`JpaRepository<T, ID>`, `ResponseEntity<T>`, `Comparator<? super T>`...). Không nắm wildcard (`? extends`/`? super`) thì signature của method thư viện trở nên khó hiểu, và rất dễ viết code generic sai theo cách compiler cảnh báo mờ nhạt (`unchecked warning`) rồi nổ `ClassCastException` ở chỗ khác.
 
-> **Phạm vi bài này:** cơ chế generic của Java — generic class/method, bounded type, tính bất biến (invariance), wildcard, quy tắc PECS, type erasure và các hệ quả của nó. **Chỉ nhắc tên, không đi sâu:** Stream/lambda/functional interface (Module 03.3), Spring Data JPA (Module 14), annotation processing. Các ví dụ Spring/JDK ở mục 10 chỉ để *đọc hiểu signature*, không phải để học framework.
+> **Phạm vi bài này:** cơ chế generic của Java — generic class/method, bounded type, tính bất biến (invariance), wildcard, quy tắc PECS, type erasure và các hệ quả của nó. **Chỉ nhắc tên, không đi sâu:** Stream/lambda/functional interface (Module 10), Spring Data JPA (Module 24), annotation processing. Các ví dụ Spring/JDK ở mục 10 chỉ để *đọc hiểu signature*, không phải để học framework.
 
 ---
 
@@ -272,7 +272,7 @@ List<Integer> ints = new ArrayList<>();
 
 > **Generic là *bất biến* (invariant):** `List<Integer>` **không phải** là con của `List<Number>`, dù `Integer` là con của `Number`. `List<A>` và `List<B>` không có quan hệ cha–con nào trừ khi `A` và `B` giống hệt nhau.
 
-### Vì sao phải bất biến? Đối chiếu với mảng (Module 01.1)
+### Vì sao phải bất biến? Đối chiếu với mảng (Module 01)
 
 Mảng thì **hiệp biến (covariant)** — và đó chính là *lỗ hổng*:
 
@@ -524,18 +524,18 @@ Chỉ đặt `@SafeVarargs` khi method **chỉ đọc** mảng varargs, **không
 ## 10. Generics trong Spring/JDK thực tế
 
 ```java
-// Spring Data JPA (Module 14) — T = Entity, ID = kiểu khóa chính
+// Spring Data JPA (Module 24) — T = Entity, ID = kiểu khóa chính
 public interface JpaRepository<T, ID> extends PagingAndSortingRepository<T, ID> { }
 public interface UserRepository extends JpaRepository<User, Long> { }   // T=User, ID=Long
 
-// Spring Web (Module 16)
+// Spring Web (Module 25)
 ResponseEntity<UserDTO> res = ResponseEntity.ok(dto);
 
 // java.util
 Optional<User> u = repo.findById(1L);
 Comparator<Employee> byName = Comparator.comparing(Employee::name);   // sort nhận Comparator<? super E>
 
-// java.util.function (Module 03.3)
+// java.util.function (Module 10)
 Function<String, Integer> len = String::length;      // Function<T, R>
 
 // Super type token — lấy về List<User> qua REST, giữ được kiểu tham số hóa
@@ -573,6 +573,54 @@ Không — invariance (mục 5). Tham số "list đọc bất kỳ" phải là `
 Đôi khi suy luận ra `List<Object>`. Dùng type witness `Collections.<String>emptyList()` hoặc gán vào biến có kiểu rõ.
 
 ---
+
+### F-bounded type — ràng buộc “kiểu con trả về chính nó”
+
+Mẫu `T extends Comparable<T>` là một dạng self-referential bound. Nó diễn đạt rằng `T` so sánh được với chính `T`, giúp compiler loại các kết hợp vô nghĩa. Với API thư viện, dạng linh hoạt hơn thường là `T extends Comparable<? super T>` để chấp nhận `T` kế thừa khả năng so sánh từ lớp cha.
+
+```java
+static <T extends Comparable<? super T>> T max(List<? extends T> values) {
+    return values.stream().max(Comparator.naturalOrder()).orElseThrow();
+}
+```
+
+### Wildcard capture — vì sao helper method sửa được lỗi compile
+
+`List<?>` nghĩa là “list của một kiểu cụ thể nhưng chưa biết”, không phải list có thể chứa mọi kiểu. Compiler có thể đặt tên tạm cho kiểu ẩn đó (capture). Helper generic cho phép giữ cùng một capture xuyên suốt thao tác:
+
+```java
+static void reverse(List<?> list) { reverseCaptured(list); }
+private static <T> void reverseCaptured(List<T> list) {
+    for (int i = 0, j = list.size() - 1; i < j; i++, j--)
+        list.set(i, list.set(j, list.get(i)));
+}
+```
+
+Đây là kỹ thuật implementation; public API vẫn nên ưu tiên chữ ký dễ đọc và PECS.
+
+### Sơ đồ PECS theo hướng dòng dữ liệu
+
+```mermaid
+flowchart LR
+    SRC["List<? extends T><br/>Producer"] -- "đọc ra T" --> ALG["Generic algorithm"]
+    ALG -- "ghi T vào" --> DST["List<? super T><br/>Consumer"]
+    SRC -. "không add T vì subtype thật chưa biết" .-> X["Compile-time safety"]
+    DST -. "đọc ra chỉ chắc chắn là Object" .-> X
+```
+
+`extends` và `super` không mô tả class hierarchy mới; chúng đặt **biên quyền thao tác** cho caller. Producer được đọc an toàn vì mọi phần tử là ít nhất `T`; consumer được ghi an toàn vì kiểu thật là `T` hoặc cha của `T`.
+
+### Sơ đồ type erasure: generic ở compile-time, raw representation ở runtime
+
+```mermaid
+flowchart LR
+    S["Source: Box<String>"] --> C["Compiler type-check và chèn cast cần thiết"]
+    C --> E["Bytecode: Box với Object/bound"]
+    E --> R["Runtime không tạo class riêng cho String"]
+    R --> B["Bridge method giữ polymorphism khi cần"]
+```
+
+Erasure giữ binary compatibility với Java trước generics và tránh nhân bản code cho mỗi type argument. Đổi lại runtime thường không biết `T`, nên không thể `new T()`, `new T[]` hay kiểm tra `instanceof List<String>` trực tiếp.
 
 ## 12. Tổng kết — Bảng ghi nhớ nhanh
 
@@ -662,7 +710,7 @@ void process(List<Integer> xs) { }
 ### Phần B — Bài tập viết code
 
 **Bài 1 — `Pair<K, V>` hoàn chỉnh.**
-`Pair<K, V>` với field `final`, constructor, getter, `equals()`/`hashCode()`/`toString()` chuẩn (dựa cả `key` và `value` — Module 02.4). Thêm generic method `static <A, B> Pair<B, A> swapped(Pair<A, B> p)`. `main` chứng minh `equals()` đúng và `swapped(swapped(p)).equals(p)`.
+`Pair<K, V>` với field `final`, constructor, getter, `equals()`/`hashCode()`/`toString()` chuẩn (dựa cả `key` và `value` — Module 07). Thêm generic method `static <A, B> Pair<B, A> swapped(Pair<A, B> p)`. `main` chứng minh `equals()` đúng và `swapped(swapped(p)).equals(p)`.
 
 **Bài 2 — Bounded generic method.**
 `<T extends Comparable<? super T>> T minOf(List<T> list)` (dùng recursive bound như `Collections.max`). Gọi với `List<Integer>`, `List<String>`, và một cặp `class Employee`/`class Manager extends Employee` mà chỉ `Employee implements Comparable<Employee>` — chứng minh `minOf(List<Manager>)` vẫn biên dịch.
@@ -757,4 +805,4 @@ void process(List<Integer> xs) { }
 
 ---
 
-*File tiếp theo trong lộ trình: **Module 03.3 — Stream API & Lambda** (map/filter/reduce/collect, method reference, functional interface).*
+*File tiếp theo trong lộ trình: **Module 10 — Stream API & Lambda** (map/filter/reduce/collect, method reference, functional interface).*

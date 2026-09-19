@@ -1,4 +1,4 @@
-# Module 14 — RESTful API Design
+# Module 23 — RESTful API Design
 
 > **Mức ưu tiên: 🔴 Cao**
 > **Vì sao quan trọng:** API là "giao diện" duy nhất mà Frontend, Mobile App, hoặc service khác nhìn thấy từ Backend của bạn. Thiết kế API sai chuẩn (dùng sai HTTP method, trả sai status code, không version hóa, error response không nhất quán...) sẽ gây khó khăn cho toàn bộ team tích hợp, khó mở rộng về sau, và là điểm bị soi kỹ nhất trong code review lẫn phỏng vấn — vì đây là kỹ năng thể hiện rõ nhất khả năng "thiết kế hệ thống" chứ không chỉ "viết code chạy được".
@@ -728,7 +728,7 @@ public ResponseEntity<UserResponse> updateUser(
 
 ## 11. Request/Response Body Design
 
-### Luôn dùng DTO, KHÔNG trả Entity trực tiếp (đã đề cập ở Module 11, nhắc lại vì rất quan trọng)
+### Luôn dùng DTO, KHÔNG trả Entity trực tiếp (đã đề cập ở Module 20, nhắc lại vì rất quan trọng)
 
 ```java
 // ❌ SAI - trả Entity trực tiếp
@@ -992,6 +992,67 @@ public class CorsConfig implements WebMvcConfigurer {
 11. **Nhầm `If-Match` với `If-None-Match`** — dùng sai header khiến cơ chế concurrency control (mục 10) không hoạt động như mong đợi, hoặc vô tình chặn nhầm request hợp lệ.
 
 12. **Xử lý thao tác nặng/chậm (export báo cáo, gọi service ngoài) đồng bộ trong 1 request** — client bị timeout, connection pool bị chiếm giữ lâu; nên áp dụng pattern `202 Accepted` + polling (mục 12).
+
+---
+
+### Keyset pagination — ổn định hơn OFFSET ở dữ liệu lớn
+
+`OFFSET n` buộc database bỏ qua nhiều row và dễ lặp/bỏ sót khi dữ liệu chèn/xóa giữa hai trang. Keyset dùng giá trị cuối trang trước làm cursor, với thứ tự **ổn định và duy nhất**:
+
+```sql
+SELECT id, created_at, total
+FROM orders
+WHERE (created_at, id) < (:lastCreatedAt, :lastId)
+ORDER BY created_at DESC, id DESC
+LIMIT :size;
+```
+
+API trả opaque cursor (có thể encode `createdAt + id`) thay vì để client phụ thuộc cấu trúc. Index phải khớp thứ tự lọc/sort. Đổi lại, keyset không nhảy tự do tới “trang 87” và cần xử lý hướng next/previous rõ ràng.
+
+### Rate-limit response là một phần của contract
+
+Khi vượt quota, trả `429 Too Many Requests`, `Retry-After` nếu biết thời điểm thử lại, và Problem Details nhất quán. Scope limit phải rõ: API key, user, tenant, IP hay endpoint; limit theo IP thuần dễ làm hại người dùng sau NAT và dễ bị phân tán bot vượt qua.
+
+> ⚠️ Retry client phải có exponential backoff + jitter và tôn trọng deadline. Retry đồng loạt ngay khi cửa sổ mở tạo thundering herd (liên hệ cache/messaging Module 27).
+
+### Sequence diagram: idempotent POST với Idempotency-Key
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant API as API
+    participant Store as Idempotency store
+    participant DB as Business database
+    C->>API: POST /payments + Idempotency-Key K
+    API->>Store: claim K và request fingerprint
+    alt K mới
+        Store-->>API: ownership granted
+        API->>DB: thực hiện transaction
+        DB-->>API: payment result
+        API->>Store: lưu status và response cho K
+        API-->>C: 201 response
+    else K đã hoàn tất cùng fingerprint
+        Store-->>API: cached response
+        API-->>C: replay cùng kết quả
+    else K đang chạy hoặc payload khác
+        Store-->>API: conflict / in-progress
+        API-->>C: response có retry semantics rõ
+    end
+```
+
+Key không chỉ là cache key: phải ràng buộc với identity/tenant, endpoint và fingerprint payload, được claim atomically và có TTL theo business window. Nếu ghi business data thành công nhưng chưa lưu response, thiết kế recovery phải tìm lại operation bằng key thay vì charge lần hai.
+
+### Mental model của REST contract
+
+```mermaid
+flowchart LR
+    R["Resource và invariant"] --> H["HTTP semantics<br/>method, status, cache"]
+    H --> REP["Representation<br/>JSON và content negotiation"]
+    REP --> O["Operational policy<br/>auth, rate limit, observability"]
+    O --> V["Versioning và compatibility"]
+```
+
+API tốt không chỉ có URL đẹp; bốn lớp trên phải nhất quán. Ví dụ `PUT` idempotent ở tầng HTTP nhưng authorization/object ownership vẫn thuộc policy, còn backward compatibility thuộc representation/versioning.
 
 ---
 
@@ -1322,4 +1383,4 @@ public ResponseEntity<ArticleResponse> updateArticle(
 
 ---
 
-*File tiếp theo trong lộ trình: **Module 15 — Spring Data & Persistence nâng cao** (Spring Data JPA Repository chi tiết, Specification/Querydsl, Auditing, Optimistic vs Pessimistic Locking, Database Migration với Flyway/Liquibase).*
+*File tiếp theo trong lộ trình: **Module 24 — Spring Data & Persistence nâng cao** (Spring Data JPA Repository chi tiết, Specification/Querydsl, Auditing, Optimistic vs Pessimistic Locking, Database Migration với Flyway/Liquibase).*

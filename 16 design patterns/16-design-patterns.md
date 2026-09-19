@@ -1,8 +1,8 @@
-# Module 08 — Design Patterns
+# Module 16 — Design Patterns
 
 > **Mức độ ưu tiên: Cao** — Spring Framework được xây dựng gần như hoàn toàn từ các pattern trong module này. Không nắm phần này thì đọc source Spring (hoặc chỉ đọc Javadoc) mãi chỉ là "học thuộc annotation" thay vì hiểu **tại sao** framework thiết kế như vậy. Đây cũng là chủ đề rất hay bị hỏi ở phỏng vấn Middle/Senior dưới dạng "thiết kế hệ thống X, bạn dùng pattern nào và vì sao **không** dùng pattern Y?".
 
-> **Phạm vi bài này:** 23 pattern GoF cổ điển và cách chúng xuất hiện thật trong JDK và Spring backend — chia theo ba nhóm Creational / Structural / Behavioral, kèm các anti-pattern đi kèm (God object, premature abstraction, Singleton như global state, service locator, anemic domain model). Mỗi pattern: ý định một câu, cấu trúc, ví dụ Java tối thiểu, dấu hiệu nên/không nên dùng, một ví dụ JDK hoặc Spring, và cái bẫy thường gặp. **Chỉ nhắc tên, không đi sâu:** SOLID, coupling/cohesion, composition over inheritance, code smell, premature abstraction, DI/IoC, service locator, self-invocation proxy → Module 01.6; `equals`/`hashCode`/`clone`/`Comparator` → Module 02.4; fail-fast iterator → Module 03.1; Stream/lambda/`sealed`/`record`/pattern matching → Module 03.3 và Module 06; `java.io` decorator stream, try-with-resources → Module 04; `synchronized`/`volatile`/double-checked locking → Module 05.1/05.2; `@Transactional`, Bean scope, AOP nội bộ → Module 21 (Spring Core) và Module 14 (Spring Data JPA). Không lan sang kiến trúc microservice, event sourcing, CQRS.
+> **Phạm vi bài này:** 23 pattern GoF cổ điển và cách chúng xuất hiện thật trong JDK và Spring backend — chia theo ba nhóm Creational / Structural / Behavioral, kèm các anti-pattern đi kèm (God object, premature abstraction, Singleton như global state, service locator, anemic domain model). Mỗi pattern: ý định một câu, cấu trúc, ví dụ Java tối thiểu, dấu hiệu nên/không nên dùng, một ví dụ JDK hoặc Spring, và cái bẫy thường gặp. **Chỉ nhắc tên, không đi sâu:** SOLID, coupling/cohesion, composition over inheritance, code smell, premature abstraction, DI/IoC, service locator, self-invocation proxy → Module 06; `equals`/`hashCode`/`clone`/`Comparator` → Module 07; fail-fast iterator → Module 08; Stream/lambda/`sealed`/`record`/pattern matching → Module 10 và Module 14; `java.io` decorator stream, try-with-resources → Module 11; `synchronized`/`volatile`/double-checked locking → Module 12–13; `@Transactional`, Bean scope, AOP nội bộ → Module 21 (Spring Core) và Module 20/24 (JPA, Spring Data). Không lan sang kiến trúc microservice, event sourcing, CQRS.
 
 ---
 
@@ -60,15 +60,15 @@ Design pattern là **tên gọi chung cho một giải pháp lặp lại** trong
 
 ### Ba nguyên tắc nền mà mọi pattern đều phục vụ
 
-1. **Lập trình theo interface, không theo implementation** — client phụ thuộc abstraction (Module 01.6 §6, DIP).
+1. **Lập trình theo interface, không theo implementation** — client phụ thuộc abstraction (Module 06 §6, DIP).
 2. **Ưu tiên composition hơn inheritance** — Strategy/Decorator/Bridge tồn tại chính vì kế thừa cứng nhắc.
-3. **Đóng gói phần hay thay đổi** — tách "cái biến thiên" ra sau một abstraction, phần còn lại đứng yên (Module 01.6 §3, OCP).
+3. **Đóng gói phần hay thay đổi** — tách "cái biến thiên" ra sau một abstraction, phần còn lại đứng yên (Module 06 §3, OCP).
 
 ### Cách đọc một pattern
 
 Với mỗi pattern, hỏi bốn câu: **(a)** nó hấp thụ *loại thay đổi* nào? **(b)** cái giá phải trả (số class, lớp gián tiếp) là gì? **(c)** ngôn ngữ hiện đại đã có sẵn cơ chế thay thế chưa (lambda, `sealed`, `enum`, `record`)? **(d)** JDK/Spring đã có bản dựng sẵn chưa, để mình dùng lại thay vì tự viết?
 
-> Pattern là công cụ đánh giá và giao tiếp, không phải chỉ tiêu KPI. Một hệ thống "dùng nhiều pattern" không tự nó tốt hơn; nhồi pattern vào chỗ không có biến thiên chỉ tạo ra *needless complexity* (Module 01.6 §9, §11).
+> Pattern là công cụ đánh giá và giao tiếp, không phải chỉ tiêu KPI. Một hệ thống "dùng nhiều pattern" không tự nó tốt hơn; nhồi pattern vào chỗ không có biến thiên chỉ tạo ra *needless complexity* (Module 06 §9, §11).
 
 ---
 
@@ -88,7 +88,7 @@ public class AppConfig {
     private AppConfig() { }                       // constructor private — chặn "new" từ ngoài
 
     public static AppConfig getInstance() {
-        if (instance == null) {                   // ⚠️ race condition — 2 thread cùng vượt check này (Module 05.1)
+        if (instance == null) {                   // ⚠️ race condition — 2 thread cùng vượt check này (Module 12)
             instance = new AppConfig();
         }
         return instance;
@@ -96,7 +96,7 @@ public class AppConfig {
 }
 ```
 
-#### Double-Checked Locking — cần `volatile` (Module 05.1/05.2)
+#### Double-Checked Locking — cần `volatile` (Module 12–13)
 
 ```java
 public class AppConfig {
@@ -116,7 +116,7 @@ public class AppConfig {
 }
 ```
 
-> Thiếu `volatile`, một thread khác có thể thấy `instance != null` nhưng object **chưa khởi tạo xong** (đọc ra trạng thái nửa vời). Chi tiết mô hình bộ nhớ ở Module 05.2.
+> Thiếu `volatile`, một thread khác có thể thấy `instance != null` nhưng object **chưa khởi tạo xong** (đọc ra trạng thái nửa vời). Chi tiết mô hình bộ nhớ ở Module 13.
 
 #### Holder idiom — lazy, không cần lock
 
@@ -154,7 +154,7 @@ public class UserService { }
 Mỗi `@Component`/`@Service`/`@Repository` mặc định **một instance duy nhất** do container quản lý — bạn **không tự viết** Singleton trong dự án Spring. Khác biệt quan trọng: đây là "một instance mỗi container", không phải "một instance mỗi ClassLoader" như `enum` singleton; và container quản lý được vòng đời, DI, proxy AOP quanh nó.
 
 - **Dấu hiệu nên dùng:** đúng một tài nguyên dùng chung, vô trạng thái hoặc trạng thái bất biến (registry, cache config, connection pool factory).
-- **Khi KHÔNG nên dùng:** có state thay đổi được → biến thành **global mutable state**, khó test (không reset được giữa các test), giấu dependency (code gọi `X.getInstance()` bên trong thay vì nhận qua constructor — nghịch DIP, Module 01.6 §7). Trong Spring, để container lo.
+- **Khi KHÔNG nên dùng:** có state thay đổi được → biến thành **global mutable state**, khó test (không reset được giữa các test), giấu dependency (code gọi `X.getInstance()` bên trong thay vì nhận qua constructor — nghịch DIP, Module 06 §7). Trong Spring, để container lo.
 - **Bẫy:** Singleton giữ state → test này ảnh hưởng test kia; `getInstance()` rải khắp code = service locator trá hình; nhiều ClassLoader (app server cũ) phá vỡ "duy nhất".
 
 ### 2.2 Factory Method
@@ -219,7 +219,7 @@ new Pizza("L", true, false, true, false, true);
 
 ```java
 public final class Pizza {
-    private final String size;                    // final → immutable sau build (liên hệ record, Module 06)
+    private final String size;                    // final → immutable sau build (liên hệ record, Module 14)
     private final boolean cheese, pepperoni, mushroom;
 
     private Pizza(Builder b) {
@@ -277,7 +277,7 @@ Cả bốn đều "tạo object", nhưng giải quyết **vấn đề khác nhau
 > **Ý định:** tạo object mới bằng cách **sao chép một mẫu có sẵn**, thay vì khởi tạo lại từ đầu (hữu ích khi khởi tạo tốn kém hoặc cấu hình phức tạp).
 
 ```java
-// GoF gốc dùng Cloneable — nhưng clone() của Java nhiều cạm bẫy (Module 02.4)
+// GoF gốc dùng Cloneable — nhưng clone() của Java nhiều cạm bẫy (Module 07)
 public class Board implements Cloneable {
     private int[][] cells;
     @Override public Board clone() {
@@ -337,7 +337,7 @@ class LegacyGatewayAdapter implements PaymentProcessor {         // OBJECT adapt
 - **JDK:** `Arrays.asList(T...)` (mảng → `List`), `InputStreamReader` (byte stream → char stream), `Collections.enumeration`/`list` (`Iterator` ↔ `Enumeration`). Spring MVC: `HandlerAdapter` cho phép dùng nhiều kiểu controller khác nhau qua một interface.
 - **Dấu hiệu nên dùng:** tích hợp SDK/thư viện bên thứ ba có interface lệch với kiến trúc hiện tại; muốn cô lập sự lệch đó vào **một** chỗ.
 - **Khi KHÔNG nên dùng:** bạn sở hữu cả hai phía và sửa được — sửa thẳng interface; khi cần thiết kế trước cho nhiều impl độc lập → đó là Bridge, không phải Adapter.
-- **Bẫy:** adapter phình ra chứa cả logic nghiệp vụ (vi phạm SRP); adapter rò kiểu của thư viện cũ ra ngoài (`Charge` của Stripe lọt vào nghiệp vụ — Module 01.6 §6).
+- **Bẫy:** adapter phình ra chứa cả logic nghiệp vụ (vi phạm SRP); adapter rò kiểu của thư viện cũ ra ngoài (`Charge` của Stripe lọt vào nghiệp vụ — Module 06 §6).
 
 ### 3.2 Decorator
 
@@ -370,7 +370,7 @@ DataSource src = new EncryptionDecorator(new CompressionDecorator(new FileDataSo
 // đọc: file → giải nén → giải mã. Xếp lớp tùy ý, không cần lớp "EncryptedCompressedFile"
 ```
 
-- **JDK:** `java.io` là ví dụ kinh điển — `new BufferedInputStream(new GZIPInputStream(new FileInputStream(f)))` (Module 04). `Collections.unmodifiableList`/`synchronizedList` bọc thêm hành vi mà giữ interface `List`.
+- **JDK:** `java.io` là ví dụ kinh điển — `new BufferedInputStream(new GZIPInputStream(new FileInputStream(f)))` (Module 11). `Collections.unmodifiableList`/`synchronizedList` bọc thêm hành vi mà giữ interface `List`.
 - **Spring:** `HttpServletRequestWrapper`/`ResponseWrapper` trong filter; `DelegatingFilterProxy`; `TransactionAwareDataSourceProxy`.
 - **Decorator vs kế thừa:** 3 hành vi tùy chọn kết hợp tự do → kế thừa cần 2³ lớp, decorator cần 3 lớp + xếp chồng runtime.
 - **Dấu hiệu nên dùng:** nhiều "trang sức" độc lập, bật/tắt và kết hợp tùy ý (buffer, nén, mã hóa, đo lường, retry).
@@ -396,7 +396,7 @@ public final class ReportFacade {
 - **Facade vs Adapter:** Adapter đổi *một* interface cho *khớp*; Facade *gộp nhiều* interface thành *một cái đơn giản hơn*, không nhằm khớp chuẩn nào.
 - **Dấu hiệu nên dùng:** một subsystem nhiều bước, nhiều class, khách hàng đa số chỉ dùng vài kịch bản; muốn một điểm vào để giảm coupling từ ngoài vào trong.
 - **Khi KHÔNG nên dùng:** subsystem vốn đã đơn giản; hoặc client thật sự cần toàn bộ khả năng chi tiết → đừng chặn họ.
-- **Bẫy:** facade phình thành **God object** ôm mọi thứ (Module 01.6 §9, và §8 dưới đây); facade rò kiểu nội bộ của subsystem ra API công khai, làm mất tác dụng che chắn.
+- **Bẫy:** facade phình thành **God object** ôm mọi thứ (Module 06 §9, và §8 dưới đây); facade rò kiểu nội bộ của subsystem ra API công khai, làm mất tác dụng che chắn.
 
 ### 3.4 Proxy
 
@@ -446,7 +446,7 @@ public class OrderService {
 
 Spring **không** gọi thẳng `OrderService` thật — nó tạo một proxy: **mở transaction → gọi method thật → commit/rollback**. Đây là cơ chế chung sau mọi annotation "kỳ diệu".
 
-> **Bẫy self-invocation (Module 01.6 §10, sẽ gặp lại ở Module 14):** trong `placeOrder`, gọi `this.otherTxMethod()` **không** đi qua proxy → `@Transactional`/`@Cacheable` trên `otherTxMethod` **vô hiệu**. Sửa: tách sang bean khác, tự inject chính mình, hoặc dùng `TransactionTemplate`/`AopContext.currentProxy()`.
+> **Bẫy self-invocation (Module 06 §10, sẽ gặp lại ở Module 21):** trong `placeOrder`, gọi `this.otherTxMethod()` **không** đi qua proxy → `@Transactional`/`@Cacheable` trên `otherTxMethod` **vô hiệu**. Sửa: tách sang bean khác, tự inject chính mình, hoặc dùng `TransactionTemplate`/`AopContext.currentProxy()`.
 
 - **Các biến thể:** virtual proxy (lazy-init, `@Lazy`), protection proxy (`@PreAuthorize`), remote proxy (RMI stub, Feign client), logging/metrics proxy.
 - **Dấu hiệu nên dùng:** thêm mối quan tâm cắt ngang (transaction, cache, security, log, retry) đồng đều lên nhiều method; trì hoãn tạo object nặng.
@@ -476,7 +476,7 @@ final class DirNode implements FsNode {
 - **JDK/Spring:** `java.awt.Container`, `javax.swing.JComponent`; Spring: `CompositeCacheManager`, `WebMvcConfigurerComposite`, `CompositePropertySource` — gom nhiều thể hiện cùng interface thành một.
 - **Dấu hiệu nên dùng:** dữ liệu tự nhiên là cây, và thao tác lên cây phần lớn là "duyệt + tổng hợp".
 - **Khi KHÔNG nên dùng:** cấu trúc phẳng; hoặc lá và cành thực sự khác nhau tới mức ép chung interface làm hại rõ ràng.
-- **Bẫy:** lá bị ép cài `add()`/`remove()` vô nghĩa (căng thẳng với ISP, Module 01.6 §5) — hoặc để `add()` ở interface con `Composite`, chấp nhận client phải ép kiểu; chu trình trong "cây" gây đệ quy vô hạn.
+- **Bẫy:** lá bị ép cài `add()`/`remove()` vô nghĩa (căng thẳng với ISP, Module 06 §5) — hoặc để `add()` ở interface con `Composite`, chấp nhận client phải ép kiểu; chu trình trong "cây" gây đệ quy vô hạn.
 
 ### 3.6 Bridge
 
@@ -506,7 +506,7 @@ Không có Bridge: `UrgentEmail`, `UrgentSms`, `NormalEmail`, `NormalSms`... = t
 - **Bridge vs Strategy:** cấu trúc giống (composition), khác ý định — Bridge tách *cả một hệ phân cấp abstraction* khỏi *cả một hệ phân cấp implementation*; Strategy chỉ hoán một thuật toán.
 - **Dấu hiệu nên dùng:** hai chiều thay đổi vuông góc nhau, mỗi chiều đều có nhiều biến thể (loại × nền tảng, hình × cách vẽ).
 - **Khi KHÔNG nên dùng:** chỉ một chiều biến thiên; hoặc mỗi chiều chỉ một biến thể (chưa cần).
-- **Bẫy:** dựng Bridge khi mới có một implementation — trừu tượng hóa sớm (Module 01.6 §11).
+- **Bẫy:** dựng Bridge khi mới có một implementation — trừu tượng hóa sớm (Module 06 §11).
 
 ### 3.7 Flyweight
 
@@ -515,7 +515,7 @@ Không có Bridge: `UrgentEmail`, `UrgentSms`, `NormalEmail`, `NormalSms`... = t
 ```java
 Integer a = Integer.valueOf(100);   // lấy từ cache -128..127
 Integer b = Integer.valueOf(100);
-a == b;                             // true — CÙNG object (flyweight, Module 01.1)
+a == b;                             // true — CÙNG object (flyweight, Module 01)
 
 Integer c = Integer.valueOf(1000);
 Integer d = Integer.valueOf(1000);
@@ -556,7 +556,7 @@ class Checkout {
             MUL { long apply(long a, long b) { return a * b; } };
       abstract long apply(long a, long b); }
   ```
-- **Spring:** inject `List<ShippingPolicy>` hoặc `Map<String, ShippingPolicy>` — container gom mọi bean cùng interface, chọn theo key/`@Qualifier`/`@Primary` (Module 01.6 §10). `RowMapper`, `ResponseErrorHandler` là Strategy.
+- **Spring:** inject `List<ShippingPolicy>` hoặc `Map<String, ShippingPolicy>` — container gom mọi bean cùng interface, chọn theo key/`@Qualifier`/`@Primary` (Module 06 §10). `RowMapper`, `ResponseErrorHandler` là Strategy.
 - **Dấu hiệu nên dùng:** một chỗ trong luồng có nhiều cách tính, chọn theo cấu hình/loại khách/A-B test; muốn thêm cách mới không sửa code cũ (OCP).
 - **Khi KHÔNG nên dùng:** chỉ một thuật toán ổn định; hoặc khác biệt chỉ là một tham số → truyền tham số.
 - **Bẫy:** interface Strategy chỉ có một impl suốt đời (trừu tượng thừa); phải nhồi quá nhiều context vào chữ ký method vì strategy không giữ được state chung.
@@ -632,7 +632,7 @@ class History {
 }
 ```
 
-- **JDK:** `Runnable`/`Callable` **chính là Command** — `executor.submit(runnable)` xếp một Command vào hàng đợi để thread pool chạy sau (Module 05.2). `javax.swing.Action`.
+- **JDK:** `Runnable`/`Callable` **chính là Command** — `executor.submit(runnable)` xếp một Command vào hàng đợi để thread pool chạy sau (Module 13). `javax.swing.Action`.
 - **Spring:** handler của message queue, `ApplicationRunner`/`CommandLineRunner`, các "use case object" trong kiến trúc hexagonal.
 - **Dấu hiệu nên dùng:** cần undo/redo, transaction log, hàng đợi tác vụ, lập lịch, macro (gộp nhiều lệnh), tách "ai yêu cầu" khỏi "ai thực thi".
 - **Khi KHÔNG nên dùng:** chỉ gọi một method đồng bộ ngay — bọc thành Command là nghi thức thừa; với callback đơn giản, lambda `Runnable` là đủ, không cần class.
@@ -649,8 +649,8 @@ while (it.hasNext()) { User u = it.next(); if (bad(u)) it.remove(); }   // remov
 ```
 
 - **JDK:** toàn bộ `Collection` là `Iterable`; `Iterator`, `ListIterator`, `Spliterator` (nền của Stream song song), `Scanner`, `Files.newDirectoryStream`.
-- **Fail-fast (Module 03.1):** sửa collection trong lúc duyệt bằng cách khác `it.remove()` → `ConcurrentModificationException`. `CopyOnWriteArrayList`/`ConcurrentHashMap` cho iterator *weakly consistent* (không ném).
-- **Internal vs external iteration:** `Iterator` là external (client điều khiển vòng lặp); `Stream`/`forEach` là internal (thư viện điều khiển — dễ song song hóa, Module 03.3).
+- **Fail-fast (Module 08):** sửa collection trong lúc duyệt bằng cách khác `it.remove()` → `ConcurrentModificationException`. `CopyOnWriteArrayList`/`ConcurrentHashMap` cho iterator *weakly consistent* (không ném).
+- **Internal vs external iteration:** `Iterator` là external (client điều khiển vòng lặp); `Stream`/`forEach` là internal (thư viện điều khiển — dễ song song hóa, Module 10).
 - **Dấu hiệu nên dùng:** bạn viết một kiểu tập hợp mới và muốn nó dùng được với `for-each`; cần nhiều cách duyệt (xuôi/ngược/lọc) trên cùng cấu trúc.
 - **Khi KHÔNG nên dùng:** đã có `Collection`/`Stream` chuẩn — đừng tự viết iterator; duyệt một `List` thường → cứ `for-each` hoặc Stream.
 - **Bẫy:** quên cài `remove()` (mặc định ném `UnsupportedOperationException`); iterator vô hạn không có điều kiện dừng; giữ iterator sống lâu qua nhiều thay đổi của collection.
@@ -729,7 +729,7 @@ class ChatRoomImpl implements ChatRoom {
 - **JDK/Spring:** `ExecutorService` điều phối task ↔ worker; `DispatcherServlet` điều phối request ↔ controller/view; `ApplicationEventMulticaster` bên trong Spring events.
 - **Dấu hiệu nên dùng:** N thành phần tham chiếu chằng chịt lẫn nhau (đồ thị giao tiếp gần đầy đủ), thêm một thành phần phải sửa nhiều chỗ; UI form với nhiều widget ràng buộc.
 - **Khi KHÔNG nên dùng:** chỉ vài thành phần, quan hệ thưa và rõ — thêm mediator chỉ thêm một tầng.
-- **Bẫy:** mediator hút hết logic điều phối thành **God object** (Module 01.6 §9); mọi thay đổi giao tiếp lại dồn về một file duy nhất.
+- **Bẫy:** mediator hút hết logic điều phối thành **God object** (Module 06 §9); mọi thay đổi giao tiếp lại dồn về một file duy nhất.
 
 ### 4.9 Memento
 
@@ -747,7 +747,7 @@ final class Editor {
 ```
 
 - **Ứng dụng:** undo/redo, checkpoint/rollback, snapshot cấu hình, "hoàn tác" trong wizard nhiều bước.
-- **Serialization như cơ chế memento:** đóng băng cả đồ thị object thành byte rồi khôi phục (nhưng nặng, vấn đề versioning, bảo mật — Module 04).
+- **Serialization như cơ chế memento:** đóng băng cả đồ thị object thành byte rồi khôi phục (nhưng nặng, vấn đề versioning, bảo mật — Module 11).
 - **Memento vs Prototype:** Prototype sao chép để tạo *object mới dùng song song*; Memento lưu để *khôi phục chính object cũ* về sau.
 - **Dấu hiệu nên dùng:** cần quay lui trạng thái, và bạn muốn giữ field `private` (không phơi getter/setter chỉ để lưu).
 - **Khi KHÔNG nên dùng:** object đã bất biến → chỉ cần giữ lại tham chiếu bản cũ; state nhỏ và công khai → copy thẳng.
@@ -770,7 +770,7 @@ class EvalVisitor implements Visitor<Double> {
 }
 ```
 
-#### Java hiện đại: `sealed` + pattern-matching `switch` thay Visitor (Module 06)
+#### Java hiện đại: `sealed` + pattern-matching `switch` thay Visitor (Module 14)
 
 ```java
 sealed interface Node permits Num, Add { }
@@ -807,7 +807,7 @@ class OrderService {
 ```
 
 - **JDK/Spring:** `Collections.emptyList()`/`emptyMap()` (null object cho collection), `Optional.empty()` (họ hàng gần), SLF4J `NOPLogger`, `OutputStream.nullOutputStream()` (Java 11), `DataBinder` no-op validators.
-- **Null Object vs Optional:** Optional **buộc** caller xử lý sự vắng mặt (kiểu trả về); Null Object **giấu** sự vắng mặt sau hành vi trung tính (thường là collaborator/dependency). Đừng bọc "không tìm thấy dữ liệu" bằng Null Object — dùng `Optional` (Module 06 §1).
+- **Null Object vs Optional:** Optional **buộc** caller xử lý sự vắng mặt (kiểu trả về); Null Object **giấu** sự vắng mặt sau hành vi trung tính (thường là collaborator/dependency). Đừng bọc "không tìm thấy dữ liệu" bằng Null Object — dùng `Optional` (Module 14 §1).
 - **Dấu hiệu nên dùng:** một collaborator tùy chọn (logger, metrics, listener), "không có" nghĩa là "bỏ qua nhẹ nhàng".
 - **Khi KHÔNG nên dùng:** sự vắng mặt là lỗi cần biết → để nó nổ hoặc trả `Optional`; hành vi "rỗng" không thật sự trung tính (nuốt mất tiền, mất dữ liệu).
 - **Bẫy:** null object nuốt lỗi im lặng khiến bug khó lần; lỡ dùng cho kết quả truy vấn làm caller tưởng "có, rỗng" trong khi đúng ra là "không có".
@@ -825,7 +825,7 @@ Hiếm khi tự viết tay ngoài bài tập — với văn phạm thật, dùng
 
 ## 5. Dependency Injection & IoC — nền của Spring
 
-DI/IoC **không phải pattern GoF**, mà là nguyên tắc kiến trúc — nhưng là "keo dán" khiến Factory, Strategy, Observer, Proxy trong Spring hoạt động tự động. Đã học kỹ ở **Module 01.6 §6–§7**; ở đây chỉ chốt liên hệ.
+DI/IoC **không phải pattern GoF**, mà là nguyên tắc kiến trúc — nhưng là "keo dán" khiến Factory, Strategy, Observer, Proxy trong Spring hoạt động tự động. Đã học kỹ ở **Module 06 §6–§7**; ở đây chỉ chốt liên hệ.
 
 ```java
 // KHÔNG DI — tự tạo dependency, coupling cao, khó test
@@ -839,8 +839,8 @@ class OrderService {
 ```
 
 - **IoC:** quyền quyết định "tạo gì, khi nào, tiêm vào đâu" chuyển từ object sang một container bên ngoài.
-- **DI là một cách hiện thực IoC** cho việc lắp ráp object; có thể đạt DIP **không cần container** — chỉ cần constructor nhận abstraction + một *composition root* lắp ráp (Module 01.6 §7).
-- **Service Locator là phản đề nên tránh** (`Locator.get(X.class)` bên trong logic) — giấu dependency, khó test (Module 01.6 §7).
+- **DI là một cách hiện thực IoC** cho việc lắp ráp object; có thể đạt DIP **không cần container** — chỉ cần constructor nhận abstraction + một *composition root* lắp ráp (Module 06 §7).
+- **Service Locator là phản đề nên tránh** (`Locator.get(X.class)` bên trong logic) — giấu dependency, khó test (Module 06 §7).
 - Chi tiết Bean scope, `@Autowired`, `@Configuration`, container lifecycle → **Module 21**.
 
 ---
@@ -852,7 +852,7 @@ Nhiều pattern GoF ra đời khi Java chưa có lambda, `enum` giàu hành vi, 
 | Pattern cổ điển | Bản hiện đại | Ghi chú |
 |---|---|---|
 | Strategy / Command / callback Template | **Lambda + functional interface** | `Comparator`, `Runnable`, `Predicate`, `Function` — không cần class riêng cho mỗi biến thể |
-| Visitor trên hierarchy đóng | **`sealed` + `record` + pattern-matching `switch`** (Module 06) | Compiler kiểm tra đủ nhánh; thêm kiểu → mọi `switch` báo lỗi |
+| Visitor trên hierarchy đóng | **`sealed` + `record` + pattern-matching `switch`** (Module 14) | Compiler kiểm tra đủ nhánh; thêm kiểu → mọi `switch` báo lỗi |
 | State / máy trạng thái nhỏ | **`enum` có method** + bảng transition | Đủ khi tập trạng thái đóng, ít |
 | Singleton | **`enum INSTANCE`** (Effective Java Item 3) hoặc **Spring bean** | Chống reflection/serialization sẵn |
 | Flyweight | **`enum`**, cache `valueOf`, String pool, `record` bất biến | JDK làm sẵn cho nguyên thủy boxing |
@@ -860,7 +860,7 @@ Nhiều pattern GoF ra đời khi Java chưa có lambda, `enum` giàu hành vi, 
 | Factory Method cho object đơn giản | **Method reference làm `Supplier<T>`** | `Map<Key, Supplier<T>>` thay cây Creator |
 | Builder | **`record`** (khi ít field bắt buộc), Lombok `@Builder` | `record` = target bất biến lý tưởng của builder |
 | Iterator | **Stream / `Iterable` + for-each** | Internal iteration, song song hóa dễ |
-| Prototype (`clone`) | **Copy constructor / copy factory / `record` + `withX`** | Tránh mọi cạm bẫy `clone()` (Module 02.4) |
+| Prototype (`clone`) | **Copy constructor / copy factory / `record` + `withX`** | Tránh mọi cạm bẫy `clone()` (Module 07) |
 
 > Quy tắc: pattern mô tả **ý định**; cú pháp hiện đại là **cách rẻ hơn** để đạt ý định đó. Nói "chỗ này là Strategy" vẫn đúng dù nó chỉ là một lambda.
 
@@ -894,20 +894,20 @@ Gần như mọi tính năng cốt lõi của Spring là một pattern GoF đư�
 
 ## 8. Anti-pattern và over-engineering
 
-Pattern dùng sai chỗ tệ hơn không dùng. Các "mùi" hay đi kèm việc lạm dụng pattern (nhiều cái đã bàn ở Module 01.6 §9, §11):
+Pattern dùng sai chỗ tệ hơn không dùng. Các "mùi" hay đi kèm việc lạm dụng pattern (nhiều cái đã bàn ở Module 06 §9, §11):
 
 | Anti-pattern | Biểu hiện | Thuốc chữa |
 |---|---|---|
-| **God object / God facade** | Một class/facade ôm mọi trách nhiệm, nghìn dòng, tên `Manager`/`Processor`/`Helper` | Tách theo *nguồn thay đổi* (SRP, Module 01.6 §2) |
-| **Premature abstraction** | Interface + factory + strategy cho biến thiên **chưa từng xảy ra**; mỗi class một `XxxImpl` | Chấp nhận lặp tới lần thứ ba rồi mới trừu tượng (Module 01.6 §11) |
+| **God object / God facade** | Một class/facade ôm mọi trách nhiệm, nghìn dòng, tên `Manager`/`Processor`/`Helper` | Tách theo *nguồn thay đổi* (SRP, Module 06 §2) |
+| **Premature abstraction** | Interface + factory + strategy cho biến thiên **chưa từng xảy ra**; mỗi class một `XxxImpl` | Chấp nhận lặp tới lần thứ ba rồi mới trừu tượng (Module 06 §11) |
 | **Pattern for pattern's sake** | Nhồi Visitor/Bridge/Command vào bài toán ba dòng để "cho pro" | Hỏi: pattern này hấp thụ *thay đổi nào*? Không có → bỏ |
 | **Singleton như global mutable state** | `X.getInstance().setThing(...)` rải khắp nơi | Bean có scope + DI; state đẩy ra ngoài, giữ Singleton bất biến |
-| **Anemic domain model** | Entity chỉ có getter/setter; toàn bộ luật nằm trong `*Service` | Đưa invariant về domain object (như `BankAccount`, Module 01.6 §2) |
-| **Service Locator** | Component tự `Locator.get(Dep.class)` thay vì nhận qua constructor | Constructor injection — dependency hiện diện, tường minh (Module 01.6 §7) |
+| **Anemic domain model** | Entity chỉ có getter/setter; toàn bộ luật nằm trong `*Service` | Đưa invariant về domain object (như `BankAccount`, Module 06 §2) |
+| **Service Locator** | Component tự `Locator.get(Dep.class)` thay vì nhận qua constructor | Constructor injection — dependency hiện diện, tường minh (Module 06 §7) |
 | **Poltergeist / lasagna** | Quá nhiều lớp gián tiếp chỉ để chuyển tiếp lời gọi; đọc code phải nhảy 6 file | Gỡ tầng không mang giá trị; một class 200 dòng mạch lạc > 8 file 25 dòng |
 | **Yo-yo problem** | Cây kế thừa Template Method quá sâu, đọc phải lên xuống liên tục | Ưu tiên composition/callback |
 
-> Câu hỏi quyết định luôn là *"thay đổi nào sắp tới và nó tốn bao nhiêu nếu không chuẩn bị"*, không phải *"đã đủ nhiều pattern chưa"* (Module 01.6 §11).
+> Câu hỏi quyết định luôn là *"thay đổi nào sắp tới và nó tốn bao nhiêu nếu không chuẩn bị"*, không phải *"đã đủ nhiều pattern chưa"* (Module 06 §11).
 
 ---
 
@@ -919,7 +919,7 @@ Pattern dùng sai chỗ tệ hơn không dùng. Các "mùi" hay đi kèm việc 
 |---|---|---|
 | Một **thuật toán/chính sách** mới cho một bước | **Strategy** (hoặc lambda / `enum` hành vi) | Hoán bước đó, code gọi không đổi |
 | Một **bước mới trong một trình tự cố định** | **Template Method** + hook, hoặc **callback** | Khung giữ nguyên, chỉ điền bước |
-| Một **kiểu mới trong tập ĐÓNG** (bạn sở hữu) | **`sealed` + pattern `switch`** (Module 06) | Compiler chỉ ra mọi chỗ cần cập nhật |
+| Một **kiểu mới trong tập ĐÓNG** (bạn sở hữu) | **`sealed` + pattern `switch`** (Module 14) | Compiler chỉ ra mọi chỗ cần cập nhật |
 | Một **kiểu mới trong tập MỞ** (bên thứ ba, plugin) | **Đa hình / interface**, hoặc **Visitor** nếu tập thao tác cũng lớn | Không sửa được các kiểu có sẵn |
 | Một **lớp hành vi bọc thêm** (buffer, nén, retry, log) có thể kết hợp | **Decorator** | Xếp chồng runtime, tránh bùng nổ lớp con |
 | Một **mối quan tâm cắt ngang** (transaction, cache, security) đồng đều nhiều method | **Proxy / AOP** | Một chỗ, không rải khắp nghiệp vụ |
@@ -930,9 +930,67 @@ Pattern dùng sai chỗ tệ hơn không dùng. Các "mùi" hay đi kèm việc 
 | Một **nguồn dữ liệu ngoài** interface lệch chuẩn | **Adapter** | Cô lập sự lệch vào một chỗ |
 | Hai **trục biến thiên vuông góc** cùng nhiều biến thể | **Bridge** | `m + n` lớp thay vì `m × n` |
 
-Nếu **không** thấy trục thay đổi rõ ràng: viết code trực tiếp nhất có thể, để lại "seam" ở ranh giới I/O ngoài (thanh toán, mail, lưu trữ) vì gần như chắc chắn cần test double ở đó (Module 01.6 §11).
+Nếu **không** thấy trục thay đổi rõ ràng: viết code trực tiếp nhất có thể, để lại "seam" ở ranh giới I/O ngoài (thanh toán, mail, lưu trữ) vì gần như chắc chắn cần test double ở đó (Module 06 §11).
 
 ---
+
+### Case study: checkout — phối hợp pattern theo điểm biến thiên
+
+Một checkout thực tế không “chọn một pattern” mà ghép các pattern với vai trò rõ:
+
+| Vấn đề | Pattern | Boundary |
+|---|---|---|
+| Chọn thuật toán giảm giá | Strategy | `PricingPolicy` |
+| Tạo payment provider theo cấu hình | Factory | `PaymentGatewayFactory` |
+| Quy trình reserve → pay → confirm | Template Method hoặc orchestrator | `CheckoutService` |
+| Phát sự kiện sau commit | Observer/Domain Event | `OrderPaid` |
+| Bọc retry/metrics quanh gateway | Decorator/Proxy | `PaymentGateway` |
+
+Trình tự thiết kế: bắt đầu bằng use case cụ thể, nhận diện thứ thật sự biến thiên, đặt boundary, rồi mới gọi tên pattern. Test phải tập trung vào contract giữa các vai trò, không khóa chặt cấu trúc class.
+
+> ⚠️ Đừng dùng pattern để che distributed transaction: publish event trước khi DB commit vẫn tạo dual-write. Với checkout qua service boundary cần Outbox/Saga (Module 27–28), không chỉ Observer trong memory.
+
+### Pattern language thay vì catalog rời rạc
+
+Pattern có quan hệ và trade-off: Composite thường đi cùng Iterator/Visitor; Abstract Factory tạo một họ Strategy; Adapter bảo vệ domain khỏi API ngoài (anti-corruption layer). Hỏi “lực nào đang xung đột?” hữu ích hơn hỏi “pattern nào phổ biến?”.
+
+### Bản đồ pattern theo loại lực thiết kế
+
+```mermaid
+flowchart TB
+    Q{"Vấn đề chính là gì?"}
+    Q -->|"Khởi tạo object"| C["Creational"]
+    Q -->|"Ghép cấu trúc / boundary"| S["Structural"]
+    Q -->|"Phối hợp hành vi"| B["Behavioral"]
+    C --> C1["Factory / Builder / Prototype"]
+    S --> S1["Adapter / Decorator / Composite / Facade"]
+    B --> B1["Strategy / Observer / Command / State"]
+    C1 --> T["Đánh giá trade-off và testability"]
+    S1 --> T
+    B1 --> T
+```
+
+Catalog chỉ là từ vựng. Quy trình thiết kế nên bắt đầu từ lực thay đổi: cái gì cần được tạo linh hoạt, boundary nào cần thích nghi, hay hành vi nào cần thay độc lập. Cùng một class diagram có thể mang ý nghĩa khác nếu intent khác.
+
+### Sequence diagram: checkout phối hợp nhiều pattern
+
+```mermaid
+sequenceDiagram
+    participant API as Checkout API
+    participant S as CheckoutService
+    participant P as Pricing Strategy
+    participant G as Payment Gateway decorator
+    participant O as Outbox
+    API->>S: checkout(command)
+    S->>P: calculate(order)
+    P-->>S: final price
+    S->>G: charge(idempotencyKey, amount)
+    G-->>S: payment result
+    S->>O: persist OrderPaid trong cùng transaction
+    S-->>API: checkout result
+```
+
+Strategy giải quyết biến thiên giá, Decorator thêm retry/metrics quanh gateway, còn Outbox bảo toàn event qua transaction boundary. Pattern không thay thế nhau; mỗi pattern xử lý một lực và phải được đặt đúng boundary.
 
 ## 10. Tổng kết — Bảng ghi nhớ nhanh
 
@@ -1050,15 +1108,15 @@ Viết `main` mô phỏng: (1) đơn hợp lệ đi hết chuỗi, kích hoạt 
 
 ### Phần C — Nâng cao
 
-**Câu 1.** So sánh ba cách viết Singleton lazy: double-checked locking (`volatile`), holder idiom, `enum`. Với mỗi cách nêu: nó lazy tới mức nào, có chống được reflection/serialization không, và một tình huống cụ thể khiến bạn chọn nó thay vì hai cách kia. Vì sao thiếu `volatile` trong DCL là bug (liên hệ Module 05.2)?
+**Câu 1.** So sánh ba cách viết Singleton lazy: double-checked locking (`volatile`), holder idiom, `enum`. Với mỗi cách nêu: nó lazy tới mức nào, có chống được reflection/serialization không, và một tình huống cụ thể khiến bạn chọn nó thay vì hai cách kia. Vì sao thiếu `volatile` trong DCL là bug (liên hệ Module 13)?
 
 **Câu 2.** "Strategy và State có cấu trúc UML gần như giống hệt nhau." Chỉ ra điểm khác nhau về **ý định** và **luồng điều khiển** (ai chọn implementation, các implementation có biết về nhau không, có tự chuyển tiếp không). Cho một ví dụ mà bắt đầu là Strategy rồi tiến hóa thành State.
 
-**Câu 3.** Với một `sealed interface Json permits JNull, JBool, JNum, JStr, JArr, JObj` mà bạn sở hữu: lập luận vì sao `switch` pattern-matching (Module 06) tốt hơn Visitor cho việc viết `render`, `validate`, `deepEquals`. Sau đó nêu một tình huống mà Visitor **vẫn** thắng (gợi ý: hierarchy do thư viện bên thứ ba định nghĩa, hoặc tập thao tác lớn hơn nhiều tập kiểu). Đây là "expression problem" — phát biểu nó.
+**Câu 3.** Với một `sealed interface Json permits JNull, JBool, JNum, JStr, JArr, JObj` mà bạn sở hữu: lập luận vì sao `switch` pattern-matching (Module 14) tốt hơn Visitor cho việc viết `render`, `validate`, `deepEquals`. Sau đó nêu một tình huống mà Visitor **vẫn** thắng (gợi ý: hierarchy do thư viện bên thứ ba định nghĩa, hoặc tập thao tác lớn hơn nhiều tập kiểu). Đây là "expression problem" — phát biểu nó.
 
 **Câu 4.** `@Cacheable` trong Spring thường được mô tả là "Proxy" nhưng cũng có nét "Decorator". Phân tích: phần nào là kiểm soát truy cập (Proxy), phần nào là bọc thêm hành vi (Decorator)? Vì sao self-invocation phá cả hai? Cách khắc phục và đánh đổi của từng cách (tách bean, tự inject, `AopContext`).
 
-**Câu 5.** Bạn có `interface PaymentGateway` với **một** implementation `StripePaymentGateway` suốt 3 năm, không test nào mock. Interface này đang tạo giá trị (OCP/DIP) hay chỉ là lớp gián tiếp thừa? Lập luận cả hai phía; nêu tiêu chí "một class xứng đáng có interface" (liên hệ Module 01.6 §11).
+**Câu 5.** Bạn có `interface PaymentGateway` với **một** implementation `StripePaymentGateway` suốt 3 năm, không test nào mock. Interface này đang tạo giá trị (OCP/DIP) hay chỉ là lớp gián tiếp thừa? Lập luận cả hai phía; nêu tiêu chí "một class xứng đáng có interface" (liên hệ Module 06 §11).
 
 **Câu 6.** Lambda "thay thế" Strategy/Command trong nhiều trường hợp. Nêu **ba** trường hợp mà bạn vẫn nên tạo một class/interface có tên thay vì dùng lambda trần (gợi ý: cần state + nhiều method, cần đặt tên cho ý nghĩa nghiệp vụ, cần Spring quản lý như bean để inject/`@Qualifier`). Với Command, `undo()` khiến lambda không đủ ở đâu?
 
@@ -1075,9 +1133,9 @@ Viết `main` mô phỏng: (1) đơn hợp lệ đi hết chuỗi, kích hoạt 
 2. `SessionRegistry` là **Singleton giữ state thay đổi được** (`active` là `HashMap` mutable) → global mutable state: không reset được giữa các test, `HashMap` không thread-safe (race khi nhiều request cùng `add`), và mọi nơi gọi `SessionRegistry.get()` là dependency bị giấu (nghịch DIP). Trong Spring: khai báo `@Component`/`@Bean` (scope singleton do container quản lý), dùng `ConcurrentHashMap`, và **inject** `SessionRegistry` qua constructor thay vì gọi static — khi đó test thay được bằng bản giả.
 3. Đây là **Proxy** (Spring AOP). `generate()` gọi `recalcAll()` bằng `this.recalcAll()` — lời gọi đi thẳng vào object thật, **không qua proxy** transaction → advice `@Transactional` của `recalcAll` bị bỏ qua (self-invocation). `recalcAll()` vẫn chạy trong transaction của `generate()` (do propagation mặc định `REQUIRED` mở ở `generate`), nhưng nếu `generate()` **không** có `@Transactional` thì `recalcAll()` chạy **không** transaction. Sửa: tách `recalcAll` sang bean khác, tự inject, hoặc `TransactionTemplate`.
 4. `FileInputStream` là nguồn thật. `InputStreamReader` là **Adapter** — chuyển `InputStream` (byte) sang `Reader` (char), hai interface khác nhau. `BufferedReader` là **Decorator** — vẫn là `Reader`, chỉ bọc thêm hành vi đệm (`readLine()`), cùng interface với cái nó bọc. Tiêu chí: đổi interface = Adapter; giữ interface + thêm hành vi = Decorator.
-5. **Premature abstraction / interface một-impl** (Module 01.6 §11). `UserService` chỉ có `UserServiceImpl`, không ai mock, cổng không đổi → interface hiện chỉ là một bước nhảy thừa khi đọc code. Hướng xử lý: nếu đây **không** phải ranh giới I/O ngoài và chưa có biến thiên thật, bỏ interface, để `UserService` là class cụ thể; thêm lại interface khi có implementation thứ hai thật hoặc khi cần test double. Giữ interface **nếu** nó là ranh giới cần mock trong test tầng trên.
+5. **Premature abstraction / interface một-impl** (Module 06 §11). `UserService` chỉ có `UserServiceImpl`, không ai mock, cổng không đổi → interface hiện chỉ là một bước nhảy thừa khi đọc code. Hướng xử lý: nếu đây **không** phải ranh giới I/O ngoài và chưa có biến thiên thật, bỏ interface, để `UserService` là class cụ thể; thêm lại interface khi có implementation thứ hai thật hoặc khi cần test double. Giữ interface **nếu** nó là ranh giới cần mock trong test tầng trên.
 6. Với `Shape` là `sealed` và **do bạn sở hữu**, nên chuyển sang `switch` pattern-matching: ít boilerplate hơn, và thêm `Triangle` vào `permits` sẽ làm **mọi** `switch` không phủ hết báo lỗi compile — an toàn khi refactor. Giữ Visitor khi: tập **thao tác** thay đổi nhiều hơn tập **kiểu** (mỗi thao tác gói gọn một class Visitor), hoặc hierarchy do bên thứ ba định nghĩa (không `sealed`/không sửa được để thêm `accept`). Tiêu chí = trục nào biến thiên nhiều hơn: thêm kiểu → `switch`/sealed; thêm thao tác → Visitor.
-7. `Integer.valueOf` cache các giá trị `-128..127` (**Flyweight**) → `a1` và `a2` cùng trỏ một object, `a1 == a2` là `true`. `1000` ngoài dải cache → mỗi autoboxing tạo `Integer` mới → `c1 == c2` là `false`. Bài học: so sánh `Integer` luôn dùng `.equals()` hoặc unbox về `int` (Module 01.1).
+7. `Integer.valueOf` cache các giá trị `-128..127` (**Flyweight**) → `a1` và `a2` cùng trỏ một object, `a1 == a2` là `true`. `1000` ngoài dải cache → mỗi autoboxing tạo `Integer` mới → `c1 == c2` là `false`. Bài học: so sánh `Integer` luôn dùng `.equals()` hoặc unbox về `int` (Module 01).
 8. (a) **Đa luồng:** `ArrayList` không thread-safe — `register()` từ thread này trong khi `place()` đang `for` duyệt listeners ở thread khác → `ConcurrentModificationException` hoặc mất phần tử. Sửa: `CopyOnWriteArrayList` (đọc nhiều, ghi hiếm) hoặc đồng bộ hóa. (b) **Bộ nhớ (lapsed listener):** không có `unregister()` → listener đăng ký một lần sống mãi cùng `OrderService`, kể cả khi bên đăng ký đã "chết" → rò bộ nhớ, và listener cũ vẫn bị gọi. Sửa: thêm `unregister()`, hoặc dùng `WeakReference`, hoặc `ApplicationEvent` của Spring (container quản lý vòng đời).
 
 </details>
@@ -1097,11 +1155,11 @@ Viết `main` mô phỏng: (1) đơn hợp lệ đi hết chuỗi, kích hoạt 
 <details>
 <summary>Bấm để xem gợi ý đáp án Phần C</summary>
 
-1. **DCL + `volatile`:** lazy hoàn toàn (tạo ở lần gọi đầu), **không** chống reflection/serialization tự thân, code rườm rà; chọn khi cần lazy và class phải `extends` cái khác hoặc cần logic khởi tạo có tham số. Thiếu `volatile`: việc gán `instance = new AppConfig()` không nguyên tử — JIT/CPU có thể publish tham chiếu **trước khi** constructor chạy xong; thread khác qua check `instance == null` đầu tiên thấy non-null và trả về object **nửa khởi tạo** (Module 05.2, happens-before). **Holder idiom:** lazy (Holder chỉ nạp khi `getInstance` gọi lần đầu), thread-safe nhờ đảm bảo khởi tạo class của JVM, không lock, không `volatile`; không chống reflection; chọn khi muốn lazy + đơn giản + không cần kế thừa. **`enum`:** **không** lazy (nạp cùng class), chống được cả reflection (constructor `enum` không gọi được) lẫn serialization (trả hằng có sẵn); chọn khi muốn an toàn tối đa và không cần lazy/kế thừa.
+1. **DCL + `volatile`:** lazy hoàn toàn (tạo ở lần gọi đầu), **không** chống reflection/serialization tự thân, code rườm rà; chọn khi cần lazy và class phải `extends` cái khác hoặc cần logic khởi tạo có tham số. Thiếu `volatile`: việc gán `instance = new AppConfig()` không nguyên tử — JIT/CPU có thể publish tham chiếu **trước khi** constructor chạy xong; thread khác qua check `instance == null` đầu tiên thấy non-null và trả về object **nửa khởi tạo** (Module 13, happens-before). **Holder idiom:** lazy (Holder chỉ nạp khi `getInstance` gọi lần đầu), thread-safe nhờ đảm bảo khởi tạo class của JVM, không lock, không `volatile`; không chống reflection; chọn khi muốn lazy + đơn giản + không cần kế thừa. **`enum`:** **không** lazy (nạp cùng class), chống được cả reflection (constructor `enum` không gọi được) lẫn serialization (trả hằng có sẵn); chọn khi muốn an toàn tối đa và không cần lazy/kế thừa.
 2. **Ý định:** Strategy = "có nhiều cách làm một việc, cho hoán đổi"; State = "hành vi của object phụ thuộc trạng thái, và trạng thái thay đổi trong vòng đời". **Luồng điều khiển:** Strategy do **client** set (`new Sorter(new QuickSort())`), các strategy **không biết nhau**, **không tự chuyển**; State do **chính object/các state** chuyển (`state = state.next()`), các state **biết** state kế tiếp. **Tiến hóa:** bắt đầu `PricingStrategy` chọn theo loại khách; rồi yêu cầu "khách mới sau 3 đơn thành khách VIP, sau khi hủy nhiều thành khách hạn chế" — logic chuyển tiếp xuất hiện → nâng thành `CustomerState` tự chuyển.
 3. `switch` thắng vì: (i) **exhaustiveness** — thêm `JDate` vào `permits` làm compiler báo lỗi tại `render`/`validate`/`deepEquals`, không sót; (ii) mỗi thao tác nằm **một chỗ, đọc thẳng**, không phân tán qua 6 method `visitXxx` trong 3 class Visitor; (iii) ít boilerplate (không cần `accept`/`Visitor<R>`). Visitor **vẫn thắng** khi: hierarchy do thư viện bên thứ ba định nghĩa (không thêm được `accept` cũng chẳng `sealed` được — nhưng thực ra khi đó cả hai đều khó; Visitor chỉ khả thi nếu lib đã cung cấp `accept`), hoặc **tập thao tác rất lớn và hay thêm** trong khi tập kiểu đóng cứng — mỗi thao tác mới chỉ là một class Visitor, không đụng gì khác. **Expression problem:** không có cách nào (trong ngôn ngữ OOP cổ điển) vừa thêm kiểu mới vừa thêm thao tác mới mà **không sửa code cũ và vẫn an toàn kiểu**; OOP/đa hình cho "thêm kiểu dễ", Visitor/`switch` cho "thêm thao tác dễ", mỗi bên hy sinh chiều còn lại.
 4. **Proxy:** Spring tạo object đại diện đứng trước bean; lời gọi bị **chặn** trước khi tới method thật để tra cache — nếu hit thì **không gọi method thật** (kiểm soát truy cập). **Decorator:** hành vi "tra cache / ghi cache" được **bọc quanh** kết quả method mà không sửa method — nếu miss thì gọi thật rồi **thêm bước** `cache.put`. Self-invocation phá cả hai vì `this.method()` bỏ qua object đại diện → không có gì chặn/bọc. Khắc phục: (a) **tách bean** — sạch nhất, nhưng đẻ thêm class; (b) **tự inject** (`@Autowired ReportService self;` rồi `self.recalcAll()`) — gọn nhưng hơi lạ khi đọc, coi chừng vòng phụ thuộc; (c) **`AopContext.currentProxy()`** — không cần field nhưng phải bật `exposeProxy = true` và trói code vào Spring AOP.
-5. Phía "bỏ": chưa có biến thiên thật, không ai mock → interface chỉ là `Impl` + một bước nhảy khi đọc (needless complexity, Module 01.6 §11). Phía "giữ": `PaymentGateway` là **ranh giới I/O ngoài** — gần như chắc chắn cần test double khi viết test cho tầng nghiệp vụ gọi nó; giữ sẵn seam rẻ hơn thêm lại về sau, và nó giúp package nghiệp vụ không `import` SDK Stripe. Kết luận hợp lý: **giữ** vì là ranh giới hệ thống ngoài; nếu chỉ là interface nội bộ giữa hai class cùng module thì cân nhắc bỏ. Tiêu chí "xứng đáng có interface": (a) ranh giới với hệ thống ngoài cần test double; (b) đã/sắp có nhiều implementation thật; (c) điểm mở rộng công khai cho module/plugin khác; (d) cần cắt vòng phụ thuộc biên dịch giữa module.
+5. Phía "bỏ": chưa có biến thiên thật, không ai mock → interface chỉ là `Impl` + một bước nhảy khi đọc (needless complexity, Module 06 §11). Phía "giữ": `PaymentGateway` là **ranh giới I/O ngoài** — gần như chắc chắn cần test double khi viết test cho tầng nghiệp vụ gọi nó; giữ sẵn seam rẻ hơn thêm lại về sau, và nó giúp package nghiệp vụ không `import` SDK Stripe. Kết luận hợp lý: **giữ** vì là ranh giới hệ thống ngoài; nếu chỉ là interface nội bộ giữa hai class cùng module thì cân nhắc bỏ. Tiêu chí "xứng đáng có interface": (a) ranh giới với hệ thống ngoài cần test double; (b) đã/sắp có nhiều implementation thật; (c) điểm mở rộng công khai cho module/plugin khác; (d) cần cắt vòng phụ thuộc biên dịch giữa module.
 6. Vẫn nên tạo class/interface có tên khi: (i) chiến lược cần **state** riêng và/hoặc **nhiều method** (lambda chỉ một method, không field); (ii) cần **đặt tên nghiệp vụ** cho ý nghĩa (`WeekendSurgePricing` đọc rõ hơn một lambda 5 dòng vô danh nhúng giữa code); (iii) cần Spring **quản lý như bean** để inject `List<T>`/`Map<String,T>`, gắn `@Qualifier`, `@Order`, hoặc để nó tự có dependency được inject. Với Command: `undo()` là method thứ hai và thường cần lưu **state để khôi phục** — lambda `Runnable` chỉ gói được `execute()`, không mang theo dữ liệu hoàn tác → cần class.
 7. **Kênh gửi** (`EmailChannel`, `SmsChannel`...) → **Strategy** (mỗi kênh một implement của `NotificationChannel`), Spring inject `List`/`Map`. **"Thử lần lượt tới khi thành công"** → một **Composite** `CompositeNotificationChannel implements NotificationChannel` giữ danh sách kênh con và lặp cho tới khi một cái thành công (hoặc **Chain of Responsibility** nếu mỗi kênh tự quyết "tôi xử lý hay chuyển tiếp"). **Retry/log/metrics** → **Decorator** bọc từng kênh (`RetryingChannel`, `TimingChannel`, `LoggingChannel`), xếp chồng tùy cấu hình. **Chọn kênh theo user** → một **Strategy/Factory** `ChannelSelector` đọc cấu hình người dùng trả về kênh (hoặc thứ tự kênh) phù hợp. `NotificationManager` co lại thành một facade mỏng điều phối `ChannelSelector` + `CompositeNotificationChannel`. Thêm kênh thứ sáu = viết `WhatsAppChannel implements NotificationChannel` + đăng ký một dòng (bean `@Component` là Spring tự gom) — không sửa retry, không sửa selector, không sửa composite.
 
@@ -1109,4 +1167,4 @@ Viết `main` mô phỏng: (1) đơn hợp lệ đi hết chuỗi, kích hoạt 
 
 ---
 
-*File tiếp theo trong lộ trình: **Module 09 — Build Tools & Quản lý dự án** (Maven, Gradle, Git & quy trình làm việc nhóm).*
+*File tiếp theo trong lộ trình: **Module 17 — Build Tools & Quản lý dự án** (Maven, Gradle, Git & quy trình làm việc nhóm).*

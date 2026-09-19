@@ -1,8 +1,8 @@
-# Module 06 — Java Modern (8 → 21+)
+# Module 14 — Java Modern (8 → 21+)
 
 > **Mức độ ưu tiên: Cao (Java 8 essentials) → Trung bình (9–17) → Bổ sung (21 LTS)** — Code Java hiện đại trông rất khác Java "cổ điển". Java 8 là bắt buộc khi phỏng vấn; ngày càng nhiều dự án chạy thẳng trên Java 17/21 LTS. Không cập nhật sẽ khiến code trông cũ và bỏ lỡ nhiều công cụ giúp code an toàn, ngắn hơn.
 
-> **Phạm vi bài này:** các tính năng ngôn ngữ/thư viện lõi thêm từ Java 8 tới 21 — `Optional`, `record`, `var`, `sealed`, pattern matching (`instanceof`/`switch`/record), text block, virtual thread, và các API String/tiện ích nhỏ. **Chỉ nhắc lại — đã học ở module khác:** Stream/lambda (03.3), Collections factory (03.1), `java.nio.file` (04), switch expression & `yield` (01.2), helpful NPE (04, 12), `record` equals/hashCode (02.4), cơ chế thread & `ExecutorService` (05.1, 05.2). Các chỗ chạm chỉ trỏ về nơi học sâu.
+> **Phạm vi bài này:** các tính năng ngôn ngữ/thư viện lõi thêm từ Java 8 tới 21 — `Optional`, `record`, `var`, `sealed`, pattern matching (`instanceof`/`switch`/record), text block, virtual thread, và các API String/tiện ích nhỏ. **Chỉ nhắc lại — đã học ở module khác:** Stream/lambda (Module 10), Collections factory (Module 08), `java.nio.file` (Module 11), switch expression & `yield` (Module 02), helpful NPE (Module 11), `record` equals/hashCode (Module 07), cơ chế thread & `ExecutorService` (Module 12–13). Các chỗ chạm chỉ trỏ về nơi học sâu.
 
 ---
 
@@ -49,7 +49,7 @@ r.ifPresentOrElse(this::render, this::render404);         // Java 9 — có / kh
 User u1 = r.orElse(GUEST);                                // giá trị mặc định (LUÔN dựng, kể cả khi không cần)
 User u2 = r.orElseGet(this::loadGuest);                   // lazy — chỉ dựng khi thực sự rỗng
 User u3 = r.orElseThrow();                                // Java 10 — ném NoSuchElementException
-User u4 = r.orElseThrow(() -> new ResourceNotFoundException("User", 999L));   // Module 04
+User u4 = r.orElseThrow(() -> new ResourceNotFoundException("User", 999L));   // Module 11
 Optional<User> u5 = r.or(() -> findInCache(999L));        // Java 9 — Optional thay thế nếu rỗng
 ```
 
@@ -150,8 +150,8 @@ void report(List<Order> orders) {
 
 - **Luôn `final`**, **không `extends`** (nhưng `implements` thoải mái); nested record ngầm `static`.
 - **Không thêm instance field** ngoài các component; **không có setter** — "sửa" = tạo record mới (`withX` viết tay).
-- `Serializable` **an toàn**: deserialize đi qua constructor chuẩn tắc → validate được thực thi (khác class thường — Module 04).
-- Component kiểu **mảng**: `equals()`/`hashCode()` sinh sẵn so sánh **tham chiếu** → dùng `List` thay `T[]`, hoặc override tay (Module 02.4).
+- `Serializable` **an toàn**: deserialize đi qua constructor chuẩn tắc → validate được thực thi (khác class thường — Module 11).
+- Component kiểu **mảng**: `equals()`/`hashCode()` sinh sẵn so sánh **tham chiếu** → dùng `List` thay `T[]`, hoặc override tay (Module 07).
 - Reflection: `Class.isRecord()`, `Class.getRecordComponents()`.
 - **Không dùng làm JPA Entity** — Entity cần constructor rỗng + mutable + proxy. `record` = **DTO / value object / khóa phức hợp / kiểu trả về nhiều giá trị**.
 - `record` + `sealed` + pattern switch = "kiểu dữ liệu đại số" (algebraic data type) — mục 4, 7.
@@ -312,7 +312,7 @@ String describe(Object obj) {
 3. **Exhaustiveness** — `switch` theo `sealed`/`enum` phải phủ hết hoặc có `default`.
 4. **`MatchException` (Java 21)** — ném lúc runtime khi: switch "đủ" theo compile nhưng hierarchy `sealed` đã đổi ở nơi biên dịch riêng và không case nào khớp; hoặc accessor của record ném exception trong deconstruction pattern.
 
-Mũi tên `case X x -> ...` **không** fall-through; kiểu hai chấm `case X x: ... yield v;` vẫn fall-through như cũ (Module 01.2). Trộn hai kiểu trong một `switch` là lỗi compile.
+Mũi tên `case X x -> ...` **không** fall-through; kiểu hai chấm `case X x: ... yield v;` vẫn fall-through như cũ (Module 02). Trộn hai kiểu trong một `switch` là lỗi compile.
 
 ---
 
@@ -395,7 +395,7 @@ String greeting = """
     """.formatted(name, orderId);
 ```
 
-> Hữu ích cho native query JPA (Module 14), JSON test fixture (Module 17), HTML/email template. **Không** dùng cho dữ liệu thay đổi hoặc chuỗi i18n (dùng resource bundle).
+> Hữu ích cho native query JPA (Module 20), JSON test fixture (Module 26), HTML/email template. **Không** dùng cho dữ liệu thay đổi hoặc chuỗi i18n (dùng resource bundle).
 
 ---
 
@@ -503,6 +503,23 @@ Hàng trăm nghìn virtual thread
   Vài carrier thread (ForkJoinPool, số lượng = số nhân CPU)
 ```
 
+```mermaid
+sequenceDiagram
+    participant V as Virtual thread
+    participant C as Carrier thread
+    participant IO as Non-blocking OS/JDK I/O
+    V->>C: mount và chạy continuation
+    C->>IO: bắt đầu thao tác I/O
+    IO-->>V: chưa có dữ liệu
+    V-->>C: unmount, giải phóng carrier
+    Note over C: Carrier chạy virtual thread khác
+    IO-->>V: I/O sẵn sàng
+    V->>C: mount lại trên carrier khả dụng
+    C-->>V: tiếp tục ngay sau điểm blocking
+```
+
+Virtual thread làm code blocking theo kiểu tuần tự có khả năng scale vì thời gian chờ I/O không giữ platform thread. Nó không làm CPU-bound code nhanh hơn: lúc thực thi Java, virtual thread vẫn cần carrier/CPU. Pinning (mục dưới) xảy ra khi continuation không thể unmount ở một số critical section; khi đó carrier bị giữ trong lúc chờ. Mental model đúng là "thread rẻ để chờ", không phải "tạo vô hạn công việc": database connection, remote quota và memory vẫn cần semaphore/pool/backpressure.
+
 Blocking mà virtual thread **unmount** được (tốt): `Thread.sleep`, I/O của `java.nio`/socket, `java.util.concurrent` lock, `BlockingQueue`.
 
 ### ⚠️ Pinning — khi virtual thread KHÔNG unmount được
@@ -511,7 +528,7 @@ Trên Java 21, virtual thread bị **ghim (pinned)** vào carrier thread — m�
 - Đang trong khối **`synchronized`** và gặp thao tác blocking.
 - Gọi **native method** (JNI).
 
-Xử lý: tạm thay `synchronized` bằng `ReentrantLock` (Module 05.2) ở đường đi nóng. Debug bằng `-Djdk.tracePinnedThreads=full`. (JDK mới hơn — JEP 491 — đã loại bỏ pinning do `synchronized`.)
+Xử lý: tạm thay `synchronized` bằng `ReentrantLock` (Module 13) ở đường đi nóng. Debug bằng `-Djdk.tracePinnedThreads=full`. (JDK mới hơn — JEP 491 — đã loại bỏ pinning do `synchronized`.)
 
 ### Quy tắc dùng
 
@@ -547,13 +564,13 @@ Những cải tiến nhỏ nhưng gặp hằng ngày:
 
 | Nhóm | Ở đâu |
 |---|---|
-| `List.of` / `Map.of` / `Set.of` / `List.copyOf` (bất biến, null-hostile) | Module 03.1 |
-| `Stream.toList()`, `mapMulti`, `takeWhile`/`dropWhile`, `Collectors.teeing` | Module 03.3 |
+| `List.of` / `Map.of` / `Set.of` / `List.copyOf` (bất biến, null-hostile) | Module 08 |
+| `Stream.toList()`, `mapMulti`, `takeWhile`/`dropWhile`, `Collectors.teeing` | Module 10 |
 | `Optional.stream`/`or`/`ifPresentOrElse` | mục 1 |
-| `Path.of`, `Files.readString`/`writeString`/`lines` | Module 04 |
-| switch expression, `yield`, arrow-case | Module 01.2 |
-| Helpful `NullPointerException` (Java 14) | Module 04, 12 |
-| `HttpClient` (Java 11 — client HTTP/2 async trong JDK) | Module 19 |
+| `Path.of`, `Files.readString`/`writeString`/`lines` | Module 11 |
+| switch expression, `yield`, arrow-case | Module 02 |
+| Helpful `NullPointerException` (Java 14) | Module 11 |
+| `HttpClient` (Java 11 — client HTTP/2 async trong JDK) | Module 28 |
 
 ---
 
@@ -595,6 +612,19 @@ Phần lớn ứng dụng Spring Boot/thư viện thực tế **vẫn chạy tr�
 
 > ⚠️ **Automatic module & unnamed module:** một JAR thường (không có `module-info.class`) khi được module khác `requires` sẽ tự động trở thành "automatic module" (tên suy từ tên file JAR, export mọi package) — cơ chế cầu nối để hệ sinh thái cũ dần tương thích ngược mà không phải sửa lại toàn bộ JAR cùng lúc.
 
+### `jlink` và `jpackage` — từ module graph tới runtime tối thiểu
+
+`jlink` ghép các JDK module cần thiết thành custom runtime, giảm image và loại module không dùng. `jdeps` hỗ trợ tìm dependency; `jpackage` đóng gói application + runtime thành native package phù hợp hệ điều hành.
+
+```bash
+jdeps --print-module-deps app.jar
+jlink --add-modules java.base,java.logging,java.sql \
+      --strip-debug --no-header-files --no-man-pages --output runtime
+jpackage --name billing --input target --main-jar billing.jar --runtime-image runtime
+```
+
+> ⚠️ Reflection/service loading có thể làm static analysis bỏ sót module. Phải smoke-test image cuối, đặc biệt với framework. Custom runtime cũng phải được rebuild khi cập nhật bản vá JDK; nhỏ hơn không có nghĩa là tự động an toàn hơn.
+
 ---
 
 ## 13. Sequenced Collections (Java 21)
@@ -634,6 +664,24 @@ scores.sequencedKeySet().reversed();   // duyệt key theo thứ tự chèn ngư
 ```
 
 > **Lưu ý:** `reversed()` trả về **view** sống động (giống `Collections.unmodifiableList` là view, không phải bản sao) — thao tác ghi qua view phản ánh ngược lại collection gốc. `HashMap`/`HashSet` **không** implement các interface này vì bản chất chúng vốn không có thứ tự xác định.
+
+---
+
+### Quản trị Preview Feature & mô hình áp dụng tính năng Java mới
+
+Preview feature cần `--enable-preview` lúc compile **và** runtime, gắn với đúng release, và có thể thay đổi hoặc bị rút ở bản sau. Dùng để thử nghiệm/feedback thì hợp lý; public library và hệ thống nâng JDK chậm nên cô lập preview sau boundary để giảm blast radius khi API đổi.
+
+```mermaid
+flowchart LR
+    P[“Preview / incubator”] --> E[“Thử nghiệm có cô lập”]
+    E --> S{“Đã final và toolchain hỗ trợ?”}
+    S -- “Chưa” --> E
+    S -- “Rồi” --> A[“Adopt trong production”]
+    A --> M[“Đo readability, latency và vận hành”]
+    M --> G[“Chuẩn hóa coding guideline”]
+```
+
+Tính năng mới chỉ có giá trị khi cả compiler, runtime, build plugin, IDE, framework và đội vận hành hỗ trợ; “JDK có syntax” chưa phải điều kiện đủ — đây cũng là lý do các mục trên đều ghi rõ tính năng ổn định từ bản Java nào trước khi khuyến nghị dùng trong production.
 
 ---
 
@@ -754,7 +802,7 @@ Mô phỏng 10_000 request đồng thời, mỗi request `Thread.sleep(100)` r�
 
 **Câu 1.** `Optional` **không** implement `Serializable` và Javadoc khuyến nghị không dùng làm field. Nêu ba vấn đề cụ thể khi đặt `Optional<String> nickname` làm field của một JPA Entity hoặc một DTO serialize qua Jackson. Giải pháp thay thế cho từng ngữ cảnh (JPA / JSON API / trả về từ service).
 
-**Câu 2.** Ba loại constructor của `record`. Vì sao compact constructor **không cho** viết `this.x = ...` mà chỉ được gán lại tham số? Điều gì xảy ra nếu một non-canonical constructor **không** gọi `this(...)`? Vì sao deserialize một `record` an toàn hơn deserialize một class thường có cùng field (liên hệ Module 04)?
+**Câu 2.** Ba loại constructor của `record`. Vì sao compact constructor **không cho** viết `this.x = ...` mà chỉ được gán lại tham số? Điều gì xảy ra nếu một non-canonical constructor **không** gọi `this(...)`? Vì sao deserialize một `record` an toàn hơn deserialize một class thường có cùng field (liên hệ Module 11)?
 
 **Câu 3.** `var a = new ArrayList<>()` cho `ArrayList<Object>` còn `var b = new ArrayList<String>()` cho `ArrayList<String>` (không phải `List<String>`). Giải thích cả hai. Với `var`, khi nào bạn **mất** khả năng "lập trình theo interface" và điều đó ảnh hưởng gì tới việc thay đổi implementation sau này?
 
@@ -800,7 +848,7 @@ Mô phỏng 10_000 request đồng thời, mỗi request `Thread.sleep(100)` r�
 <summary>Bấm để xem gợi ý đáp án Phần C</summary>
 
 1. (i) `Optional` không `Serializable` → Entity/DTO chứa field `Optional` không serialize được qua RMI/session/cache Java. (ii) JPA provider không map được `Optional<String>` sang cột — cần `@Column` trên `String`; và không có constructor rỗng khởi tạo `Optional` đúng cách. (iii) Jackson mặc định serialize `Optional` thành `{"present":true,"value":...}` (xấu) trừ khi thêm `jackson-datatype-jdk8`; kể cả có module thì vòng đời null/absent gây nhập nhằng. Thay thế: JPA → field `String` nullable; JSON API → field nullable + `@JsonInclude(NON_NULL)`; service trả về → `Optional<X>` ở **chữ ký method** là hợp lệ và khuyến khích.
-2. Compact constructor chạy **trước** khi các field `final` được gán — tại thời điểm đó `this.x` chưa tồn tại để gán; Java gán field tự động **sau** khi compact ctor kết thúc, dùng **giá trị hiện tại của tham số**, nên chỉ được "chuẩn hóa tham số". Non-canonical không gọi `this(...)` → lỗi compile (`constructor must invoke another constructor`); mọi đường khởi tạo phải hội tụ về canonical để đảm bảo validate/chuẩn hóa chạy đúng một lần. Deserialize record: đi qua canonical constructor → compact ctor (validate) được thực thi → không tạo được record vi phạm bất biến; class thường: `readObject` gán thẳng field, **bỏ qua** constructor (Module 04).
+2. Compact constructor chạy **trước** khi các field `final` được gán — tại thời điểm đó `this.x` chưa tồn tại để gán; Java gán field tự động **sau** khi compact ctor kết thúc, dùng **giá trị hiện tại của tham số**, nên chỉ được "chuẩn hóa tham số". Non-canonical không gọi `this(...)` → lỗi compile (`constructor must invoke another constructor`); mọi đường khởi tạo phải hội tụ về canonical để đảm bảo validate/chuẩn hóa chạy đúng một lần. Deserialize record: đi qua canonical constructor → compact ctor (validate) được thực thi → không tạo được record vi phạm bất biến; class thường: `readObject` gán thẳng field, **bỏ qua** constructor (Module 11).
 3. `new ArrayList<>()` — diamond cần "kiểu đích" để suy tham số kiểu; `var` không cung cấp kiểu đích → suy về `Object`. `new ArrayList<String>()` — tham số kiểu viết tường minh nên giữ `String`; nhưng `var` bắt **kiểu tĩnh của biểu thức khởi tạo** = `ArrayList<String>` (lớp cụ thể), không "nới" lên `List`. Mất lập trình-theo-interface: nếu sau này muốn đổi sang `LinkedList`/`List.of`, biến `var` đang là `ArrayList<String>` khiến mọi chỗ phụ thuộc API riêng của `ArrayList` (`ensureCapacity`, `trimToSize`) — nên khi muốn linh hoạt, khai báo `List<String> x = new ArrayList<>();` tường minh.
 4. **Dominance** là lỗi compile vì một case không bao giờ chạy được là gần như chắc chắn bug của lập trình viên (khác Java cũ chỉ cảnh báo unreachable ở vài chỗ) — JLS quy định case sau bị case trước "che" ⇒ compile error. **Exhaustiveness** bắt buộc `default` (hoặc phủ hết nhánh) khi selector **không** phải kiểu đóng (sealed/enum) hoàn toàn phủ được; với sealed phủ đủ thì `default` là tùy chọn. **`MatchException`**: (a) hierarchy sealed đổi qua separate compilation — module A compile switch khi `Shape` có {Circle, Square}; sau đó `Shape` thêm `Triangle` và chỉ recompile module chứa `Shape`; runtime gặp `Triangle` → không case nào khớp, switch "đủ theo compile cũ" → `MatchException`. (b) accessor của record ném exception trong quá trình deconstruct pattern → bọc thành `MatchException`.
 5. Ưu điểm: (i) thêm một biến thể mới → compiler chỉ ra **mọi** `switch` cần cập nhật (an toàn khi refactor); visitor phải sửa interface `Visitor` + mọi implementation. (ii) code xử lý nằm **tại nơi dùng** (switch trong service), không phân tán vào từng class như visitor — dễ đọc cho logic đặc thù một chỗ. Visitor vẫn tốt hơn khi: tập thao tác (operations) thay đổi nhiều hơn tập kiểu, và muốn mỗi thao tác gói gọn một chỗ (double dispatch), hoặc khi hierarchy do bên thứ ba sở hữu (không sealed được).
@@ -811,4 +859,4 @@ Mô phỏng 10_000 request đồng thời, mỗi request `Thread.sleep(100)` r�
 
 ---
 
-*File tiếp theo trong lộ trình: **Module 07 — JVM Internals** (Heap vs Stack, Garbage Collection, ClassLoader, JIT Compiler).*
+*File tiếp theo trong lộ trình: **Module 15 — JVM Internals** (Heap vs Stack, Garbage Collection, ClassLoader, JIT Compiler).*
