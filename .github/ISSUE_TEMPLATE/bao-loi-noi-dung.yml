@@ -1,0 +1,30 @@
+name: "🐛 Báo lỗi nội dung"
+description: "Báo sai sót kỹ thuật trong một module (khái niệm sai, code không chạy được, ví dụ lỗi thời...)"
+labels: ["content-bug"]
+body:
+  - type: input
+    id: module
+    attributes:
+      label: Module
+      description: "Số thứ tự + tên module, ví dụ: 20 — JPA / Hibernate"
+      placeholder: "NN — Tên module"
+    validations:
+      required: true
+  - type: input
+    id: section
+    attributes:
+      label: Vị trí trong module
+      description: "Mục lớn, đoạn code, hoặc bài tập cụ thể"
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Mô tả sai sót
+      description: "Nội dung hiện tại nói gì, vì sao cho là chưa đúng. Trích dẫn nguồn tham khảo (Javadoc, spec, RFC...) nếu có."
+    validations:
+      required: true
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: Đề xuất sửa (không bắt buộc)

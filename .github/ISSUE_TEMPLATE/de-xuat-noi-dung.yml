@@ -1,0 +1,16 @@
+name: "💡 Đề xuất cải thiện"
+description: "Đề xuất bổ sung nội dung, cải thiện cấu trúc, hoặc ý tưởng mới cho repo"
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: Đề xuất
+      description: "Bạn muốn thêm/đổi gì? Vì sao nó có ích cho người đọc?"
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Phạm vi ảnh hưởng
+      description: "Có ảnh hưởng cấu trúc thư mục, đánh số module, hay knowledge graph không?"
