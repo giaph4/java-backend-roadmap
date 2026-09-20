@@ -1,6 +1,6 @@
 # Lời giải đầy đủ — Module 25: Soft Skills & Career
 
-> Nguồn đề: `33 soft skills career/33-soft-skills-career.md` (Phần B — Bài tập thực hành). Chỉ làm Phần B.
+> Nguồn đề: `33-soft-skills-career/33-soft-skills-career.md` (Phần B — Bài tập thực hành). Chỉ làm Phần B.
 
 ---
 

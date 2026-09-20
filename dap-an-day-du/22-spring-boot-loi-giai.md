@@ -1,6 +1,6 @@
 # Lời giải đầy đủ — Module 14: Spring Boot nâng cao
 
-> Nguồn đề: `22 spring boot/22-spring-boot.md` (Phần B — Bài tập viết code). Chỉ làm Phần B.
+> Nguồn đề: `22-spring-boot/22-spring-boot.md` (Phần B — Bài tập viết code). Chỉ làm Phần B.
 
 ---
 

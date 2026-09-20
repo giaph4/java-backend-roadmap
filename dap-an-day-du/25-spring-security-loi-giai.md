@@ -1,6 +1,6 @@
 # Lời giải đầy đủ — Module 17: Spring Security
 
-> Nguồn đề: `25 spring security/25-spring-security.md` (Phần B — Bài tập viết code). Chỉ làm Phần B.
+> Nguồn đề: `25-spring-security/25-spring-security.md` (Phần B — Bài tập viết code). Chỉ làm Phần B.
 
 ---
 

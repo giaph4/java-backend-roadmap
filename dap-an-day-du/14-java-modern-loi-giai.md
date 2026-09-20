@@ -1,6 +1,6 @@
 # Lời giải đầy đủ — Module 06: Java Modern (8 → 21+)
 
-> Nguồn đề: `14 java modern/14-java-modern.md` (Phần B — Bài tập viết code). Chỉ làm Phần B.
+> Nguồn đề: `14-java-modern/14-java-modern.md` (Phần B — Bài tập viết code). Chỉ làm Phần B.
 
 ---
 

@@ -1,6 +1,6 @@
 # Lời giải đầy đủ — Module 20: Microservices
 
-> Nguồn đề: `28 microservices/28-microservices.md` (Phần B — Bài tập viết code). Chỉ làm Phần B.
+> Nguồn đề: `28-microservices/28-microservices.md` (Phần B — Bài tập viết code). Chỉ làm Phần B.
 
 ---
 

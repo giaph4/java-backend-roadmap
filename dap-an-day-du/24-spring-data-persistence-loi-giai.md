@@ -1,6 +1,6 @@
 # Lời giải đầy đủ — Module 16: Spring Data & Advanced Persistence
 
-> Nguồn đề: `24 spring data persistence/24-spring-data-persistence.md` (Phần B — Bài tập viết code). Chỉ làm Phần B.
+> Nguồn đề: `24-spring-data-persistence/24-spring-data-persistence.md` (Phần B — Bài tập viết code). Chỉ làm Phần B.
 
 ---
 

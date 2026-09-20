@@ -1,6 +1,6 @@
 # Lời giải đầy đủ — Module 01.6: SOLID Principles trong Java
 
-> Nguồn đề: `06 solid principles/06-solid-principles.md` (Phần B — Bài tập viết code/refactor). Chỉ làm Phần B.
+> Nguồn đề: `06-solid-principles/06-solid-principles.md` (Phần B — Bài tập viết code/refactor). Chỉ làm Phần B.
 
 ---
 

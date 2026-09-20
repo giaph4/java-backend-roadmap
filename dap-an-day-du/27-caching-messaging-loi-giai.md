@@ -1,6 +1,6 @@
 # Lời giải đầy đủ — Module 19: Caching & Messaging
 
-> Nguồn đề: `27 caching messaging/27-caching-messaging.md` (Phần B — Bài tập viết code). Chỉ làm Phần B.
+> Nguồn đề: `27-caching-messaging/27-caching-messaging.md` (Phần B — Bài tập viết code). Chỉ làm Phần B.
 
 ---
 

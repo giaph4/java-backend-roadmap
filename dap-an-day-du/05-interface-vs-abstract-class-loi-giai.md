@@ -1,6 +1,6 @@
 # Lời giải đầy đủ — Module 01.5: Interface vs Abstract Class
 
-> Nguồn đề: `05 interface vs abstract class/05-interface-vs-abstract-class.md` (Phần B — Bài tập viết code). Chỉ làm Phần B.
+> Nguồn đề: `05-interface-vs-abstract-class/05-interface-vs-abstract-class.md` (Phần B — Bài tập viết code). Chỉ làm Phần B.
 
 ---
 

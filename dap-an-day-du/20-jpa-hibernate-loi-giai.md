@@ -1,6 +1,6 @@
 # Lời giải đầy đủ — Module 12: JPA & Hibernate
 
-> Nguồn đề: `20 jpa hibernate/20-jpa-hibernate.md` (Phần B — Bài tập viết code). Chỉ làm Phần B.
+> Nguồn đề: `20-jpa-hibernate/20-jpa-hibernate.md` (Phần B — Bài tập viết code). Chỉ làm Phần B.
 
 ---
 

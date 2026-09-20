@@ -1,6 +1,6 @@
 # Lời giải đầy đủ — Module 21: DevOps cơ bản
 
-> Nguồn đề: `29 devops co ban/29-devops-co-ban.md` (Phần B — Bài tập viết code). Chỉ làm Phần B.
+> Nguồn đề: `29-devops-co-ban/29-devops-co-ban.md` (Phần B — Bài tập viết code). Chỉ làm Phần B.
 
 ---
 

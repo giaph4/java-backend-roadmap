@@ -1,6 +1,6 @@
 # Lời giải đầy đủ — Module 05.1: Thread cơ bản
 
-> Nguồn đề: `12 thread co ban/12-thread-co-ban.md` (Phần B — Bài tập viết code). Chỉ làm Phần B.
+> Nguồn đề: `12-thread-co-ban/12-thread-co-ban.md` (Phần B — Bài tập viết code). Chỉ làm Phần B.
 
 ---
 

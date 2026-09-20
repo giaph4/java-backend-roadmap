@@ -1,6 +1,6 @@
 # Lời giải đầy đủ — Module 03.2: Generics
 
-> Nguồn đề: `09 generics/09-generics.md` (Phần B — Bài tập viết code). Chỉ làm Phần B.
+> Nguồn đề: `09-generics/09-generics.md` (Phần B — Bài tập viết code). Chỉ làm Phần B.
 
 ---
 

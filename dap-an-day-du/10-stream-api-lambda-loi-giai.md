@@ -1,6 +1,6 @@
 # Lời giải đầy đủ — Module 03.3: Stream API & Lambda
 
-> Nguồn đề: `10 stream api lambda/10-stream-api-lambda.md` (Phần B — Bài tập viết code). Chỉ làm Phần B.
+> Nguồn đề: `10-stream-api-lambda/10-stream-api-lambda.md` (Phần B — Bài tập viết code). Chỉ làm Phần B.
 
 ---
 

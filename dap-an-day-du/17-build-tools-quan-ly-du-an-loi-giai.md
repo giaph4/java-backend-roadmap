@@ -1,6 +1,6 @@
 # Lời giải đầy đủ — Module 09: Build Tools & Quản lý dự án
 
-> Nguồn đề: `17 build tools quan ly du an/17-build-tools-quan-ly-du-an.md` (Phần B — Bài tập thực hành). Chỉ làm Phần B.
+> Nguồn đề: `17-build-tools-quan-ly-du-an/17-build-tools-quan-ly-du-an.md` (Phần B — Bài tập thực hành). Chỉ làm Phần B.
 
 ---
 

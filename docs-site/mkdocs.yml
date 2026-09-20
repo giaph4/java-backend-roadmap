@@ -33,43 +33,43 @@ nav:
   - Giai đoạn 1 — Ngôn ngữ Java:
       - "01 · Cú pháp & kiểu dữ liệu": 01-cu-phap-kieu-du-lieu/01-cu-phap-kieu-du-lieu.md
       - "02 · Cấu trúc điều khiển": 02-cau-truc-dieu-khien/02-cau-truc-dieu-khien.md
-      - "03 · Class, Object, Method": 03 class object method/03-class-object-method.md
-      - "04 · 4 trụ cột OOP": 04 4 tru cot oop/04-4-tru-cot-oop.md
-      - "05 · Interface vs Abstract Class": 05 interface vs abstract class fix/05-interface-vs-abstract-class.md
-      - "06 · SOLID Principles": 06 solid principles/06-solid-principles.md
-      - "07 · equals / hashCode / toString": 07 equals hashcode tostring/07-equals-hashcode-tostring.md
+      - "03 · Class, Object, Method": 03-class-object-method/03-class-object-method.md
+      - "04 · 4 trụ cột OOP": 04-4-tru-cot-oop/04-4-tru-cot-oop.md
+      - "05 · Interface vs Abstract Class": 05-interface-vs-abstract-class/05-interface-vs-abstract-class.md
+      - "06 · SOLID Principles": 06-solid-principles/06-solid-principles.md
+      - "07 · equals / hashCode / toString": 07-equals-hashcode-tostring/07-equals-hashcode-tostring.md
   - Giai đoạn 2 — Thư viện chuẩn & Java hiện đại:
-      - "08 · Collections Framework": 08 collections framework/08-collections-framework.md
-      - "09 · Generics": 09 generics/09-generics.md
-      - "10 · Stream API & Lambda": 10 stream api lambda/10-stream-api-lambda.md
-      - "11 · Exception Handling, I/O & Networking": 11 exception handling io/11-exception-handling-io.md
-      - "12 · Thread cơ bản": 12 thread co ban/12-thread-co-ban.md
-      - "13 · Concurrency Utilities": 13 concurrency utilities/13-concurrency-utilities.md
-      - "14 · Java hiện đại (9 → 21)": 14 java modern/14-java-modern.md
+      - "08 · Collections Framework": 08-collections-framework/08-collections-framework.md
+      - "09 · Generics": 09-generics/09-generics.md
+      - "10 · Stream API & Lambda": 10-stream-api-lambda/10-stream-api-lambda.md
+      - "11 · Exception Handling, I/O & Networking": 11-exception-handling-io/11-exception-handling-io.md
+      - "12 · Thread cơ bản": 12-thread-co-ban/12-thread-co-ban.md
+      - "13 · Concurrency Utilities": 13-concurrency-utilities/13-concurrency-utilities.md
+      - "14 · Java hiện đại (9 → 21)": 14-java-modern/14-java-modern.md
   - Giai đoạn 3 — Bên dưới lớp vỏ ngôn ngữ:
-      - "15 · JVM Internals": 15 jvm internals/15-jvm-internals.md
-      - "16 · Design Patterns": 16 design patterns/16-design-patterns.md
-      - "17 · Build Tools & quản lý dự án": 17 build tools quan ly du an/17-build-tools-quan-ly-du-an.md
+      - "15 · JVM Internals": 15-jvm-internals/15-jvm-internals.md
+      - "16 · Design Patterns": 16-design-patterns/16-design-patterns.md
+      - "17 · Build Tools & quản lý dự án": 17-build-tools-quan-ly-du-an/17-build-tools-quan-ly-du-an.md
   - Giai đoạn 4 — Dữ liệu:
-      - "18 · Database & SQL": 18 database sql/18-database-sql.md
-      - "19 · RDBMS vs NoSQL": 19 rdbms nosql/19-rdbms-nosql.md
-      - "20 · JPA / Hibernate": 20 jpa hibernate/20-jpa-hibernate.md
+      - "18 · Database & SQL": 18-database-sql/18-database-sql.md
+      - "19 · RDBMS vs NoSQL": 19-rdbms-nosql/19-rdbms-nosql.md
+      - "20 · JPA / Hibernate": 20-jpa-hibernate/20-jpa-hibernate.md
   - Giai đoạn 5 — Spring:
-      - "21 · Spring Core (IoC, DI, AOP)": 21 spring core/21-spring-core.md
-      - "22 · Spring Boot": 22 spring boot/22-spring-boot.md
-      - "23 · RESTful API Design": 23 restful api design/23-restful-api-design.md
-      - "24 · Spring Data & Persistence": 24 spring data persistence/24-spring-data-persistence.md
-      - "25 · Spring Security": 25 spring security/25-spring-security.md
+      - "21 · Spring Core (IoC, DI, AOP)": 21-spring-core/21-spring-core.md
+      - "22 · Spring Boot": 22-spring-boot/22-spring-boot.md
+      - "23 · RESTful API Design": 23-restful-api-design/23-restful-api-design.md
+      - "24 · Spring Data & Persistence": 24-spring-data-persistence/24-spring-data-persistence.md
+      - "25 · Spring Security": 25-spring-security/25-spring-security.md
   - Giai đoạn 6 — Chất lượng & vận hành:
-      - "26 · Testing": 26 testing/26-testing.md
-      - "27 · Caching & Messaging": 27 caching messaging/27-caching-messaging.md
-      - "28 · Microservices": 28 microservices/28-microservices.md
-      - "29 · DevOps cơ bản": 29 devops co ban/29-devops-co-ban.md
-      - "30 · Observability": 30 observability/30-observability.md
+      - "26 · Testing": 26-testing/26-testing.md
+      - "27 · Caching & Messaging": 27-caching-messaging/27-caching-messaging.md
+      - "28 · Microservices": 28-microservices/28-microservices.md
+      - "29 · DevOps cơ bản": 29-devops-co-ban/29-devops-co-ban.md
+      - "30 · Observability": 30-observability/30-observability.md
   - Giai đoạn 7 — Kiến trúc & sự nghiệp:
-      - "31 · System Design": 31 system design/31-system-design.md
-      - "32 · Bảo mật — OWASP Top 10": 32 bao mat owasp/32-bao-mat-owasp.md
-      - "33 · Soft Skills & Career": 33 soft skills career/33-soft-skills-career.md
+      - "31 · System Design": 31-system-design/31-system-design.md
+      - "32 · Bảo mật — OWASP Top 10": 32-bao-mat-owasp/32-bao-mat-owasp.md
+      - "33 · Soft Skills & Career": 33-soft-skills-career/33-soft-skills-career.md
   - Knowledge Graph: knowledge-graph.md
 
 theme:

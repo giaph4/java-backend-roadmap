@@ -1,6 +1,6 @@
 # Lời giải đầy đủ — Module 13: Spring Core (IoC/DI, AOP)
 
-> Nguồn đề: `21 spring core/21-spring-core.md` (Phần B — Bài tập viết code). Chỉ làm Phần B.
+> Nguồn đề: `21-spring-core/21-spring-core.md` (Phần B — Bài tập viết code). Chỉ làm Phần B.
 
 ---
 

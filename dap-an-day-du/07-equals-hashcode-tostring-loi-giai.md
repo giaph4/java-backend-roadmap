@@ -1,6 +1,6 @@
 # Lời giải đầy đủ — Module 02.4: equals(), hashCode(), toString()
 
-> Nguồn đề: `07 equals hashcode tostring/07-equals-hashcode-tostring.md` (Phần B — Bài tập viết code). Chỉ làm Phần B.
+> Nguồn đề: `07-equals-hashcode-tostring/07-equals-hashcode-tostring.md` (Phần B — Bài tập viết code). Chỉ làm Phần B.
 
 ---
 

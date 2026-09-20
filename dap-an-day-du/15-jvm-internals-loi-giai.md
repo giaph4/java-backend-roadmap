@@ -1,6 +1,6 @@
 # Lời giải đầy đủ — Module 07: JVM Internals
 
-> Nguồn đề: `15 jvm internals/15-jvm-internals.md` (Phần B — Bài tập viết code). Chỉ làm Phần B.
+> Nguồn đề: `15-jvm-internals/15-jvm-internals.md` (Phần B — Bài tập viết code). Chỉ làm Phần B.
 > **Lưu ý chung:** Các bài trong module này cần chạy với cờ JVM cụ thể (`-Xss`, `-Xmx`, `-XX:...`) — lời giải nêu đầy đủ code + lệnh chạy + kết quả **tiêu biểu** (số liệu thực tế phụ thuộc máy/JVM version, nhưng xu hướng/hiện tượng luôn nhất quán).
 
 ---

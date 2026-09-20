@@ -1,6 +1,6 @@
 # Lời giải đầy đủ — Module 05.2: Concurrency Utilities
 
-> Nguồn đề: `13 concurrency utilities/13-concurrency-utilities.md` (Phần B — Bài tập viết code). Chỉ làm Phần B.
+> Nguồn đề: `13-concurrency-utilities/13-concurrency-utilities.md` (Phần B — Bài tập viết code). Chỉ làm Phần B.
 
 ---
 

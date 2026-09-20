@@ -8,7 +8,9 @@
 ![Modules](https://img.shields.io/badge/modules-33-blue)
 ![Language](https://img.shields.io/badge/docs-Tiếng%20Việt-informational)
 ![Status](https://img.shields.io/badge/status-active-brightgreen)
-![License](https://img.shields.io/badge/license-unspecified-lightgrey)
+![License](https://img.shields.io/badge/license-CC%20BY--NC--SA%204.0-lightgrey)
+[![Docs quality checks](https://github.com/giaph4/java-backend-roadmap/actions/workflows/docs-ci.yml/badge.svg)](https://github.com/giaph4/java-backend-roadmap/actions/workflows/docs-ci.yml)
+[![Deploy documentation site](https://github.com/giaph4/java-backend-roadmap/actions/workflows/deploy-docs.yml/badge.svg)](https://github.com/giaph4/java-backend-roadmap/actions/workflows/deploy-docs.yml)
 
 [Lộ trình](#lộ-trình) · [Cấu trúc dự án](#cấu-trúc-dự-án) · [Bắt đầu](#bắt-đầu) · [Đóng góp](#đóng-góp) · [FAQ](#faq)
 
@@ -77,7 +79,7 @@ Cột **Trạng thái** để bạn tự đánh dấu tiến độ học — m�
 
     Collections, Generics, Stream, Concurrency, Java 9–21 — 7 module.
 
-    [:octicons-arrow-right-24: Module 08](<08 collections framework/08-collections-framework.md>)
+    [:octicons-arrow-right-24: Module 08](08-collections-framework/08-collections-framework.md)
 
 -   :material-chip:{ .lg .middle } **3 · Bên dưới lớp vỏ ngôn ngữ**
 
@@ -85,7 +87,7 @@ Cột **Trạng thái** để bạn tự đánh dấu tiến độ học — m�
 
     JVM Internals, Design Patterns, Build Tools — 3 module.
 
-    [:octicons-arrow-right-24: Module 15](<15 jvm internals/15-jvm-internals.md>)
+    [:octicons-arrow-right-24: Module 15](15-jvm-internals/15-jvm-internals.md)
 
 -   :material-database:{ .lg .middle } **4 · Dữ liệu**
 
@@ -93,7 +95,7 @@ Cột **Trạng thái** để bạn tự đánh dấu tiến độ học — m�
 
     SQL, RDBMS vs NoSQL, JPA/Hibernate — 3 module.
 
-    [:octicons-arrow-right-24: Module 18](<18 database sql/18-database-sql.md>)
+    [:octicons-arrow-right-24: Module 18](18-database-sql/18-database-sql.md)
 
 -   :material-leaf:{ .lg .middle } **5 · Spring**
 
@@ -101,7 +103,7 @@ Cột **Trạng thái** để bạn tự đánh dấu tiến độ học — m�
 
     Core, Boot, REST, Data, Security — 5 module.
 
-    [:octicons-arrow-right-24: Module 21](<21 spring core/21-spring-core.md>)
+    [:octicons-arrow-right-24: Module 21](21-spring-core/21-spring-core.md)
 
 -   :material-shield-check-outline:{ .lg .middle } **6 · Chất lượng & vận hành**
 
@@ -109,7 +111,7 @@ Cột **Trạng thái** để bạn tự đánh dấu tiến độ học — m�
 
     Testing, Caching, Microservices, DevOps, Observability — 5 module.
 
-    [:octicons-arrow-right-24: Module 26](<26 testing/26-testing.md>)
+    [:octicons-arrow-right-24: Module 26](26-testing/26-testing.md)
 
 -   :material-chart-timeline-variant:{ .lg .middle } **7 · Kiến trúc & sự nghiệp**
 
@@ -117,7 +119,7 @@ Cột **Trạng thái** để bạn tự đánh dấu tiến độ học — m�
 
     System Design, Bảo mật OWASP, Soft Skills — 3 module.
 
-    [:octicons-arrow-right-24: Module 31](<31 system design/31-system-design.md>)
+    [:octicons-arrow-right-24: Module 31](31-system-design/31-system-design.md)
 
 </div>
 
@@ -127,67 +129,67 @@ Cột **Trạng thái** để bạn tự đánh dấu tiến độ học — m�
 |---|---|---|
 | 01 | [Cú pháp & kiểu dữ liệu](01-cu-phap-kieu-du-lieu/01-cu-phap-kieu-du-lieu.md) | ☐ Chưa học |
 | 02 | [Cấu trúc điều khiển](02-cau-truc-dieu-khien/02-cau-truc-dieu-khien.md) | ☐ Chưa học |
-| 03 | [Class, Object, Method](<03 class object method/03-class-object-method.md>) | ☐ Chưa học |
-| 04 | [4 trụ cột OOP](<04 4 tru cot oop/04-4-tru-cot-oop.md>) | ☐ Chưa học |
-| 05 | [Interface vs Abstract Class](<05 interface vs abstract class fix/05-interface-vs-abstract-class.md>) | ☐ Chưa học |
-| 06 | [SOLID Principles](<06 solid principles/06-solid-principles.md>) | ☐ Chưa học |
-| 07 | [equals / hashCode / toString](<07 equals hashcode tostring/07-equals-hashcode-tostring.md>) | ☐ Chưa học |
+| 03 | [Class, Object, Method](03-class-object-method/03-class-object-method.md) | ☐ Chưa học |
+| 04 | [4 trụ cột OOP](04-4-tru-cot-oop/04-4-tru-cot-oop.md) | ☐ Chưa học |
+| 05 | [Interface vs Abstract Class](05-interface-vs-abstract-class/05-interface-vs-abstract-class.md) | ☐ Chưa học |
+| 06 | [SOLID Principles](06-solid-principles/06-solid-principles.md) | ☐ Chưa học |
+| 07 | [equals / hashCode / toString](07-equals-hashcode-tostring/07-equals-hashcode-tostring.md) | ☐ Chưa học |
 
 ### Giai đoạn 2 — Thư viện chuẩn & lập trình hiện đại
 
 | # | Module | Trạng thái |
 |---|---|---|
-| 08 | [Collections Framework](<08 collections framework/08-collections-framework.md>) | ☐ Chưa học |
-| 09 | [Generics](<09 generics/09-generics.md>) | ☐ Chưa học |
-| 10 | [Stream API & Lambda](<10 stream api lambda/10-stream-api-lambda.md>) | ☐ Chưa học |
-| 11 | [Exception Handling, I/O & Networking](<11 exception handling io/11-exception-handling-io.md>) | ☐ Chưa học |
-| 12 | [Thread cơ bản](<12 thread co ban/12-thread-co-ban.md>) | ☐ Chưa học |
-| 13 | [Concurrency Utilities](<13 concurrency utilities/13-concurrency-utilities.md>) | ☐ Chưa học |
-| 14 | [Java hiện đại (9 → 21)](<14 java modern/14-java-modern.md>) | ☐ Chưa học |
+| 08 | [Collections Framework](08-collections-framework/08-collections-framework.md) | ☐ Chưa học |
+| 09 | [Generics](09-generics/09-generics.md) | ☐ Chưa học |
+| 10 | [Stream API & Lambda](10-stream-api-lambda/10-stream-api-lambda.md) | ☐ Chưa học |
+| 11 | [Exception Handling, I/O & Networking](11-exception-handling-io/11-exception-handling-io.md) | ☐ Chưa học |
+| 12 | [Thread cơ bản](12-thread-co-ban/12-thread-co-ban.md) | ☐ Chưa học |
+| 13 | [Concurrency Utilities](13-concurrency-utilities/13-concurrency-utilities.md) | ☐ Chưa học |
+| 14 | [Java hiện đại (9 → 21)](14-java-modern/14-java-modern.md) | ☐ Chưa học |
 
 ### Giai đoạn 3 — Bên dưới lớp vỏ ngôn ngữ
 
 | # | Module | Trạng thái |
 |---|---|---|
-| 15 | [JVM Internals](<15 jvm internals/15-jvm-internals.md>) | ☐ Chưa học |
-| 16 | [Design Patterns](<16 design patterns/16-design-patterns.md>) | ☐ Chưa học |
-| 17 | [Build Tools & quản lý dự án](<17 build tools quan ly du an/17-build-tools-quan-ly-du-an.md>) | ☐ Chưa học |
+| 15 | [JVM Internals](15-jvm-internals/15-jvm-internals.md) | ☐ Chưa học |
+| 16 | [Design Patterns](16-design-patterns/16-design-patterns.md) | ☐ Chưa học |
+| 17 | [Build Tools & quản lý dự án](17-build-tools-quan-ly-du-an/17-build-tools-quan-ly-du-an.md) | ☐ Chưa học |
 
 ### Giai đoạn 4 — Dữ liệu
 
 | # | Module | Trạng thái |
 |---|---|---|
-| 18 | [Database & SQL](<18 database sql/18-database-sql.md>) | ☐ Chưa học |
-| 19 | [RDBMS vs NoSQL](<19 rdbms nosql/19-rdbms-nosql.md>) | ☐ Chưa học |
-| 20 | [JPA / Hibernate](<20 jpa hibernate/20-jpa-hibernate.md>) | ☐ Chưa học |
+| 18 | [Database & SQL](18-database-sql/18-database-sql.md) | ☐ Chưa học |
+| 19 | [RDBMS vs NoSQL](19-rdbms-nosql/19-rdbms-nosql.md) | ☐ Chưa học |
+| 20 | [JPA / Hibernate](20-jpa-hibernate/20-jpa-hibernate.md) | ☐ Chưa học |
 
 ### Giai đoạn 5 — Spring
 
 | # | Module | Trạng thái |
 |---|---|---|
-| 21 | [Spring Core (IoC, DI, AOP)](<21 spring core/21-spring-core.md>) | ☐ Chưa học |
-| 22 | [Spring Boot](<22 spring boot/22-spring-boot.md>) | ☐ Chưa học |
-| 23 | [RESTful API Design](<23 restful api design/23-restful-api-design.md>) | ☐ Chưa học |
-| 24 | [Spring Data & Persistence](<24 spring data persistence/24-spring-data-persistence.md>) | ☐ Chưa học |
-| 25 | [Spring Security](<25 spring security/25-spring-security.md>) | ☐ Chưa học |
+| 21 | [Spring Core (IoC, DI, AOP)](21-spring-core/21-spring-core.md) | ☐ Chưa học |
+| 22 | [Spring Boot](22-spring-boot/22-spring-boot.md) | ☐ Chưa học |
+| 23 | [RESTful API Design](23-restful-api-design/23-restful-api-design.md) | ☐ Chưa học |
+| 24 | [Spring Data & Persistence](24-spring-data-persistence/24-spring-data-persistence.md) | ☐ Chưa học |
+| 25 | [Spring Security](25-spring-security/25-spring-security.md) | ☐ Chưa học |
 
 ### Giai đoạn 6 — Chất lượng & vận hành
 
 | # | Module | Trạng thái |
 |---|---|---|
-| 26 | [Testing](<26 testing/26-testing.md>) | ☐ Chưa học |
-| 27 | [Caching & Messaging](<27 caching messaging/27-caching-messaging.md>) | ☐ Chưa học |
-| 28 | [Microservices](<28 microservices/28-microservices.md>) | ☐ Chưa học |
-| 29 | [DevOps cơ bản](<29 devops co ban/29-devops-co-ban.md>) | ☐ Chưa học |
-| 30 | [Observability](<30 observability/30-observability.md>) | ☐ Chưa học |
+| 26 | [Testing](26-testing/26-testing.md) | ☐ Chưa học |
+| 27 | [Caching & Messaging](27-caching-messaging/27-caching-messaging.md) | ☐ Chưa học |
+| 28 | [Microservices](28-microservices/28-microservices.md) | ☐ Chưa học |
+| 29 | [DevOps cơ bản](29-devops-co-ban/29-devops-co-ban.md) | ☐ Chưa học |
+| 30 | [Observability](30-observability/30-observability.md) | ☐ Chưa học |
 
 ### Giai đoạn 7 — Kiến trúc & sự nghiệp
 
 | # | Module | Trạng thái |
 |---|---|---|
-| 31 | [System Design](<31 system design/31-system-design.md>) | ☐ Chưa học |
-| 32 | [Bảo mật — OWASP Top 10](<32 bao mat owasp/32-bao-mat-owasp.md>) | ☐ Chưa học |
-| 33 | [Soft Skills & Career](<33 soft skills career/33-soft-skills-career.md>) | ☐ Chưa học |
+| 31 | [System Design](31-system-design/31-system-design.md) | ☐ Chưa học |
+| 32 | [Bảo mật — OWASP Top 10](32-bao-mat-owasp/32-bao-mat-owasp.md) | ☐ Chưa học |
+| 33 | [Soft Skills & Career](33-soft-skills-career/33-soft-skills-career.md) | ☐ Chưa học |
 
 Ngoài 33 module lý thuyết, repo còn có [🕸️ Knowledge Graph](knowledge-graph.md) thể hiện trực quan các module liên hệ chéo với nhau.
 
@@ -202,12 +204,19 @@ java-core/
 │   ├── 02-cau-truc-dieu-khien.md
 │   └── src/
 ├── ...                               # 03 → 33, cùng một khuôn mẫu
-├── 33 soft skills career/
+├── 33-soft-skills-career/
 │   └── 33-soft-skills-career.md
 ├── dap-an-day-du/                     # lời giải chi tiết bài tập module 03 → 33
 ├── docs-site/mkdocs.yml               # cấu hình website tài liệu (MkDocs Material)
 ├── knowledge-graph.md                 # trang sơ đồ quan hệ giữa các module
-├── .github/workflows/                 # CI kiểm tra chất lượng docs + build/deploy site
+├── scripts/                           # script kiểm tra Mermaid, cấu trúc module (dùng trong CI)
+├── .github/
+│   ├── workflows/                     # CI kiểm tra chất lượng docs + build/deploy site
+│   ├── ISSUE_TEMPLATE/                # mẫu báo lỗi nội dung / đề xuất
+│   └── PULL_REQUEST_TEMPLATE.md
+├── CONTRIBUTING.md                    # quy trình đóng góp
+├── CODE_OF_CONDUCT.md                 # quy tắc ứng xử
+├── LICENSE                            # CC BY-NC-SA 4.0
 └── README.MD
 ```
 
@@ -232,7 +241,7 @@ Không cần cài đặt gì để đọc — mở trực tiếp file `.md` củ
 Mỗi thư mục `src/` là một IntelliJ module độc lập (không dùng Maven/Gradle), biên dịch trực tiếp bằng `javac`:
 
 ```bash
-cd "05 interface vs abstract class fix/src"
+cd "05-interface-vs-abstract-class/src"
 javac Main.java
 java Main
 ```
@@ -255,28 +264,15 @@ Repo này là **tài liệu học**, không phải một ứng dụng chạy đ�
 
 ## Đóng góp
 
-Repo hiện là ghi chú cá nhân, nhưng nếu bạn phát hiện sai sót kỹ thuật hoặc muốn góp ý:
-
-1. Tạo Issue mô tả rõ module nào, phần nào, và vì sao cho là chưa đúng.
-2. Hoặc mở Pull Request theo quy trình: fork → tạo nhánh → sửa → mở PR kèm mô tả ngắn gọn thay đổi.
-
-```text
-docs/<mô-tả-ngắn>     # cập nhật nội dung một module
-fix/<mô-tả-ngắn>      # sửa lỗi kỹ thuật/chính tả
-```
-
-Không có convention commit bắt buộc, nhưng ưu tiên message mô tả rõ *module nào* thay đổi, ví dụ: `docs(module-20): sửa ví dụ N+1 query`. Trước khi mở PR, CI (`docs-ci.yml`) sẽ tự kiểm tra Markdown lint, sơ đồ Mermaid, liên kết chéo và cấu trúc file — xem log Actions nếu PR bị fail.
+Repo hiện là ghi chú cá nhân đã mở để cộng đồng tham khảo và đóng góp. Xem quy trình chi tiết (Issue, nhánh, checklist trước khi mở PR) tại [CONTRIBUTING.md](CONTRIBUTING.md), và [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) trước khi tham gia thảo luận.
 
 ## FAQ
 
 **Vì sao không có `pom.xml` hay `build.gradle` ở gốc repo?**
-Vì đây không phải một dự án Java thống nhất — mỗi module là bài học độc lập, code minh họa chỉ vài file nên không cần build tool riêng. Kiến thức về Maven/Gradle được dạy ở [module 17](<17 build tools quan ly du an/17-build-tools-quan-ly-du-an.md>).
+Vì đây không phải một dự án Java thống nhất — mỗi module là bài học độc lập, code minh họa chỉ vài file nên không cần build tool riêng. Kiến thức về Maven/Gradle được dạy ở [module 17](17-build-tools-quan-ly-du-an/17-build-tools-quan-ly-du-an.md).
 
 **Nội dung có đảm bảo chính xác 100% không?**
 Đây là tài liệu tự học, đã cố gắng kiểm chứng kỹ nhưng vẫn có thể còn sai sót hoặc góc nhìn cá nhân ở một số đoạn — nếu thấy chỗ nào chưa đúng, xem mục [Đóng góp](#đóng-góp).
-
-**Vì sao thư mục có khoảng trắng trong tên (`08 collections framework`) thay vì gạch nối?**
-Không nhất quán — phần đầu repo (module 01–02) đặt tên theo kiểu `kebab-case`, các module sau đặt trực tiếp bằng tên IntelliJ module. Giữ nguyên để không phá liên kết cũ, không ảnh hưởng tới việc đọc nội dung.
 
 **Trang MkDocs lấy nội dung từ đâu, có phải maintain hai bản không?**
 Không — `mkdocs.yml` trỏ thẳng vào các file `.md` hiện có (`docs_dir: .`), không copy nội dung sang thư mục riêng. Sửa file module như bình thường, trang web tự cập nhật theo.
@@ -290,6 +286,8 @@ Chưa — toàn bộ nội dung hiện là tiếng Việt.
 - [x] Bài tập tự luyện + đáp án cho từng module.
 - [x] README đồng bộ với cấu trúc 33 module thực tế + trạng thái học.
 - [x] Website MkDocs Material + GitHub Pages, CI kiểm tra chất lượng tài liệu, trang Knowledge Graph.
+- [x] Chuẩn hóa tên thư mục toàn bộ 33 module về `kebab-case`.
+- [x] LICENSE (CC BY-NC-SA 4.0), CONTRIBUTING.md, CODE_OF_CONDUCT.md, issue/PR templates.
 - [ ] Đề xuất: `examples/`/`exercises/` runnable code + Maven multi-module + JUnit cho từng module.
 - [ ] Đề xuất: Capstone Spring Boot (hệ thống đặt hàng — PostgreSQL, Redis, JWT, Kafka/RabbitMQ, Docker, metrics) liên kết ngược về từng module lý thuyết.
 - [ ] Đề xuất: bản tiếng Anh song song.
@@ -298,7 +296,7 @@ Các mục đánh dấu "Đề xuất" là ý tưởng, chưa có cam kết th�
 
 ## License
 
-Chưa áp dụng giấy phép mã nguồn mở nào cho repo này.
+Nội dung (tài liệu `.md` và code minh họa) được phát hành theo giấy phép [CC BY-NC-SA 4.0](LICENSE) — được phép chia sẻ, chỉnh sửa, phân phối lại, miễn là ghi nguồn, không dùng cho mục đích thương mại, và giữ nguyên giấy phép này ở bản phái sinh.
 
 ## Tác giả
 

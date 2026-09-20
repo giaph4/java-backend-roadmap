@@ -1,6 +1,6 @@
 # Lời giải đầy đủ — Module 08: Design Patterns
 
-> Nguồn đề: `16 design patterns/16-design-patterns.md` (Phần B — Bài tập viết code). Chỉ làm Phần B.
+> Nguồn đề: `16-design-patterns/16-design-patterns.md` (Phần B — Bài tập viết code). Chỉ làm Phần B.
 
 ---
 

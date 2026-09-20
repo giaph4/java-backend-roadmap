@@ -1,6 +1,6 @@
 # Lời giải đầy đủ — Module 22: Observability
 
-> Nguồn đề: `30 observability/30-observability.md` (Phần B — Bài tập viết code). Chỉ làm Phần B.
+> Nguồn đề: `30-observability/30-observability.md` (Phần B — Bài tập viết code). Chỉ làm Phần B.
 
 ---
 

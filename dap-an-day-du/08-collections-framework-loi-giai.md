@@ -1,6 +1,6 @@
 # Lời giải đầy đủ — Module 03.1: Collections Framework
 
-> Nguồn đề: `08 collections framework/08-collections-framework.md` (Phần B — Bài tập viết code). Chỉ làm Phần B.
+> Nguồn đề: `08-collections-framework/08-collections-framework.md` (Phần B — Bài tập viết code). Chỉ làm Phần B.
 
 ---
 

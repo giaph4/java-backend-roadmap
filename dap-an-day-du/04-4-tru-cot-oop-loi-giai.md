@@ -1,6 +1,6 @@
 # Lời giải đầy đủ — Module 02.1: 4 Trụ Cột OOP
 
-> Nguồn đề: `04 4 tru cot oop/04-4-tru-cot-oop.md` (Phần B — Bài tập viết code). Chỉ làm Phần B.
+> Nguồn đề: `04-4-tru-cot-oop/04-4-tru-cot-oop.md` (Phần B — Bài tập viết code). Chỉ làm Phần B.
 
 ---
 

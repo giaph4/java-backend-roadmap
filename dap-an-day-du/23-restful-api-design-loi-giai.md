@@ -1,6 +1,6 @@
 # Lời giải đầy đủ — Module 15: RESTful API Design
 
-> Nguồn đề: `23 restful api design/23-restful-api-design.md` (Phần B — Bài tập viết code). Chỉ làm Phần B.
+> Nguồn đề: `23-restful-api-design/23-restful-api-design.md` (Phần B — Bài tập viết code). Chỉ làm Phần B.
 
 ---
 

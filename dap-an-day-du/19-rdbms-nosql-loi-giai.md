@@ -1,6 +1,6 @@
 # Lời giải đầy đủ — Module 11: RDBMS & NoSQL
 
-> Nguồn đề: `19 rdbms nosql/19-rdbms-nosql.md` (Phần B — Bài tập thực hành). Chỉ làm Phần B.
+> Nguồn đề: `19-rdbms-nosql/19-rdbms-nosql.md` (Phần B — Bài tập thực hành). Chỉ làm Phần B.
 
 ---
 

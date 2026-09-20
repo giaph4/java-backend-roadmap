@@ -1,6 +1,6 @@
 # Lời giải đầy đủ — Module 23: System Design
 
-> Nguồn đề: `31 system design/31-system-design.md` (Phần B — Bài tập viết code). Chỉ làm Phần B.
+> Nguồn đề: `31-system-design/31-system-design.md` (Phần B — Bài tập viết code). Chỉ làm Phần B.
 
 ---
 

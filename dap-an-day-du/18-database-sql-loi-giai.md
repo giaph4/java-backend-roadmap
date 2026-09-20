@@ -1,6 +1,6 @@
 # Lời giải đầy đủ — Module 10: Database & SQL
 
-> Nguồn đề: `18 database sql/18-database-sql.md` (Phần B — Bài tập viết SQL). Chỉ làm Phần B.
+> Nguồn đề: `18-database-sql/18-database-sql.md` (Phần B — Bài tập viết SQL). Chỉ làm Phần B.
 
 ---
 

@@ -1,6 +1,6 @@
 # Lời giải đầy đủ — Module 24: Bảo mật OWASP
 
-> Nguồn đề: `32 bao mat owasp/32-bao-mat-owasp.md` (Phần B — Bài tập viết code). Chỉ làm Phần B.
+> Nguồn đề: `32-bao-mat-owasp/32-bao-mat-owasp.md` (Phần B — Bài tập viết code). Chỉ làm Phần B.
 
 ---
 

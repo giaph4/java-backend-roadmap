@@ -1,6 +1,6 @@
 # Lời giải đầy đủ — Module 01.3: Class, Object, Method
 
-> Nguồn đề: `03 class object method/03-class-object-method.md` (Phần B — Bài tập viết code). Chỉ làm Phần B (không làm Phần A trắc nghiệm và Phần C nâng cao lý thuyết).
+> Nguồn đề: `03-class-object-method/03-class-object-method.md` (Phần B — Bài tập viết code). Chỉ làm Phần B (không làm Phần A trắc nghiệm và Phần C nâng cao lý thuyết).
 
 ---
 

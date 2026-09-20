@@ -1,6 +1,6 @@
 # Lời giải đầy đủ — Module 04: Exception Handling & I/O
 
-> Nguồn đề: `11 exception handling io/11-exception-handling-io.md` (Phần B — Bài tập viết code). Chỉ làm Phần B.
+> Nguồn đề: `11-exception-handling-io/11-exception-handling-io.md` (Phần B — Bài tập viết code). Chỉ làm Phần B.
 
 ---
 
